@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "jsx": "react-jsx",
+
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    },
+
+    "moduleResolution": "Bundler",
+
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+
+    "types": ["vite/client"]
+  },
+
+  "include": ["src", "vite.config.ts"],
+
+  "exclude": ["supabase/functions"]
+}

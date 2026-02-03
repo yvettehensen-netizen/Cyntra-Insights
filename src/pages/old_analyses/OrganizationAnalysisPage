@@ -1,0 +1,18 @@
+import AIAnalysisPage from "../components/AIAnalysisPage";
+
+export default function OrganizationAnalysisPage() {
+  const questions = [
+    { name: "structure", label: "Hoe is je organisatie gestructureerd?" },
+    { name: "culture", label: "Hoe zou je je organisatiecultuur omschrijven?" },
+    { name: "leadership", label: "Hoe worden beslissingen genomen?" },
+  ];
+  return (
+    <AIAnalysisPage
+      title="Organization Analysis"
+      description="Inzicht in structuur, cultuur en leiderschap."
+      questions={questions}
+      promptTopic="organisatieontwikkeling en McKinsey 7S"
+    />
+  );
+}
+

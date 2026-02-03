@@ -1,0 +1,153 @@
+/* src/styles/print.css */
+/* Import dit bestand in je root layout of App.tsx voor perfecte PDF/print-output */
+
+@page {
+  size: A4;
+  margin: 1.5cm 2cm;
+  @top-center {
+    content: "Cyntra Insights — Vertrouwelijk Rapport";
+    font-family: system-ui, sans-serif;
+    font-size: 10pt;
+    color: #333;
+  }
+  @bottom-center {
+    content: "Pagina " counter(page);
+    font-size: 9pt;
+    color: #666;
+  }
+}
+
+@media print {
+  /* === Basis reset voor schone print === */
+  body {
+    background: white !important;
+    color: #000 !important;
+    font-family: Georgia, serif;
+    font-size: 11pt;
+    line-height: 1.6;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* === Verberg alle UI-elementen die niet in print horen === */
+  nav,
+  aside,
+  header > div:first-child, /* navbar */
+  button,
+  a[href]:empty,
+  .no-print,
+  [class*="hover:"],
+  [class*="transition"],
+  footer .trust-footer {
+    display: none !important;
+  }
+
+  /* === Layout aanpassingen === */
+  .max-w-7xl,
+  .max-w-5xl,
+  .max-w-4xl {
+    max-width: none !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 auto !important;
+  }
+
+  /* === Typografie optimaliseren === */
+  h1 {
+    font-size: 24pt !important;
+    margin: 40pt 0 20pt 0 !important;
+    page-break-after: avoid;
+    color: #1a1a1a !important;
+  }
+
+  h2 {
+    font-size: 18pt !important;
+    margin: 30pt 0 15pt 0 !important;
+    page-break-after: avoid;
+    color: #333 !important;
+    border-bottom: 1pt solid #D4AF37;
+    padding-bottom: 8pt;
+  }
+
+  h3 {
+    font-size: 14pt !important;
+    margin: 20pt 0 10pt 0 !important;
+    page-break-after: avoid;
+  }
+
+  p, li {
+    orphans: 3;
+    widows: 3;
+    margin: 0 0 12pt 0 !important;
+  }
+
+  ul, ol {
+    padding-left: 20pt !important;
+    margin: 12pt 0 !important;
+  }
+
+  li {
+    margin-bottom: 8pt !important;
+  }
+
+  /* === Secties & cards schoonmaken === */
+  section,
+  div[class*="bg-black"],
+  div[class*="border"],
+  div[class*="rounded"],
+  div[class*="p-"],
+  div[class*="shadow"] {
+    background: none !important;
+    border: none !important;
+    border-top: 1pt solid #eee !important;
+    padding: 20pt 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    page-break-inside: avoid;
+  }
+
+  /* === Specifieke Cyntra elementen === */
+  /* Goudaccenten subtiel in zwart-wit */
+  [class*="text-[#D4AF37]"],
+  [class*="text-amber"] {
+    color: #000 !important;
+    font-weight: bold !important;
+  }
+
+  /* Rode urgentie behouden (wordt grijs in print, maar blijft zichtbaar) */
+  [class*="text-red"] {
+    color: #000 !important;
+    font-weight: bold !important;
+  }
+
+  /* Icons verwijderen */
+  svg {
+    display: none !important;
+  }
+
+  /* === Pagina breaks slim plaatsen === */
+  h1, h2 {
+    page-break-after: avoid;
+  }
+
+  section {
+    page-break-inside: avoid;
+  }
+
+  /* Forceer nieuwe pagina na executive verdict als nodig */
+  .executive-verdict {
+    page-break-before: always;
+  }
+
+  /* === Footer trust statement behouden */
+  .trust-footer,
+  p:contains("Volledig vertrouwelijk") {
+    display: block !important;
+    text-align: center;
+    font-size: 9pt;
+    color: #666;
+    margin-top: 40pt;
+    border-top: 1pt solid #ddd;
+    padding-top: 10pt;
+  }
+}

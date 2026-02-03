@@ -1,0 +1,6 @@
+.env
+node_modules
+QUICK_FIX_OPENAI.md
+SETUP_SECRETS_GUIDE.md
+COMPLETE_SETUP_GUIDE.md
+env.example/env.example

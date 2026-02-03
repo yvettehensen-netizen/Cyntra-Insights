@@ -1,0 +1,16 @@
+export type ReportSection =
+  | "strategic_blueprint"
+  | "financial_health"
+  | "financial_strategy"
+  | "opportunity_map"
+  | "risk_register"
+  | "market_contribution"
+  | "process_contribution"
+  | "leadership_profile"
+  | "team_dynamics"
+  | "culture_scan"
+  | "understream_scan"
+  | "esg_contribution"
+  | "governance_contribution"
+  | "customer_contribution"
+  | "ninety_day_plan";

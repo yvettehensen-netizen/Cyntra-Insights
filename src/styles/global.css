@@ -1,0 +1,15 @@
+/* Cyntra Theme */
+@import url("https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600&display=swap");
+
+:root {
+  --cyntra-gold: #d6b48e;
+  --cyntra-dark: #0e0e0e;
+  --cyntra-text: #f8f5f2;
+}
+
+body {
+  background: var(--cyntra-dark);
+  color: var(--cyntra-text);
+  margin: 0;
+  padding: 0;
+}

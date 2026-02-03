@@ -1,0 +1,72 @@
+{
+  "company": "TechVision B.V.",
+  "industry": "SaaS",
+  "revenue": "€8.5M ARR",
+  "employees": 45,
+  "analysis_date": "2025-01-15",
+  "mode": "Executive / Brutal",
+  "confidence_score": 87,
+
+  "executive_summary": "TechVision B.V. demonstrates strong product-market fit but is constrained by execution gaps that threaten scalability within the next 6–9 months.",
+
+  "key_themes": [
+    "Execution Discipline",
+    "Scaling Readiness",
+    "Financial Leverage",
+    "Team Sustainability",
+    "Market Opportunity"
+  ],
+
+  "vital_signs": {
+    "cashflow": "MONITORING",
+    "customer_retention": "HEALTHY",
+    "team_morale": "CRITICAL",
+    "execution_velocity": "MONITORING",
+    "decision_quality": "HEALTHY"
+  },
+
+  "risks": [
+    "Cashflow pressure if growth slows",
+    "High employee turnover",
+    "Customer concentration risk",
+    "Leadership burnout",
+    "Competitive pricing pressure"
+  ],
+
+  "opportunities": [
+    "Pricing optimization",
+    "Customer diversification",
+    "Operational automation",
+    "Accountability structure",
+    "Selective market expansion"
+  ],
+
+  "recommendations": [
+    "Stabilize team morale through transparency",
+    "Introduce weekly cashflow forecasting",
+    "Clarify ownership of strategic initiatives",
+    "Reduce sales cycle duration",
+    "Implement leadership succession planning"
+  ],
+
+  "roadmap_90d": {
+    "month1": [
+      "Employee pulse survey",
+      "Cashflow monitoring",
+      "Ownership clarification"
+    ],
+    "month2": [
+      "Sales process optimization",
+      "Accountability dashboard",
+      "Pricing adjustment"
+    ],
+    "month3": [
+      "Market expansion pilot",
+      "Succession planning",
+      "Leadership review"
+    ]
+  },
+
+  "generated_by": "Aurelius Engine",
+  "timestamp": "2025-01-15T14:32:00Z"
+}

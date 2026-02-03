@@ -1,0 +1,31 @@
+import {
+  Target,
+  LineChart,
+  TrendingUp,
+  Users,
+  HeartHandshake,
+  BarChart3,
+  Workflow,
+  Shield,
+  Leaf,
+  Boxes,
+  Cpu,
+  Crown,
+  Lightbulb,
+} from "lucide-react";
+
+export const analysisIcons: Record<string, React.ElementType> = {
+  strategy: Target,
+  finance: LineChart,
+  growth: TrendingUp,
+  team: Users,
+  culture: HeartHandshake,
+  market: BarChart3,
+  process: Workflow,
+  change: Shield,
+  esg: Leaf,
+  swot: Boxes,
+  ai: Cpu,
+  leadership: Crown,
+  synthese: Lightbulb,
+};

@@ -1,0 +1,41 @@
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  "https://xlnchtikhxqfnifwbgbu.supabase.co",
+  "PASTE_HIER_JE_ANON_KEY"
+);
+
+const { data, error } = await supabase.auth.signInWithPassword({
+  email: "info@inzichtenimpact.nl",
+  password: "PASTE_HIER_JE_WACHTWOORD",
+});
+
+if (error) {
+  console.error("❌ LOGIN FAILED:", error.message);
+  process.exit(1);
+}
+
+console.log("\n✅ JWT ACCESS TOKEN:\n");
+console.log(data.session.access_token);
+
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  "https://xlnchtikhxqfnifwbgbu.supabase.co",
+  "PASTE_HIER_JE_ANON_KEY"
+);
+
+const { data, error } = await supabase.auth.signInWithPassword({
+  email: "info@inzichtenimpact.nl",
+  password: "PASTE_HIER_JE_WACHTWOORD",
+});
+
+if (error) {
+  console.error("❌ LOGIN FAILED:", error.message);
+  process.exit(1);
+}
+
+console.log("\n✅ JWT ACCESS TOKEN:\n");
+console.log(data.session.access_token);
+
+

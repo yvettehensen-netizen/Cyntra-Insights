@@ -1,0 +1,19 @@
+<svg width="1200" height="600" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="grad5" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#8B1538;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#D4AF37;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="600" fill="#0A0A0A"/>
+  <polygon points="600,150 700,280 850,320 750,450 500,470 400,350 450,220" fill="url(#grad5)" opacity="0.15" stroke="#D4AF37" stroke-width="3"/>
+  <circle cx="600" cy="150" r="12" fill="#D4AF37"/>
+  <circle cx="700" cy="280" r="10" fill="#D4AF37"/>
+  <circle cx="850" cy="320" r="14" fill="#D4AF37"/>
+  <circle cx="750" cy="450" r="11" fill="#8B1538"/>
+  <circle cx="500" cy="470" r="13" fill="#8B1538"/>
+  <circle cx="400" cy="350" r="10" fill="#8B1538"/>
+  <circle cx="450" cy="220" r="12" fill="#D4AF37"/>
+  <text x="600" y="290" font-family="Arial, sans-serif" font-size="42" font-weight="bold" fill="#D4AF37" text-anchor="middle">Opportunity</text>
+  <text x="600" cy="340" font-family="Arial, sans-serif" font-size="42" font-weight="bold" fill="#FFFFFF" text-anchor="middle">Map</text>
+</svg>

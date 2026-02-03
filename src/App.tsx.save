@@ -1,0 +1,80 @@
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+
+// -------------------- PUBLIC PAGES --------------------
+import HomePage from "./pages/HomePage";
+import QuickscanPage from "./pages/QuickscanPage";
+import PricesPage from "./pages/PricesPage";
+import ContactPage from "./pages/ContactPage";
+import LoginPage from "./pages/LoginPage";
+
+import PublicNavbar from "./components/PublicNavbar";
+
+// -------------------- PORTAL (CYNTRA) --------------------
+import PortalLayout from "./layouts/PortalLayout";
+import DashboardPage from "./pages/DashboardPage";
+import PerformanceScanResults from "./pages/PerformanceScanResults";
+import NewAnalysisPage from "./pages/NewAnalysisPage";
+import SettingsPage from "./pages/SettingsPage";
+import PortalPage from "./pages/portal/PortalPage";
+
+// -------------------- AURELIUS SITE --------------------
+import AureliusLayout from "./aurelius/layouts/AureliusLayout";
+
+// AURELIUS ANALYSES (CHECKED AGAINST YOUR FILE STRUCTURE)
+import SWOTAnalysisPage from "./aurelius/pages/analysis/SWOTAnalysisPage";
+import GrowthAnalysisPage from "./aurelius/pages/analysis/GrowthAnalysisPage";
+import FinancialAnalysisPage from "./aurelius/pages/analysis/FinancialAnalysisPage";
+import ESGAnalysisPage from "./aurelius/pages/analysis/ESGAnalysisPage";
+
+// ADMIN ROOT PAGES
+import RootDashboard from "./pages/root/RootDashboard";
+import RootUsers from "./pages/root/RootUsers";
+import RootAnalyses from "./pages/root/RootAnalyses";
+import RootEngine from "./pages/root/RootEngine";
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <PublicNavbar />
+
+      <Routes>
+
+        {/* ---------------- PUBLIC ROUTES ---------------- */}
+        <Route path="/" element={<HomePage />} />
+        <Route path="/quickscan-gratis" element={<QuickscanPage />} />
+        <Route path="/prijzen" element={<PricesPage />} />
+        <Route path="/contact" element={<ContactPage />} />
+        <Route path="/login" element={<LoginPage />} />
+
+        {/* ---------------- PORTAL ROUTES ---------------- */}
+        <Route element={<PortalLayout />}>
+          <Route path="/portal" element={<PortalPage />} />
+          <Route path="/portal/dashboard" element={<DashboardPage />} />
+          <Route path="/portal/rapporten" element={<PerformanceScanResults />} />
+          <Route path="/portal/nieuwe-analyse" element={<NewAnalysisPage />} />
+          <Route path="/portal/instellingen" element={<SettingsPage />} />
+        </Route>
+
+        {/* ---------------- AURELIUS SITE + ANALYSES ---------------- */}
+        <Route element={<AureliusLayout />}>
+          <Route path="/aurelius/swot" element={<SWOTAnalysisPage />} />
+          <Route path="/aurelius/growth" element={<GrowthAnalysisPage />} />
+          <Route path="/aurelius/finance" element={<FinancialAnalysisPage />} />
+          <Route path="/aurelius/esg" element={<ESGAnalysisPage />} />
+        </Route>
+
+        {/* ---------------- ROOT ADMIN ---------------- */}
+        <Route path="/root/dashboard" element={<RootDashboard />} />
+        <Route path="/root/users" element={<RootUsers />} />
+        <Route path="/root/analyses" element={<RootAnalyses />} />
+        <Route path="/root/engine" element={<RootEngine />} />
+
+      </Routes>
+    </BrowserRouter>
+  );
+}
+CTRL + X
+
+git commit
+
+

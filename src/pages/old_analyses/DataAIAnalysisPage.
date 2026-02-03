@@ -1,0 +1,17 @@
+import AIAnalysisPage from "../components/AIAnalysisPage";
+
+export default function DataAIAnalysisPage() {
+  const questions = [
+    { name: "dataSources", label: "Welke databronnen gebruik je?" },
+    { name: "analytics", label: "Hoe gebruik je analytics in je organisatie?" },
+    { name: "aiProjects", label: "Heb je lopende AI-initiatieven?" },
+  ];
+  return (
+    <AIAnalysisPage
+      title="Data & AI Analysis"
+      description="Analyse van je datagebruik en AI-potentie."
+      questions={questions}
+      promptTopic="AI readiness en data governance"
+    />
+  );
+}
