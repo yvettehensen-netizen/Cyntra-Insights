@@ -25,11 +25,12 @@ export default function ControlSurface() {
     risk,
     governance,
     signals,
+    performance,
     loading,
     error,
   } = useIntelligenceData();
 
-  if (loading && (!sri || !drift || !risk || !governance || !signals)) {
+  if (loading && (!sri || !drift || !risk || !governance || !signals || !performance)) {
     return (
       <div className="mx-auto max-w-[1380px] px-4 pb-10 md:px-8">
         <div className="flex h-[55vh] items-center justify-center">
@@ -42,7 +43,7 @@ export default function ControlSurface() {
     );
   }
 
-  if (!sri || !drift || !risk || !governance || !signals) {
+  if (!sri || !drift || !risk || !governance || !signals || !performance) {
     return (
       <div className="mx-auto max-w-[980px] px-4 pb-10 md:px-8">
         <div className="rounded-2xl border border-red-500/40 bg-red-950/35 px-4 py-3 text-sm text-red-100">
@@ -61,6 +62,7 @@ export default function ControlSurface() {
       sri={sri}
       governance={governance}
       signals={signals}
+      performance={performance}
       freezeMode={freezeMode}
       pulse={pulse}
     />

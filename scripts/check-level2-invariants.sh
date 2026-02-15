@@ -64,7 +64,7 @@ if rg -n "https://api.openai.com/v1/(chat/completions|embeddings)|new OpenAI\\("
 fi
 pass "no extra direct LLM calls outside canonical edge path"
 
-ALLOWED_UI_DRIFT_REGEX='^(src/App.tsx|src/layouts/(PortalLayout.tsx|Footer.tsx|AureliusLayout.tsx)|src/aurelius/components/AureliusNavbar.tsx|src/pages/aurelius/(ControlSurface.tsx|BoardTestPage.tsx|BoardEvaluationPage.tsx)|src/components/aurelius/control-surface/(index.ts|[^/]+\.tsx)|src/components/aurelius/board-evaluation/(index.ts|[^/]+\.tsx))$'
+ALLOWED_UI_DRIFT_REGEX='^(src/App.tsx|src/layouts/(PortalLayout.tsx|Footer.tsx|AureliusLayout.tsx)|src/aurelius/components/AureliusNavbar.tsx|src/pages/aurelius/(ControlSurface.tsx|BoardTestPage.tsx|BoardEvaluationPage.tsx)|src/components/aurelius/control-surface/(index.ts|[^/]+\.tsx)|src/components/aurelius/board-evaluation/(index.ts|[^/]+\.tsx)|src/components/aurelius/performance/(index.ts|[^/]+\.tsx))$'
 UI_CHANGED_FILES="$(git diff --name-only "${BASE_REF}"...HEAD | rg '^(src/pages|src/components|src/layouts|src/App.tsx|src/aurelius/pages/analysis/UnifiedAnalysisPage.tsx)' || true)"
 if [[ -n "${UI_CHANGED_FILES}" ]]; then
   UI_UNAUTHORIZED="$(printf '%s\n' "${UI_CHANGED_FILES}" | rg -v "${ALLOWED_UI_DRIFT_REGEX}" || true)"

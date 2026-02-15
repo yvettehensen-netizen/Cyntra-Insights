@@ -1,10 +1,12 @@
 import { AlertTriangle } from "lucide-react";
 import type { GovernanceResponse, SriResponse } from "@/dashboard/executive/api/types";
+import type { PerformanceSurfaceModel } from "@/cyntra/performance-engine";
 import type { AggregatedSignals } from "@/cyntra/intelligence/types";
 import DriftMatrix from "./DriftMatrix";
 import ExecutiveDecisionCard from "./ExecutiveDecisionCard";
 import GovernanceStatePanel from "./GovernanceStatePanel";
 import GovernanceStatusLayer from "./GovernanceStatusLayer";
+import PerformanceImprovementPanel from "./PerformanceImprovementPanel";
 import RiskTrajectory from "./RiskTrajectory";
 import StrategicHealthIndex from "./StrategicHealthIndex";
 
@@ -12,6 +14,7 @@ interface UnifiedSurfaceProps {
   sri: SriResponse;
   governance: GovernanceResponse;
   signals: AggregatedSignals;
+  performance: PerformanceSurfaceModel;
   freezeMode: boolean;
   pulse: boolean;
 }
@@ -20,6 +23,7 @@ export default function UnifiedSurface({
   sri,
   governance,
   signals,
+  performance,
   freezeMode,
   pulse,
 }: UnifiedSurfaceProps) {
@@ -41,6 +45,7 @@ export default function UnifiedSurface({
       ) : null}
 
       <div style={freezeMode ? { filter: "grayscale(0.2)" } : undefined} className="space-y-4 transition">
+        <PerformanceImprovementPanel performance={performance} />
         <GovernanceStatusLayer governanceControl={signals.governance_control} />
         <StrategicHealthIndex
           sri={sri}
