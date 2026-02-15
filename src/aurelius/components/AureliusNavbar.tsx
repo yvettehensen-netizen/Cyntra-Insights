@@ -1,69 +1,28 @@
-// ============================================================================
-// AURELIUS NAVBAR — DECISION OS READY (ADD ONLY)
-// Analyses • Scans • Rapporten • Bestuur
-// ============================================================================
-
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import {
   Menu,
   X,
-  ChevronDown,
   LogOut,
   LayoutDashboard,
   FileText,
   Settings,
   Search,
-  ClipboardCheck,
+  PlayCircle,
+  ClipboardList,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
-
-/* ============================================================================
-   CONFIG
-============================================================================ */
-
-const ANALYSES = [
-  { label: "Strategie", to: "/portal/analyse/strategy" },
-  { label: "Finance", to: "/portal/analyse/finance" },
-  { label: "Financiële strategie", to: "/portal/analyse/financial_strategy" },
-  { label: "Groei", to: "/portal/analyse/growth" },
-  { label: "Markt", to: "/portal/analyse/market" },
-  { label: "Processen", to: "/portal/analyse/process" },
-  { label: "Leiderschap", to: "/portal/analyse/leadership" },
-  { label: "Team & Cultuur", to: "/portal/analyse/team_culture" },
-  { label: "Teamdynamiek", to: "/portal/analyse/team_dynamics" },
-  { label: "Veranderkracht", to: "/portal/analyse/change_resilience" },
-  { label: "Onderstroom", to: "/portal/analyse/onderstroom" },
-  { label: "SWOT", to: "/portal/analyse/swot" },
-  { label: "ESG", to: "/portal/analyse/esg" },
-  { label: "AI & Data", to: "/portal/analyse/ai_data" },
-  { label: "Marketing", to: "/portal/analyse/marketing" },
-  { label: "Sales", to: "/portal/analyse/sales" },
-];
-
-const SCANS = [
-  { label: "Zorgscan", to: "/portal/scan/zorg" },
-  { label: "Overheidsscan", to: "/portal/scan/overheid" },
-  { label: "Bedrijfsscan", to: "/portal/scan/bedrijf" },
-];
-
-/* ============================================================================
-   COMPONENT
-============================================================================ */
+import { ENABLE_UNIFIED_SURFACE } from "@/config/featureFlags";
 
 export default function AureliusNavbar() {
   const location = useLocation();
   const navigate = useNavigate();
 
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [analysisOpen, setAnalysisOpen] = useState(false);
-  const [scanOpen, setScanOpen] = useState(false);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
     setMobileOpen(false);
-    setAnalysisOpen(false);
-    setScanOpen(false);
   }, [location.pathname]);
 
   const navClass = ({ isActive }: { isActive: boolean }) =>
@@ -87,96 +46,44 @@ export default function AureliusNavbar() {
   }
 
   return (
-    <header className="sticky top-0 z-50 bg-[#0A0A0A]/95 backdrop-blur-xl border-b border-white/10">
-      <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-
-        {/* LOGO */}
-        <NavLink to="/portal/dashboard" className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-[#8B1538] via-[#D4AF37] to-[#8B1538] flex items-center justify-center font-bold text-black">
-            A
+    <header className="fixed top-0 left-0 right-0 z-[9999] border-b border-white/10 bg-[#0A0A0A]/95 backdrop-blur-xl">
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
+        <NavLink to="/aurelius/control-surface" className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-[#8B1538] via-[#D4AF37] to-[#8B1538] font-bold text-black">
+            C
           </div>
           <div className="leading-tight">
             <div className="text-sm font-bold text-white">CYNTRA</div>
-            <div className="text-[11px] text-[#D4AF37]">
-              Aurelius Decision Engine
-            </div>
+            <div className="text-[11px] text-[#D4AF37]">Executive Intelligentie Controlekamer</div>
           </div>
         </NavLink>
 
-        {/* SEARCH */}
-        <form
-          onSubmit={handleSearch}
-          className="hidden lg:flex flex-1 mx-6 max-w-md"
-        >
+        <form onSubmit={handleSearch} className="mx-6 hidden max-w-md flex-1 lg:flex">
           <div className="relative w-full">
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Zoek rapporten…"
-              className="w-full px-4 py-2 rounded-lg bg-[#0F0F0F] border border-white/10 text-white"
+              placeholder="Zoek rapporten..."
+              className="w-full rounded-lg border border-white/10 bg-[#0F0F0F] px-4 py-2 text-white"
             />
-            <button className="absolute right-3 top-1/2 -translate-y-1/2">
+            <button className="absolute right-3 top-1/2 -translate-y-1/2" aria-label="Zoeken">
               <Search size={16} />
             </button>
           </div>
         </form>
 
-        {/* DESKTOP NAV */}
-        <nav className="hidden lg:flex items-center gap-4 text-sm">
-
-          <NavLink to="/portal/dashboard" className={navClass}>
+        <nav className="hidden items-center gap-3 text-sm lg:flex">
+          <NavLink to="/aurelius/control-surface" className={navClass}>
             <LayoutDashboard size={16} />
-            Dashboard
+            Controlekamer
           </NavLink>
 
-          {/* ANALYSES */}
-          <div className="relative">
-            <button
-              onClick={() => setAnalysisOpen((v) => !v)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-gray-300 hover:bg-white/5"
-            >
-              Analyses <ChevronDown size={14} />
-            </button>
-
-            {analysisOpen && (
-              <div className="absolute left-0 mt-2 w-72 rounded-xl bg-[#111] border border-white/10 shadow-xl p-2">
-                {ANALYSES.map((a) => (
-                  <NavLink
-                    key={a.to}
-                    to={a.to}
-                    className="block px-4 py-2 rounded-lg text-gray-300 hover:text-white hover:bg-white/5"
-                  >
-                    {a.label}
-                  </NavLink>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* 🆕 SCANS (ADD ONLY — KRITISCH) */}
-          <div className="relative">
-            <button
-              onClick={() => setScanOpen((v) => !v)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-gray-300 hover:bg-white/5"
-            >
-              Scans <ChevronDown size={14} />
-            </button>
-
-            {scanOpen && (
-              <div className="absolute left-0 mt-2 w-64 rounded-xl bg-[#111] border border-white/10 shadow-xl p-2">
-                {SCANS.map((s) => (
-                  <NavLink
-                    key={s.to}
-                    to={s.to}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-gray-300 hover:text-white hover:bg-white/5"
-                  >
-                    <ClipboardCheck size={14} />
-                    {s.label}
-                  </NavLink>
-                ))}
-              </div>
-            )}
-          </div>
+          {ENABLE_UNIFIED_SURFACE ? (
+            <NavLink to="/aurelius/board-test" className={navClass}>
+              <ClipboardList size={16} />
+              Board Test
+            </NavLink>
+          ) : null}
 
           <NavLink to="/portal/rapporten" className={navClass}>
             <FileText size={16} />
@@ -189,37 +96,56 @@ export default function AureliusNavbar() {
           </NavLink>
 
           <button
+            type="button"
+            onClick={() => navigate("/aurelius/control-surface")}
+            className="inline-flex items-center gap-2 rounded-lg border border-[#D4AF37]/50 bg-[#D4AF37]/20 px-4 py-2 text-[#F1D98C] transition hover:bg-[#D4AF37]/30"
+          >
+            <PlayCircle size={16} />
+            Start Executive Intelligence
+          </button>
+
+          <button
             onClick={handleLogout}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-red-400 hover:bg-red-500/10"
+            className="flex items-center gap-2 rounded-lg px-4 py-2 text-red-400 transition hover:bg-red-500/10"
           >
             <LogOut size={16} />
             Uitloggen
           </button>
         </nav>
 
-        {/* MOBILE */}
-        <button
-          onClick={() => setMobileOpen(true)}
-          className="lg:hidden text-gray-300"
-        >
+        <button onClick={() => setMobileOpen(true)} className="text-gray-300 lg:hidden" aria-label="Menu openen">
           <Menu size={24} />
         </button>
       </div>
 
-      {/* MOBILE MENU (optioneel later uitbreiden met Scans) */}
       {mobileOpen && (
         <div className="fixed inset-0 z-50 bg-black/95 p-6 lg:hidden">
-          <div className="flex justify-between mb-6">
+          <div className="mb-6 flex justify-between">
             <span className="font-semibold">Menu</span>
-            <button onClick={() => setMobileOpen(false)}>
+            <button onClick={() => setMobileOpen(false)} aria-label="Menu sluiten">
               <X size={24} />
             </button>
           </div>
 
           <div className="space-y-3">
-            <NavLink to="/portal/dashboard" className={navClass}>
-              Dashboard
+            <NavLink to="/aurelius/control-surface" className={navClass}>
+              Controlekamer
             </NavLink>
+
+            {ENABLE_UNIFIED_SURFACE ? (
+              <NavLink to="/aurelius/board-test" className={navClass}>
+                Board Test
+              </NavLink>
+            ) : null}
+
+            <button
+              type="button"
+              onClick={() => navigate("/aurelius/control-surface")}
+              className="flex w-full items-center gap-2 rounded-lg border border-[#D4AF37]/50 bg-[#D4AF37]/20 px-4 py-3 text-sm font-semibold text-[#F1D98C]"
+            >
+              <PlayCircle size={18} />
+              Start Executive Intelligence
+            </button>
 
             <NavLink to="/portal/rapporten" className={navClass}>
               Rapporten
@@ -231,7 +157,7 @@ export default function AureliusNavbar() {
 
             <button
               onClick={handleLogout}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-red-400 hover:bg-red-500/10"
+              className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-red-400 hover:bg-red-500/10"
             >
               <LogOut size={18} />
               Uitloggen

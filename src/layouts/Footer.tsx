@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "@/lib/supabaseClient";
+import { ENABLE_UNIFIED_SURFACE } from "@/config/featureFlags";
 
 import {
   Linkedin,
@@ -63,12 +64,21 @@ export default function Footer() {
               OPLOSSINGEN
           -------------------------------------------------- */}
           <FooterColumn title="Oplossingen">
-            <FooterLink to="/analysis/strategy" label="Strategische Analyse" />
-            <FooterLink to="/analysis/finance" label="Financiële Analyse" />
-            <FooterLink to="/analysis/growth" label="Groei & Schaling" />
-            <FooterLink to="/analysis/team" label="Team & Cultuur" />
-            <FooterLink to="/analysis/onderstroom" label="Onderstroom Analyse" />
-            <FooterLink to="/consultants" label="Volledige Analyse" />
+            {ENABLE_UNIFIED_SURFACE ? (
+              <>
+                <FooterLink to="/aurelius/control-surface" label="Unified Control Surface" />
+                <FooterLink to="/aurelius/board-test" label="Board Test Module" />
+              </>
+            ) : (
+              <>
+                <FooterLink to="/analysis/strategy" label="Strategische Analyse" />
+                <FooterLink to="/analysis/finance" label="Financiële Analyse" />
+                <FooterLink to="/analysis/growth" label="Groei & Schaling" />
+                <FooterLink to="/analysis/team" label="Team & Cultuur" />
+                <FooterLink to="/analysis/onderstroom" label="Onderstroom Analyse" />
+                <FooterLink to="/consultants" label="Volledige Analyse" />
+              </>
+            )}
           </FooterColumn>
 
           {/* --------------------------------------------------
@@ -87,9 +97,11 @@ export default function Footer() {
           <FooterColumn title={isLoggedIn ? "Portal" : "Account"}>
             {isLoggedIn ? (
               <>
-                <FooterLink to="/portal/dashboard" label="Dashboard" />
+                <FooterLink to="/aurelius/control-surface" label="Dashboard" />
                 <FooterLink to="/portal/rapporten" label="Mijn Rapporten" />
-                <FooterLink to="/portal/nieuwe-analyse" label="Nieuwe Analyse" />
+                {!ENABLE_UNIFIED_SURFACE ? (
+                  <FooterLink to="/portal/nieuwe-analyse" label="Nieuwe Analyse" />
+                ) : null}
               </>
             ) : (
               <>

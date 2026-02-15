@@ -6,16 +6,19 @@ import {
   PlusCircle,
   Settings,
   LogOut,
+  ClipboardList,
 } from "lucide-react";
 import CyntraLogo from "@/components/CyntraLogo";
+import AureliusNavbar from "@/aurelius/components/AureliusNavbar";
+import { ENABLE_UNIFIED_SURFACE } from "@/config/featureFlags";
 
 export default function PortalLayout() {
   const location = useLocation();
 
   const navItems = [
     {
-      to: "/portal/dashboard",
-      label: "Dashboard",
+      to: "/aurelius/control-surface",
+      label: "Aurelius Control Room",
       icon: LayoutDashboard,
     },
     {
@@ -23,12 +26,25 @@ export default function PortalLayout() {
       label: "Besluiten & Rapporten",
       icon: FileText,
     },
-    {
-      to: "/portal/nieuwe-analyse",
-      label: "Nieuw besluit",
-      icon: PlusCircle,
-      primary: true,
-    },
+    ...(!ENABLE_UNIFIED_SURFACE
+      ? [
+          {
+            to: "/portal/nieuwe-analyse",
+            label: "Nieuw besluit",
+            icon: PlusCircle,
+            primary: true,
+          },
+        ]
+      : []),
+    ...(ENABLE_UNIFIED_SURFACE
+      ? [
+          {
+            to: "/aurelius/board-test",
+            label: "Board Test",
+            icon: ClipboardList,
+          },
+        ]
+      : []),
     {
       to: "/portal/instellingen",
       label: "Instellingen",
@@ -38,7 +54,8 @@ export default function PortalLayout() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#0A090A] via-[#0F0E10] to-[#0B0B0B] text-white flex">
-      <aside className="fixed inset-y-0 left-0 w-72 bg-black/40 backdrop-blur-xl border-r border-white/10 z-40">
+      <AureliusNavbar />
+      <aside className="fixed top-16 bottom-0 left-0 w-72 bg-black/40 backdrop-blur-xl border-r border-white/10 z-40">
         <div className="h-full px-6 py-10 flex flex-col">
           <div className="mb-12">
             <CyntraLogo className="h-9" />
@@ -94,7 +111,7 @@ export default function PortalLayout() {
         </div>
       </aside>
 
-      <main className="ml-72 flex-1 px-10 py-12">
+      <main className="ml-72 flex-1 px-10 pt-20 pb-12">
         <div className="max-w-7xl mx-auto">
           <Outlet />
         </div>
@@ -102,4 +119,3 @@ export default function PortalLayout() {
     </div>
   );
 }
-
