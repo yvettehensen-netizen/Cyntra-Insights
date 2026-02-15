@@ -3,6 +3,7 @@ import type {
   GovernanceResponse,
   RiskEvolutionResponse,
 } from "@/dashboard/executive/api/types";
+import { calculateGovernanceState } from "@/cyntra/governance-control";
 import { evaluateDecisionIntelligence } from "@/cyntra/decision-intelligence";
 import { detectPatterns } from "@/cyntra/pattern-learning";
 import { modelRiskEvolution } from "@/cyntra/risk-evolution";
@@ -43,6 +44,37 @@ function governanceSeverityScore(governance: GovernanceResponse): number {
   return 85;
 }
 
+function boardSeverityPenalty(highestSeverity: string): number {
+  const severity = String(highestSeverity || "low").toLowerCase();
+  if (severity === "critical") return 1.6;
+  if (severity === "high") return 1.1;
+  if (severity === "medium") return 0.6;
+  return 0.2;
+}
+
+function deriveBoardAdoptionLegitimacyIndex(input: IntelligenceAggregateInput): number {
+  const explicitIndex = Number(input.boardAdoptionLegitimacyIndex);
+  if (Number.isFinite(explicitIndex)) {
+    return Number(clamp(explicitIndex, 0, 10).toFixed(2));
+  }
+
+  const readinessBase = clamp(input.boardSummary.governance_readiness_score, 0, 100) / 10;
+  const escalationPenalty =
+    Math.min(2.4, input.boardSummary.escalatie_exposure.actief * 0.35) +
+    boardSeverityPenalty(input.boardSummary.escalatie_exposure.hoogste_ernst);
+
+  const evolutionAdjustment =
+    input.decisionIntelligence.evolution_state === "Verbetering"
+      ? 0.35
+      : input.decisionIntelligence.evolution_state === "Verslechtering"
+      ? -0.65
+      : 0;
+
+  return Number(
+    clamp(readinessBase - escalationPenalty + evolutionAdjustment, 0, 10).toFixed(2)
+  );
+}
+
 function ratio422(drift: DriftResponse): number {
   const filtered = drift.drift_intensiteit_heatmap.filter((row) =>
     String(row.drift_type).includes("422")
@@ -60,7 +92,7 @@ function redactExecutiveNarrative(input: ExecutiveDecisionCardData): string {
     `Dominante these: ${input.dominant_thesis}. ` +
     `Centrale spanning: ${input.central_tension}. ` +
     `Irreversibele keuze: ${input.irreversible_choice}. ` +
-    `Confidence ${input.confidence_pct}%. ` +
+    `Betrouwbaarheid ${input.confidence_pct}%. ` +
     `${input.window_30d}.`;
 
   const woorden = base.replace(/\s+/g, " ").trim().split(" ");
@@ -116,6 +148,7 @@ export function aggregateSignals(input: IntelligenceAggregateInput): AggregatedS
   const decisionVelocity = clamp(
     100 - Math.abs(input.sri.risicosnelheid) * 16
   );
+  const boardAdoptionLegitimacyIndex = deriveBoardAdoptionLegitimacyIndex(input);
 
   const strategic_health = calculateStrategicHealth({
     governance_score: governanceScore,
@@ -123,6 +156,7 @@ export function aggregateSignals(input: IntelligenceAggregateInput): AggregatedS
     drift_stability_inverse: driftStabilityInverse,
     risk_density_inverse: riskDensityInverse,
     decision_velocity: decisionVelocity,
+    board_adoption_legitimacy_index: boardAdoptionLegitimacyIndex,
     sriTrend: input.sri.sri_trend,
   });
 
@@ -147,7 +181,9 @@ export function aggregateSignals(input: IntelligenceAggregateInput): AggregatedS
   const decision_intelligence = evaluateDecisionIntelligence({
     history: input.decisionIntelligence.history,
     irreversibility_score: input.decisionIntelligence.irreversibility_score,
-    ownership_clarity: input.decisionIntelligence.ownership_clarity,
+    ownership_clarity_score:
+      input.decisionIntelligence.ownership_clarity_score ??
+      input.decisionIntelligence.ownership_clarity,
     execution_probability: input.decisionIntelligence.execution_probability,
     decision_strength_index: input.decisionIntelligence.decision_strength_index,
   });
@@ -169,6 +205,20 @@ export function aggregateSignals(input: IntelligenceAggregateInput): AggregatedS
     consistency_score: executionConsistency,
   });
 
+  const governance_control = calculateGovernanceState({
+    sri: strategic_health.score,
+    board_index: boardAdoptionLegitimacyIndex,
+    risk_acceleration: risk_evolution.risk_acceleration,
+    governance_decay: risk_evolution.governance_decay,
+    drift_quadrant: drift.quadrant,
+    decision_strength_index: decision_intelligence.decision_strength_index,
+    updated_at:
+      input.sri.gegenereerd_op ||
+      input.boardSummary.gegenereerd_op ||
+      input.governance.gegenereerd_op ||
+      new Date().toISOString(),
+  });
+
   const executive_decision = buildExecutiveDecisionCard(
     input,
     strategic_health.score * 0.55 + decision_intelligence.decision_strength_index * 0.45,
@@ -181,6 +231,7 @@ export function aggregateSignals(input: IntelligenceAggregateInput): AggregatedS
     risk,
     risk_evolution,
     governance_state,
+    governance_control,
     pattern_learning,
     decision_intelligence,
     executive_decision,

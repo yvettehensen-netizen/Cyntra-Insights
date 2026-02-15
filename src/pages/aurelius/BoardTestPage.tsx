@@ -43,13 +43,13 @@ export default function BoardTestPage() {
         feedback: feedback.trim(),
       });
 
-      setStatus("Board test opgeslagen.");
+      setStatus("Bestuurlijke adoptietest opgeslagen.");
       setFeedback("");
     } catch (submitError) {
       setError(
         submitError instanceof Error
           ? submitError.message
-          : "Opslaan board test mislukt."
+          : "Opslaan bestuurlijke adoptietest mislukt."
       );
     } finally {
       setSaving(false);
@@ -60,7 +60,7 @@ export default function BoardTestPage() {
     <div className="mx-auto max-w-[980px] px-4 pb-10 md:px-8">
       <section className="rounded-3xl border border-white/10 bg-[#0f141c] p-6">
         <header className="mb-5">
-          <p className="text-[11px] uppercase tracking-[0.28em] text-white/45">Board Test Module</p>
+          <p className="text-[11px] uppercase tracking-[0.28em] text-white/45">Bestuurlijke adoptietest</p>
           <h1 className="mt-1 text-2xl font-semibold text-white">Bestuurlijke bruikbaarheidstest</h1>
         </header>
 
@@ -140,7 +140,7 @@ export default function BoardTestPage() {
             disabled={saving}
             className="rounded-xl border border-white/25 bg-white/10 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
           >
-            {saving ? "Opslaan..." : "Opslaan board test"}
+            {saving ? "Opslaan..." : "Opslaan adoptietest"}
           </button>
         </form>
       </section>

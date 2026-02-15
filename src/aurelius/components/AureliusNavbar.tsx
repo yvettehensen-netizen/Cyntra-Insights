@@ -10,6 +10,7 @@ import {
   Search,
   PlayCircle,
   ClipboardList,
+  BarChart3,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { ENABLE_UNIFIED_SURFACE } from "@/config/featureFlags";
@@ -54,7 +55,7 @@ export default function AureliusNavbar() {
           </div>
           <div className="leading-tight">
             <div className="text-sm font-bold text-white">CYNTRA</div>
-            <div className="text-[11px] text-[#D4AF37]">Executive Intelligentie Controlekamer</div>
+            <div className="text-[11px] text-[#D4AF37]">Bestuurlijke intelligentiecontrolelaag</div>
           </div>
         </NavLink>
 
@@ -81,7 +82,14 @@ export default function AureliusNavbar() {
           {ENABLE_UNIFIED_SURFACE ? (
             <NavLink to="/aurelius/board-test" className={navClass}>
               <ClipboardList size={16} />
-              Board Test
+              Bestuurlijke Adoptietest
+            </NavLink>
+          ) : null}
+
+          {ENABLE_UNIFIED_SURFACE ? (
+            <NavLink to="/aurelius/board-evaluation" className={navClass}>
+              <BarChart3 size={16} />
+              Board Adoption & Legitimiteitsindex
             </NavLink>
           ) : null}
 
@@ -101,7 +109,7 @@ export default function AureliusNavbar() {
             className="inline-flex items-center gap-2 rounded-lg border border-[#D4AF37]/50 bg-[#D4AF37]/20 px-4 py-2 text-[#F1D98C] transition hover:bg-[#D4AF37]/30"
           >
             <PlayCircle size={16} />
-            Start Executive Intelligence
+            Start Bestuurlijke Intelligentie
           </button>
 
           <button
@@ -134,7 +142,13 @@ export default function AureliusNavbar() {
 
             {ENABLE_UNIFIED_SURFACE ? (
               <NavLink to="/aurelius/board-test" className={navClass}>
-                Board Test
+                Bestuurlijke Adoptietest
+              </NavLink>
+            ) : null}
+
+            {ENABLE_UNIFIED_SURFACE ? (
+              <NavLink to="/aurelius/board-evaluation" className={navClass}>
+                Board Adoption & Legitimiteitsindex
               </NavLink>
             ) : null}
 
@@ -144,7 +158,7 @@ export default function AureliusNavbar() {
               className="flex w-full items-center gap-2 rounded-lg border border-[#D4AF37]/50 bg-[#D4AF37]/20 px-4 py-3 text-sm font-semibold text-[#F1D98C]"
             >
               <PlayCircle size={18} />
-              Start Executive Intelligence
+              Start Bestuurlijke Intelligentie
             </button>
 
             <NavLink to="/portal/rapporten" className={navClass}>

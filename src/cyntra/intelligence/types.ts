@@ -7,6 +7,7 @@ import type {
   RiskEvolutionResponse,
   SriResponse,
 } from "@/dashboard/executive/api/types";
+import type { GovernanceControlOutput } from "@/cyntra/governance-control";
 
 export type DriftQuadrant = "Stable" | "Fragile" | "Chaotic" | "Stagnating";
 
@@ -23,6 +24,7 @@ export interface StrategicHealthFactors {
   drift_stability_inverse: number;
   risk_density_inverse: number;
   decision_velocity: number;
+  board_adoption_legitimacy_index?: number;
 }
 
 export interface StrategicHealthOutput {
@@ -30,6 +32,7 @@ export interface StrategicHealthOutput {
   trend7d: number;
   trend30d: number;
   volatility_flag: boolean;
+  board_adoption_legitimacy_index: number;
 }
 
 export interface DriftAnalysisInput {
@@ -81,6 +84,7 @@ export interface PatternLearningSignal {
 
 export interface DecisionIntelligenceSignal {
   irreversibility_score: number;
+  ownership_clarity_score: number;
   ownership_clarity: number;
   execution_probability: number;
   decision_strength_index: number;
@@ -108,6 +112,7 @@ export interface IntelligenceAggregateInput {
   patternLearning: PatternLearningResponse;
   decisionIntelligence: DecisionIntelligenceResponse;
   boardSummary: BoardSummaryResponse;
+  boardAdoptionLegitimacyIndex?: number | null;
 }
 
 export interface AggregatedSignals {
@@ -116,6 +121,7 @@ export interface AggregatedSignals {
   risk: RiskTrajectoryOutput;
   risk_evolution: RiskEvolutionIntelligenceSignal;
   governance_state: GovernanceResolutionOutput;
+  governance_control: GovernanceControlOutput;
   pattern_learning: PatternLearningSignal;
   decision_intelligence: DecisionIntelligenceSignal;
   executive_decision: ExecutiveDecisionCardData;

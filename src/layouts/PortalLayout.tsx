@@ -7,6 +7,7 @@ import {
   Settings,
   LogOut,
   ClipboardList,
+  BarChart3,
 } from "lucide-react";
 import CyntraLogo from "@/components/CyntraLogo";
 import AureliusNavbar from "@/aurelius/components/AureliusNavbar";
@@ -18,7 +19,7 @@ export default function PortalLayout() {
   const navItems = [
     {
       to: "/aurelius/control-surface",
-      label: "Aurelius Control Room",
+      label: "Aurelius Controlelaag",
       icon: LayoutDashboard,
     },
     {
@@ -40,8 +41,13 @@ export default function PortalLayout() {
       ? [
           {
             to: "/aurelius/board-test",
-            label: "Board Test",
+            label: "Bestuurlijke Adoptietest",
             icon: ClipboardList,
+          },
+          {
+            to: "/aurelius/board-evaluation",
+            label: "Board Adoption & Legitimiteit",
+            icon: BarChart3,
           },
         ]
       : []),
@@ -60,7 +66,7 @@ export default function PortalLayout() {
           <div className="mb-12">
             <CyntraLogo className="h-9" />
             <p className="text-xs text-gray-400 mt-2 ml-1">
-              Aurelius Decision Engine™
+              Bestuurlijk beslissingssysteem
             </p>
           </div>
 

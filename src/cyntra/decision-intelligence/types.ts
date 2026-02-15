@@ -16,6 +16,7 @@ export interface DecisionSnapshot {
 export interface DecisionIntelligenceInput {
   history: DecisionSnapshot[];
   irreversibility_score?: number;
+  ownership_clarity_score?: number;
   ownership_clarity?: number;
   execution_probability?: number;
   decision_strength_index?: number;
@@ -23,6 +24,7 @@ export interface DecisionIntelligenceInput {
 
 export interface DecisionIntelligenceOutput {
   irreversibility_score: number;
+  ownership_clarity_score: number;
   ownership_clarity: number;
   execution_probability: number;
   decision_strength_index: number;

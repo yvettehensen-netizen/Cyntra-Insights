@@ -34,6 +34,13 @@ function governanceBandKleur(band: string): string {
   return "text-emerald-300";
 }
 
+function governanceBandLabel(band: string): string {
+  if (band === "Exec Committee") return "Bestuurscommissie";
+  if (band === "CTO Freeze") return "CTO-bevriezing";
+  if (band === "Autonomous") return "Autonoom";
+  return band;
+}
+
 export default function StrategicHealthIndex({
   sri,
   health,
@@ -43,21 +50,23 @@ export default function StrategicHealthIndex({
   const delta30d = Number.isFinite(health.trend30d) ? health.trend30d : deltaWaarde(sri, 30);
 
   return (
-    <section className="rounded-3xl border border-white/10 bg-[#0f141c] p-5" aria-label="Strategic Health Index">
+    <section className="rounded-3xl border border-white/10 bg-[#0f141c] p-5" aria-label="Strategische gezondheidsindex">
       <header className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-[11px] uppercase tracking-[0.28em] text-white/45">Strategic Health Index</p>
-          <h2 className="mt-1 text-xl font-semibold text-white">Aurelius Stability Risk Index</h2>
+          <p className="text-[11px] uppercase tracking-[0.28em] text-white/45">Strategische gezondheidsindex</p>
+          <h2 className="mt-1 text-xl font-semibold text-white">Aurelius stabiliteits- en risico-index</h2>
         </div>
         <div className="text-right">
-          <div className={`text-sm font-semibold ${governanceBandKleur(sri.sri_band)}`}>{sri.sri_band}</div>
+          <div className={`text-sm font-semibold ${governanceBandKleur(sri.sri_band)}`}>
+            {governanceBandLabel(sri.sri_band)}
+          </div>
           <div className="text-xs text-white/65">
             Evolutie: <span className="font-semibold text-white/80">{decision.evolution_state}</span>
           </div>
         </div>
       </header>
 
-      <div className="grid gap-3 md:grid-cols-5">
+      <div className="grid gap-3 md:grid-cols-6">
         <article className="rounded-2xl border border-white/10 bg-[#0b1017] p-4">
           <p className="text-xs uppercase tracking-[0.16em] text-white/55">SRI score</p>
           <p className="mt-2 text-4xl font-semibold text-white">{sri.huidige_sri.toFixed(1)}</p>
@@ -74,12 +83,22 @@ export default function StrategicHealthIndex({
         </article>
 
         <article className="rounded-2xl border border-white/10 bg-[#0b1017] p-4">
-          <p className="text-xs uppercase tracking-[0.16em] text-white/55">Strategic health</p>
+          <p className="text-xs uppercase tracking-[0.16em] text-white/55">Strategische gezondheid</p>
           <p className="mt-2 text-3xl font-semibold text-white">{health.score.toFixed(1)}</p>
         </article>
 
         <article className="rounded-2xl border border-white/10 bg-[#0b1017] p-4">
-          <p className="text-xs uppercase tracking-[0.16em] text-white/55">Decision strength</p>
+          <p className="text-xs uppercase tracking-[0.16em] text-white/55">
+            Board Adoption & Legitimiteitsindex
+          </p>
+          <p className="mt-2 text-3xl font-semibold text-white">
+            {health.board_adoption_legitimacy_index.toFixed(1)}
+          </p>
+          <p className="mt-2 text-xs text-white/60">Schaal 0-10 (bestuurlijke adoptie)</p>
+        </article>
+
+        <article className="rounded-2xl border border-white/10 bg-[#0b1017] p-4">
+          <p className="text-xs uppercase tracking-[0.16em] text-white/55">Besluitsterkte</p>
           <p className="mt-2 text-3xl font-semibold text-white">{decision.decision_strength_index.toFixed(1)}</p>
           <p className="mt-2 text-xs text-white/60">
             Uitvoerbaarheid {decision.execution_probability.toFixed(1)}%

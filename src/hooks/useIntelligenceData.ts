@@ -10,6 +10,7 @@ import type {
 } from "@/dashboard/executive/api/types";
 import { aggregateSignals } from "@/cyntra/intelligence/aggregateSignals";
 import type { AggregatedSignals } from "@/cyntra/intelligence/types";
+import { fetchBoardAdoptionLegitimacyIndex } from "@/api/boardEvaluation";
 
 type IntelligenceError = string | null;
 
@@ -21,6 +22,7 @@ interface IntelligenceState {
   patternLearning: PatternLearningResponse | null;
   decisionIntelligence: DecisionIntelligenceResponse | null;
   boardSummary: BoardSummaryResponse | null;
+  boardAdoptionLegitimacyIndex: number | null;
   signals: AggregatedSignals | null;
   loading: boolean;
   error: IntelligenceError;
@@ -54,6 +56,7 @@ export default function useIntelligenceData() {
     patternLearning: null,
     decisionIntelligence: null,
     boardSummary: null,
+    boardAdoptionLegitimacyIndex: null,
     signals: null,
     loading: true,
     error: null,
@@ -79,6 +82,15 @@ export default function useIntelligenceData() {
         fetchJson<BoardSummaryResponse>(`${BASE}/board-summary`, controller.signal),
       ]);
 
+      const organisationId =
+        sri.organisatie_id ||
+        String(localStorage.getItem("active_org_id") || "").trim() ||
+        null;
+
+      const boardAdoptionLegitimacyIndex = organisationId
+        ? await fetchBoardAdoptionLegitimacyIndex(organisationId).catch(() => null)
+        : null;
+
       if (controller.signal.aborted) return;
 
       setState({
@@ -89,6 +101,7 @@ export default function useIntelligenceData() {
         patternLearning,
         decisionIntelligence,
         boardSummary,
+        boardAdoptionLegitimacyIndex,
         signals: aggregateSignals({
           sri,
           drift,
@@ -97,6 +110,7 @@ export default function useIntelligenceData() {
           patternLearning,
           decisionIntelligence,
           boardSummary,
+          boardAdoptionLegitimacyIndex,
         }),
         loading: false,
         error: null,
@@ -134,6 +148,7 @@ export default function useIntelligenceData() {
       patternLearning: state.patternLearning,
       decisionIntelligence: state.decisionIntelligence,
       boardSummary: state.boardSummary,
+      boardAdoptionLegitimacyIndex: state.boardAdoptionLegitimacyIndex,
       signals: state.signals,
       loading: state.loading,
       error: state.error,

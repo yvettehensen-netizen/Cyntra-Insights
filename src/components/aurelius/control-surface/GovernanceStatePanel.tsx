@@ -26,10 +26,10 @@ export default function GovernanceStatePanel({
   const alerts = governance.escalation_ladder.slice(0, 4);
 
   return (
-    <section className="rounded-3xl border border-white/10 bg-[#0f141c] p-5" aria-label="Governance State Panel">
+    <section className="rounded-3xl border border-white/10 bg-[#0f141c] p-5" aria-label="Bestuurlijke status">
       <header className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-[11px] uppercase tracking-[0.28em] text-white/45">Governance State</p>
+          <p className="text-[11px] uppercase tracking-[0.28em] text-white/45">Bestuurlijke status</p>
           <h2 className="mt-1 text-xl font-semibold text-white">Bestuurlijke maturiteit</h2>
         </div>
         <div className={`rounded-lg border px-3 py-1 text-sm font-semibold ${stateBadgeKleur(state.state)}`}>
@@ -39,13 +39,13 @@ export default function GovernanceStatePanel({
 
       <div className="grid gap-3 md:grid-cols-[220px_1fr]">
         <article className="rounded-2xl border border-white/10 bg-[#0b1017] p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-white/55">Confidence</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-white/55">Betrouwbaarheid</p>
           <p className="mt-2 text-3xl font-semibold text-white">{state.confidence.toFixed(1)}%</p>
           <p className="mt-2 text-xs text-white/60">
-            Freeze flags: {governance.actieve_freeze_flags.length}
+            Freeze-flags: {governance.actieve_freeze_flags.length}
           </p>
           <p className="mt-1 text-xs text-white/60">
-            Governance decay: {riskEvolution.governance_decay.toFixed(1)}
+            Governance-verval: {riskEvolution.governance_decay.toFixed(1)}
           </p>
         </article>
 

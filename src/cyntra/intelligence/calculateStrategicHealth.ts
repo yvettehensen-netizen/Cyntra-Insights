@@ -33,13 +33,22 @@ export function calculateStrategicHealth(
   const driftInverse = clamp(input.drift_stability_inverse);
   const riskInverse = clamp(input.risk_density_inverse);
   const velocity = clamp(input.decision_velocity);
+  const boardIndex = clamp(
+    Number.isFinite(input.board_adoption_legitimacy_index)
+      ? Number(input.board_adoption_legitimacy_index)
+      : 7,
+    0,
+    10
+  );
+  const boardIndexScore = boardIndex * 10;
 
   const score =
-    governance * 0.3 +
-    consistency * 0.25 +
-    driftInverse * 0.2 +
+    governance * 0.25 +
+    consistency * 0.2 +
+    driftInverse * 0.15 +
     riskInverse * 0.15 +
-    velocity * 0.1;
+    velocity * 0.1 +
+    boardIndexScore * 0.15;
 
   const trend7d = trendFromSlice(input.sriTrend, 7);
   const trend30d = trendFromSlice(input.sriTrend, 30);
@@ -54,5 +63,6 @@ export function calculateStrategicHealth(
     trend7d,
     trend30d,
     volatility_flag,
+    board_adoption_legitimacy_index: Number(boardIndex.toFixed(2)),
   };
 }

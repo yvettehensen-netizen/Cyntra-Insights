@@ -106,8 +106,14 @@ export function evaluateDecisionIntelligence(
     ? clamp(Number(input.irreversibility_score))
     : currentDerived?.irreversibility || 0;
 
-  const ownership = Number.isFinite(input.ownership_clarity)
-    ? clamp(Number(input.ownership_clarity))
+  const ownershipInput = Number.isFinite(input.ownership_clarity_score)
+    ? Number(input.ownership_clarity_score)
+    : Number.isFinite(input.ownership_clarity)
+    ? Number(input.ownership_clarity)
+    : null;
+
+  const ownership = ownershipInput !== null
+    ? clamp(ownershipInput)
     : currentDerived?.ownership || 0;
 
   const execution = Number.isFinite(input.execution_probability)
@@ -127,6 +133,7 @@ export function evaluateDecisionIntelligence(
 
   return {
     irreversibility_score: Number(irreversibility.toFixed(1)),
+    ownership_clarity_score: Number(ownership.toFixed(1)),
     ownership_clarity: Number(ownership.toFixed(1)),
     execution_probability: Number(execution.toFixed(1)),
     decision_strength_index: Number(strength.toFixed(1)),

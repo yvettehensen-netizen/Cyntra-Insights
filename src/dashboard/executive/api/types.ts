@@ -181,6 +181,7 @@ export interface DecisionIntelligenceResponse {
   gegenereerd_op: string;
   organisatie_id: string | null;
   irreversibility_score: number;
+  ownership_clarity_score: number;
   ownership_clarity: number;
   execution_probability: number;
   decision_strength_index: number;

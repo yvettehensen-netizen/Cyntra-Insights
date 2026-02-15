@@ -66,8 +66,9 @@ export default function Footer() {
           <FooterColumn title="Oplossingen">
             {ENABLE_UNIFIED_SURFACE ? (
               <>
-                <FooterLink to="/aurelius/control-surface" label="Unified Control Surface" />
-                <FooterLink to="/aurelius/board-test" label="Board Test Module" />
+                <FooterLink to="/aurelius/control-surface" label="Geünificeerde controlelaag" />
+                <FooterLink to="/aurelius/board-test" label="Bestuurlijke Adoptietest" />
+                <FooterLink to="/aurelius/board-evaluation" label="Board Adoption & Legitimiteitsindex" />
               </>
             ) : (
               <>

@@ -16,6 +16,21 @@ function severity(avgIntensity: number): "critical" | "high" | "medium" | "low" 
   return "low";
 }
 
+function severityLabel(value: "critical" | "high" | "medium" | "low"): string {
+  if (value === "critical") return "kritiek";
+  if (value === "high") return "hoog";
+  if (value === "medium") return "matig";
+  return "laag";
+}
+
+function quadrantLabel(quadrant: string): string {
+  if (quadrant === "Stable") return "Stabiel";
+  if (quadrant === "Fragile") return "Fragiel";
+  if (quadrant === "Chaotic") return "Chaotisch";
+  if (quadrant === "Stagnating") return "Stagnerend";
+  return quadrant;
+}
+
 export default function DriftMatrix({ drift, pattern }: DriftMatrixProps) {
   const view = 320;
   const pad = 32;
@@ -31,15 +46,17 @@ export default function DriftMatrix({ drift, pattern }: DriftMatrixProps) {
   const derivedSeverity = useMemo(() => severity(avgDrift), [avgDrift]);
 
   return (
-    <section className="rounded-3xl border border-white/10 bg-[#0f141c] p-5" aria-label="Drift Matrix">
+    <section className="rounded-3xl border border-white/10 bg-[#0f141c] p-5" aria-label="Driftmatrix">
       <header className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-[11px] uppercase tracking-[0.28em] text-white/45">Drift Matrix</p>
-          <h2 className="mt-1 text-xl font-semibold text-white">Execution vs Governance Drift</h2>
+          <p className="text-[11px] uppercase tracking-[0.28em] text-white/45">Driftmatrix</p>
+          <h2 className="mt-1 text-xl font-semibold text-white">Uitvoering versus bestuurlijke drift</h2>
         </div>
         <div className="text-sm text-white">
-          Quadrant: <span className="font-semibold text-amber-300">{drift.quadrant}</span> · Severity:{" "}
-          <span className={derivedSeverity === "critical" ? "text-red-300" : "text-white/85"}>{derivedSeverity}</span>
+          Kwadrant: <span className="font-semibold text-amber-300">{quadrantLabel(drift.quadrant)}</span> · Ernst:{" "}
+          <span className={derivedSeverity === "critical" ? "text-red-300" : "text-white/85"}>
+            {severityLabel(derivedSeverity)}
+          </span>
         </div>
       </header>
 
@@ -69,13 +86,13 @@ export default function DriftMatrix({ drift, pattern }: DriftMatrixProps) {
           />
 
           <text x={pad + 10} y={pad + 18} fill="rgba(255,255,255,0.75)" fontSize="11">
-            Stagnating
+            Stagnerend
           </text>
           <text x={pad + size / 2 + 10} y={pad + 18} fill="rgba(255,255,255,0.75)" fontSize="11">
-            Chaotic
+            Chaotisch
           </text>
           <text x={pad + 10} y={pad + size / 2 + 18} fill="rgba(255,255,255,0.75)" fontSize="11">
-            Stable
+            Stabiel
           </text>
           <text
             x={pad + size / 2 + 10}
@@ -83,12 +100,13 @@ export default function DriftMatrix({ drift, pattern }: DriftMatrixProps) {
             fill="rgba(255,255,255,0.75)"
             fontSize="11"
           >
-            Fragile
+            Fragiel
           </text>
 
           <circle cx={dotX} cy={dotY} r="6.5" fill="#D4AF37" stroke="white" strokeWidth="1.5">
             <title>
-              Execution drift {drift.execution_drift.toFixed(2)} / Structural drift {drift.structural_drift.toFixed(2)}
+              Uitvoeringsdrift {drift.execution_drift.toFixed(2)} / Structurele drift{" "}
+              {drift.structural_drift.toFixed(2)}
             </title>
           </circle>
 
@@ -108,12 +126,12 @@ export default function DriftMatrix({ drift, pattern }: DriftMatrixProps) {
 
         <div className="grid gap-3">
           <article className="rounded-2xl border border-white/10 bg-[#0b1017] p-4">
-            <p className="text-xs uppercase tracking-[0.18em] text-white/55">Structural drift</p>
+            <p className="text-xs uppercase tracking-[0.18em] text-white/55">Structurele drift</p>
             <p className="mt-2 text-3xl font-semibold text-white">{(drift.structural_drift * 100).toFixed(1)}%</p>
           </article>
 
           <article className="rounded-2xl border border-white/10 bg-[#0b1017] p-4">
-            <p className="text-xs uppercase tracking-[0.18em] text-white/55">Execution drift</p>
+            <p className="text-xs uppercase tracking-[0.18em] text-white/55">Uitvoeringsdrift</p>
             <p className="mt-2 text-3xl font-semibold text-white">{(drift.execution_drift * 100).toFixed(1)}%</p>
           </article>
 
