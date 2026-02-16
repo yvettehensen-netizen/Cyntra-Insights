@@ -1,30 +1,85 @@
 import express from "express";
 import dotenv from "dotenv";
-import cors from "cors";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 import sendReportRouter from "./sendReport.js";
 import aiRouter from "./ai.js";
 import intelligenceRouter from "./intelligence.js";
 import analysesRouter from "./analyses.js";
+import domainPersistenceRouter from "./domainPersistence.js";
 
 dotenv.config();
 
-const app = express();
-const resolvedPort = Number.parseInt(
-  String(process.env.CONTROL_ROOM_API_PORT || process.env.PORT || "5100"),
-  10
-);
-const apiPort = Number.isFinite(resolvedPort) && resolvedPort > 0 ? resolvedPort : 5100;
+function attachApiRoutes(app) {
+  app.get("/health", (_req, res) => {
+    res.json({ status: "ok" });
+  });
 
-app.use(cors());
-app.use(express.json());
+  app.use("/", sendReportRouter);
+  app.use("/", aiRouter);
+  app.use("/", analysesRouter);
+  app.use("/", domainPersistenceRouter);
+  app.use("/intelligence", intelligenceRouter);
+}
 
-// ROUTES
-app.use("/api", sendReportRouter);
-app.use("/api", aiRouter);
-app.use("/api", analysesRouter);
-app.use("/api/intelligence", intelligenceRouter);
-app.use("/intelligence", intelligenceRouter);
+export function createServer() {
+  const app = express();
 
-app.listen(apiPort, () => {
-  console.log(`✅ Backend draait op http://localhost:${apiPort}`);
-});
+  app.disable("x-powered-by");
+  app.use(express.json({ limit: "12mb" }));
+  app.use(express.urlencoded({ extended: true, limit: "12mb" }));
+
+  attachApiRoutes(app);
+
+  app.use((err, _req, res, _next) => {
+    const message = err instanceof Error ? err.message : String(err || "Onbekende fout");
+    res.status(500).json({ error: message });
+  });
+
+  return app;
+}
+
+function isExecutedDirectly() {
+  const entryFile = process.argv[1] ? path.resolve(process.argv[1]) : "";
+  const thisFile = fileURLToPath(import.meta.url);
+  return entryFile === thisFile;
+}
+
+function createStandaloneApp() {
+  const app = express();
+  const apiApp = createServer();
+
+  app.disable("x-powered-by");
+  app.use("/api", apiApp);
+
+  const distDir = path.resolve(process.cwd(), "dist");
+  const indexPath = path.join(distDir, "index.html");
+
+  if (fs.existsSync(indexPath)) {
+    app.use(express.static(distDir));
+    app.get("*", (_req, res) => {
+      res.sendFile(indexPath);
+    });
+  } else {
+    app.get("/", (_req, res) => {
+      res.status(200).json({
+        status: "ok",
+        message: "Frontend dist ontbreekt. Run eerst `npm run build`.",
+      });
+    });
+  }
+
+  return app;
+}
+
+if (isExecutedDirectly()) {
+  const app = createStandaloneApp();
+  const port = Number(process.env.PORT || 5173);
+
+  app.listen(port, () => {
+    console.log(`[server] running on http://localhost:${port}`);
+  });
+}
+

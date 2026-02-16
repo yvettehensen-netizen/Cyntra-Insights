@@ -9,11 +9,11 @@ import { generateEmailTemplate } from "./emailTemplate.js";
 dotenv.config();
 const router = express.Router();
 const upload = multer();
-const resend = new Resend(process.env.VITE_RESEND_API_KEY);
+const resend = new Resend(process.env.RESEND_API_KEY || process.env.VITE_RESEND_API_KEY);
 
 const brands = JSON.parse(fs.readFileSync(path.resolve("./src/server/brands.json"), "utf8"));
 
-router.post("/api/sendReport", upload.single("file"), async (req, res) => {
+router.post("/sendReport", upload.single("file"), async (req, res) => {
   const { email, brand } = req.body;
   const file = req.file;
   if (!file) return res.status(400).json({ error: "Geen PDF ontvangen." });

@@ -1,32 +1,15 @@
-// src/api/saveAureliusReport.ts
-import { supabase } from "../lib/supabaseClient";
+// Legacy helper kept for compatibility.
+// Report persistence now happens server-side via POST /api/analyses.
 
 export async function saveAureliusReport(
-  type: string,
-  company: string,
-  result: any
+  _type: string,
+  _company: string,
+  _result: unknown
 ) {
-  const { data: auth } = await supabase.auth.getUser();
-
-  if (!auth?.user) {
-    return { success: false, error: "Not authenticated" };
-  }
-
-  const { data, error } = await supabase
-    .from("analyses")
-    .insert({
-      user_id: auth.user.id,
-      analysis_type: `aurelius-${type}`,
-      analysis_name: `Aurelius 3.5 – ${type}`,
-      company_name: company,
-      result,
-      status: "completed",
-      created_at: new Date().toISOString(),
-    })
-    .select()
-    .single();
-
-  if (error) return { success: false, error };
-
-  return { success: true, data };
+  return {
+    success: false,
+    error:
+      "saveAureliusReport is gedeactiveerd. Gebruik runAureliusEngine() met backend route /api/analyses.",
+  };
 }
+

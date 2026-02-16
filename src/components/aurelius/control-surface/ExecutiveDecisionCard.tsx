@@ -75,6 +75,56 @@ export default function ExecutiveDecisionCard({
         <p className="text-xs uppercase tracking-[0.18em] text-white/55">Bestuurlijke duiding</p>
         <p className="mt-2 text-sm leading-relaxed text-white/90">{truncateWords(card.narrative, 120)}</p>
       </article>
+
+      <button
+        className="btn btn-primary"
+        onClick={async () => {
+          try {
+            const createRes = await fetch("/api/analyses", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                organization: "Demo BV",
+                description: "Bestuurlijke Intelligentielaag Analyse",
+                context: {
+                  source: "ExecutiveDecisionCard",
+                  decision_card: card,
+                },
+                runImmediately: true,
+              }),
+            });
+
+            const created = await createRes.json();
+            if (!createRes.ok) {
+              throw new Error(created?.error || "POST /api/analyses mislukt");
+            }
+
+            const analysisId = created?.analysis?.id as string | undefined;
+            if (!analysisId) {
+              throw new Error("Geen analysis id teruggekregen");
+            }
+
+            const detailRes = await fetch(`/api/analyses/${encodeURIComponent(analysisId)}`);
+            const detail = await detailRes.json();
+            if (!detailRes.ok) {
+              throw new Error(detail?.error || "GET /api/analyses/:id mislukt");
+            }
+
+            console.log("Analysis created:", created.analysis);
+            console.log("Analysis details:", detail.analysis);
+
+            const pdfUrl = `/api/reports/pdf?analysisId=${encodeURIComponent(analysisId)}`;
+            window.open(pdfUrl, "_blank", "noopener,noreferrer");
+          } catch (error) {
+            console.error(error);
+            alert(error instanceof Error ? error.message : "Analyse starten mislukt");
+          }
+        }}
+      >
+        Start Analyse
+      </button>
     </section>
   );
 }

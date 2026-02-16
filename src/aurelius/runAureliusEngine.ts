@@ -1,14 +1,7 @@
-import { supabase } from "@/lib/supabaseClient";
-import { v4 as uuid } from "uuid";
-
-/* ✅ ADDITION — SUPABASE JSON SAFE TYPE */
-type Json =
-  | string
-  | number
-  | boolean
-  | null
-  | { [key: string]: Json }
-  | Json[];
+// ============================================================
+// AURELIUS — CORE ANALYSIS ENGINE CLIENT
+// ROUTE: src/aurelius/runAureliusEngine.ts
+// ============================================================
 
 export interface AureliusResult {
   executive_summary: string;
@@ -20,7 +13,14 @@ export interface AureliusResult {
     month2: string[];
     month3: string[];
   };
+  decision_pressure?: {
+    explicit_decision_required: boolean;
+    execution_risk_high: boolean;
+    governance_blocking: boolean;
+  };
+  execution_risks?: string[];
   confidence_score?: number;
+  decision_card_id?: string;
 }
 
 export type EngineSuccess = {
@@ -33,69 +33,71 @@ export type EngineFailure = {
   error: { message: string };
 };
 
+function extractResultPayload(analysis: Record<string, unknown> | null): AureliusResult | null {
+  if (!analysis) return null;
+
+  if (analysis.result_payload && typeof analysis.result_payload === "object") {
+    return analysis.result_payload as AureliusResult;
+  }
+
+  if (analysis.result && typeof analysis.result === "object") {
+    const legacy = analysis.result as Record<string, unknown>;
+    if ("input_payload" in legacy) {
+      const { input_payload: _discard, ...rest } = legacy;
+      if (Object.keys(rest).length) {
+        return rest as AureliusResult;
+      }
+    }
+    return legacy as AureliusResult;
+  }
+
+  return null;
+}
+
 export async function runAureliusEngine(input: {
   analysis_type: string;
   company_context: string;
   document_data?: string;
 }): Promise<EngineSuccess | EngineFailure> {
   try {
-    const id = uuid();
-
-    const result: AureliusResult = {
-      executive_summary:
-        "De organisatie bevindt zich op een kantelpunt waarbij doorgroeien zonder herstructurering leidt tot strategische erosie.",
-
-      insights: [
-        "Het MT opereert reactief in plaats van richtinggevend.",
-        "Besluitvorming is informeel en vertraagd.",
-      ],
-
-      risks: [
-        "Talentverlies",
-        "Strategische versnippering",
-        "Afname executiekracht",
-      ],
-
-      opportunities: [
-        "Heldere governance",
-        "Versnellen besluitvorming",
-        "Betere strategische focus",
-      ],
-
-      roadmap_90d: {
-        month1: ["Strategische prioriteiten herijken"],
-        month2: ["MT-structuur herdefiniëren"],
-        month3: ["Executiekracht borgen"],
+    const response = await fetch("/api/analyses", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
       },
-
-      confidence_score: 0.82,
-    };
-
-    /* ✅ ADDITION — JSON SAFE SERIALIZATION */
-    const safeResult = result as unknown as Json;
-
-    const { error } = await supabase.from("analyses").insert({
-      id,
-      analysis_type: input.analysis_type,
-
-      /* ✅ ADDITION — SUPABASE SAFE JSON */
-      result: safeResult,
-
-      input_data: {
-        company_context: input.company_context,
-        document_data: input.document_data ?? null,
-      },
-
-      created_at: new Date().toISOString(),
+      body: JSON.stringify({
+        organization: "Organisatie",
+        description: input.company_context,
+        context: {
+          analysis_type: input.analysis_type,
+          document_data: input.document_data ?? "",
+        },
+        runImmediately: true,
+      }),
     });
 
-    if (error) throw error;
+    const body = (await response.json()) as {
+      analysis?: Record<string, unknown>;
+      error?: string;
+    };
+
+    if (!response.ok) {
+      throw new Error(body.error || "Analyse engine fout");
+    }
+
+    const result = extractResultPayload(body.analysis ?? null);
+    if (!result) {
+      throw new Error("Analyse afgerond zonder resultaat payload");
+    }
 
     return { success: true, result };
-  } catch (e: any) {
+  } catch (e: unknown) {
     return {
       success: false,
-      error: { message: e.message ?? "Analyse engine fout" },
+      error: {
+        message: e instanceof Error ? e.message : "Analyse engine fout",
+      },
     };
   }
 }
+

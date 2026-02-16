@@ -1,10 +1,8 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { supabase } from "@/lib/supabaseClient";
 
-import ActionPlan90Days, {
-  MonthPlan,
-} from "@/aurelius/components/report/ActionPlan90Days";
+/* ✅ CANONIEK: bestuurs-executieplan */
+import ExecutionPlan90D from "@/aurelius/components/report/ExecutionPlan90D";
 
 import {
   ArrowLeft,
@@ -21,6 +19,9 @@ interface AnalysisResult {
   insights?: string[];
   risks?: string[];
   opportunities?: string[];
+  decision_contract?: any;
+  decision_gate?: any;
+  decision_failure_text?: string | null;
 }
 
 interface AnalysisRecord {
@@ -31,7 +32,25 @@ interface AnalysisRecord {
   input_data?: {
     companyName?: string;
   };
-  action_plan?: MonthPlan[];
+
+  /**
+   * ✅ NIEUW CANONIEK:
+   * Execution plan op bestuursniveau
+   * (gegenereerd via generate90DayPlan)
+   */
+  execution_plan?: {
+    objective: string;
+    months: {
+      month: number;
+      focus: string;
+      steps: {
+        week: number;
+        action: string;
+        owner: string;
+        metric: string;
+      }[];
+    }[];
+  };
 }
 
 /* =======================
@@ -47,15 +66,60 @@ export default function RapportDetailPage() {
   useEffect(() => {
     if (!id) return;
 
-    supabase
-      .from("analyses")
-      .select("*")
-      .eq("id", id)
-      .single()
-      .then(({ data }) => {
-        setReport(data as AnalysisRecord);
-        setLoading(false);
+    let cancelled = false;
+
+    fetch(`/api/analyses/${encodeURIComponent(id)}`)
+      .then(async (res) => {
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const message =
+            typeof json?.error === "string" ? json.error : "Rapport niet gevonden.";
+          throw new Error(message);
+        }
+
+        const analysis = (json?.analysis ?? {}) as Record<string, any>;
+        const resultPayload =
+          (analysis.result_payload as AnalysisResult | undefined) ||
+          (analysis.result as AnalysisResult | undefined) ||
+          {};
+        const inputPayload = (analysis.input_payload ?? {}) as Record<string, any>;
+
+        const mapped: AnalysisRecord = {
+          id: String(analysis.id || id),
+          analysis_type: String(analysis.analysis_type || analysis.type || "executive"),
+          created_at: String(analysis.created_at || new Date().toISOString()),
+          result: resultPayload,
+          input_data: {
+            companyName: String(
+              inputPayload.organization_name ||
+                inputPayload.companyName ||
+                analysis.organization_id ||
+                "Organisatie"
+            ),
+          },
+          execution_plan:
+            (resultPayload as any)?.execution_plan ??
+            (resultPayload as any)?.roadmap_90d ??
+            undefined,
+        };
+
+        return mapped;
+      })
+      .then((mapped) => {
+        if (cancelled) return;
+        setReport(mapped);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setReport(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   if (loading) {
@@ -74,7 +138,28 @@ export default function RapportDetailPage() {
     );
   }
 
-  const { result, created_at, analysis_type, input_data, action_plan } = report;
+  const {
+    result,
+    created_at,
+    analysis_type,
+    input_data,
+    execution_plan,
+  } = report;
+
+  const decisionContract =
+    (result as any)?.decision_contract ||
+    (result as any)?.decisionContract ||
+    (result as any)?.decision_gate?.contract ||
+    null;
+
+  const decisionFailureText =
+    (result as any)?.decision_failure_text ||
+    (result as any)?.decisionFailureText ||
+    (result as any)?.decision_gate?.failure_text ||
+    null;
+
+  const decisionScore =
+    (result as any)?.decision_gate?.score?.total ?? null;
 
   const formattedDate = new Date(created_at).toLocaleDateString("nl-NL", {
     day: "numeric",
@@ -125,8 +210,60 @@ export default function RapportDetailPage() {
           </section>
         )}
 
+        {/* ================= BESLUITCONTRACT ================= */}
+        {(decisionFailureText || decisionContract) && (
+          <section className="rounded-3xl border border-[#D4AF37]/30 bg-black/60 p-10 space-y-6">
+            <p className="text-xs tracking-[0.3em] text-[#D4AF37] uppercase">
+              Besluitcontract
+            </p>
+
+            {decisionFailureText && (
+              <div className="rounded-2xl border border-red-500/40 bg-red-950/40 p-6 text-red-200">
+                {sanitizeText(String(decisionFailureText))}
+              </div>
+            )}
+
+            {!decisionFailureText && decisionContract && (
+              <div className="space-y-4 text-white/80">
+                {typeof decisionContract === "string" ? (
+                  <p>{sanitizeText(decisionContract)}</p>
+                ) : (
+                  <div className="space-y-3">
+                    <DecisionRow label="Besluit" value={decisionContract.decision_statement} />
+                    <DecisionRow label="Owner" value={decisionContract.owner} />
+                    <DecisionRow label="Scope" value={decisionContract.scope} />
+                    <DecisionRow label="Onomkeerbaar" value={decisionContract.irreversible_action} />
+                    <DecisionRow
+                      label="Consequence"
+                      value={decisionContract.consequence_if_not_executed}
+                    />
+                    <DecisionRow
+                      label="Window (dagen)"
+                      value={String(decisionContract.execution_window_days ?? "")}
+                    />
+                    <DecisionRow
+                      label="Eerste signaal"
+                      value={decisionContract.first_execution_signal}
+                    />
+                    <DecisionRow
+                      label="Failure mode"
+                      value={decisionContract.failure_mode_if_ignored}
+                    />
+                  </div>
+                )}
+
+                {decisionScore !== null && (
+                  <p className="text-xs text-white/40">
+                    Score: {decisionScore} / 100
+                  </p>
+                )}
+              </div>
+            )}
+          </section>
+        )}
+
         {/* ================= INSIGHTS ================= */}
-        {result.insights?.length && (
+        {result.insights?.length ? (
           <section>
             <h2 className="text-4xl font-bold mb-24">
               Kerninzichten
@@ -145,10 +282,10 @@ export default function RapportDetailPage() {
               ))}
             </div>
           </section>
-        )}
+        ) : null}
 
         {/* ================= RISKS ================= */}
-        {result.risks?.length && (
+        {result.risks?.length ? (
           <section>
             <div className="flex items-center gap-4 mb-12">
               <AlertTriangle className="w-8 h-8 text-red-400" />
@@ -168,10 +305,10 @@ export default function RapportDetailPage() {
               ))}
             </div>
           </section>
-        )}
+        ) : null}
 
         {/* ================= OPPORTUNITIES ================= */}
-        {result.opportunities?.length && (
+        {result.opportunities?.length ? (
           <section>
             <h2 className="text-4xl font-bold mb-20">
               Strategische kansen
@@ -188,12 +325,12 @@ export default function RapportDetailPage() {
               ))}
             </ul>
           </section>
-        )}
+        ) : null}
 
-        {/* ================= 90-DAGEN ACTIEPLAN ================= */}
-        {action_plan && action_plan.length > 0 && (
+        {/* ================= 90-DAGEN EXECUTIEPLAN ================= */}
+        {execution_plan && (
           <section className="border border-[#D4AF37]/40 bg-black/40 backdrop-blur-xl rounded-3xl p-20 shadow-3xl">
-            <ActionPlan90Days plans={action_plan} />
+            <ExecutionPlan90D plan={execution_plan} />
           </section>
         )}
 
@@ -211,4 +348,27 @@ export default function RapportDetailPage() {
       </main>
     </div>
   );
+}
+
+function DecisionRow({ label, value }: { label: string; value?: string }) {
+  if (!value) return null;
+  return (
+    <p>
+      <span className="text-white/50">{label}:</span>{" "}
+      {sanitizeText(value)}
+    </p>
+  );
+}
+
+function sanitizeText(value: string): string {
+  return value
+    .replace(/\*+/g, "")
+    .replace(/HGBCO/gi, "")
+    .replace(/primary structural failure/gi, "")
+    .replace(/^\s*[-•]\s+/gm, "")
+    .replace(/^\s*\d+[.)]\s+/gm, "")
+    .replace(/[•]/g, "")
+    .replace(/\s+/g, " ")
+    .replace(/\s+([.,;:!?])/g, "$1")
+    .trim();
 }

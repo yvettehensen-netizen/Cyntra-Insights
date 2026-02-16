@@ -1,13 +1,7 @@
 // ============================================================
-// ✅ RUN AURELIUS ENGINE — CYNTRA INTERNAL STORAGE (FOUTLOOS)
+// ✅ RUN AURELIUS ENGINE — BACKEND API CLIENT
 // Path: src/aurelius/engine/runAurelius.ts
 // ============================================================
-
-import { supabase } from "../../lib/supabaseClient";
-
-/* ============================================================
-   REPORT SCHEMA (CYNTRA V1)
-============================================================ */
 
 export interface AureliusResult {
   executive_summary: string;
@@ -22,10 +16,6 @@ export interface AureliusResult {
   confidence_score?: number;
 }
 
-/* ============================================================
-   ENGINE RESPONSE TYPES
-============================================================ */
-
 export type EngineSuccess = {
   success: true;
   result: AureliusResult;
@@ -36,9 +26,27 @@ export type EngineFailure = {
   error: { message: string };
 };
 
-/* ============================================================
-   ✅ MAIN ENGINE RUNNER — STORES FULLY IN SUPABASE
-============================================================ */
+function extractResultPayload(analysis: Record<string, unknown> | null): AureliusResult | null {
+  if (!analysis) return null;
+  const resultPayload = analysis.result_payload;
+  if (resultPayload && typeof resultPayload === "object") {
+    return resultPayload as AureliusResult;
+  }
+
+  const legacyResult = analysis.result;
+  if (legacyResult && typeof legacyResult === "object") {
+    const legacy = legacyResult as Record<string, unknown>;
+    if ("input_payload" in legacy) {
+      const { input_payload: _discard, ...rest } = legacy;
+      if (Object.keys(rest).length) {
+        return rest as AureliusResult;
+      }
+    }
+    return legacy as AureliusResult;
+  }
+
+  return null;
+}
 
 export async function runAureliusEngine(input: {
   analysis_type: string;
@@ -46,51 +54,35 @@ export async function runAureliusEngine(input: {
   document_data?: string;
 }): Promise<EngineSuccess | EngineFailure> {
   try {
-    const id = crypto.randomUUID();
-
-    const result: AureliusResult = {
-      executive_summary:
-        "De organisatie bevindt zich op een kantelpunt waarbij doorgroeien zonder herstructurering leidt tot strategische erosie.",
-
-      insights: [
-        "Het MT opereert reactief in plaats van richtinggevend.",
-        "Besluitvorming is informeel en vertraagd.",
-      ],
-
-      risks: [
-        "Talentverlies",
-        "Strategische versnippering",
-        "Afname executiekracht",
-      ],
-
-      opportunities: [
-        "Heldere governance",
-        "Versnellen besluitvorming",
-        "Betere strategische focus",
-      ],
-
-      roadmap_90d: {
-        month1: ["Strategische prioriteiten herijken"],
-        month2: ["MT-structuur herdefiniëren"],
-        month3: ["Executiekracht borgen"],
+    const response = await fetch("/api/analyses", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
       },
-
-      confidence_score: 0.82,
-    };
-
-    // ✅ SAVE TO SUPABASE
-    const { error } = await supabase.from("analyses").insert({
-      id,
-      analysis_type: input.analysis_type,
-      result,
-      input_data: {
-        company_context: input.company_context,
-        document_data: input.document_data ?? null,
-      },
-      created_at: new Date().toISOString(),
+      body: JSON.stringify({
+        organization: "Organisatie",
+        description: input.company_context,
+        context: {
+          analysis_type: input.analysis_type,
+          document_data: input.document_data ?? "",
+        },
+        runImmediately: true,
+      }),
     });
 
-    if (error) throw error;
+    const body = (await response.json()) as {
+      analysis?: Record<string, unknown>;
+      error?: string;
+    };
+
+    if (!response.ok) {
+      throw new Error(body.error || "Analyse engine fout");
+    }
+
+    const result = extractResultPayload(body.analysis ?? null);
+    if (!result) {
+      throw new Error("Analyse afgerond zonder resultaat payload");
+    }
 
     return { success: true, result };
   } catch (err) {
@@ -102,3 +94,4 @@ export async function runAureliusEngine(input: {
     };
   }
 }
+

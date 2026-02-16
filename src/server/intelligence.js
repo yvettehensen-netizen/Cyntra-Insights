@@ -1,24 +1,9 @@
 import { Router } from "express";
-import { createClient } from "@supabase/supabase-js";
+import { supabaseService } from "./supabaseService.js";
 
 const router = Router();
 
-const SUPABASE_URL =
-  process.env.SUPABASE_URL ||
-  process.env.VITE_SUPABASE_URL ||
-  "";
-
-const SUPABASE_KEY =
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.SERVICE_ROLE_KEY ||
-  process.env.VITE_SUPABASE_ANON_KEY ||
-  "";
-
-const supabase = SUPABASE_URL && SUPABASE_KEY
-  ? createClient(SUPABASE_URL, SUPABASE_KEY, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    })
-  : null;
+const supabase = supabaseService;
 
 const SRI_BANDEN = [
   { naam: "Autonomous", max: 35, kleur: "green" },
@@ -989,6 +974,7 @@ async function haalDecisionIntelligenceData(organisatieId) {
       gegenereerd_op: nuIso(),
       organisatie_id: organisatieId || null,
       irreversibility_score: 0,
+      ownership_clarity_score: 0,
       ownership_clarity: 0,
       execution_probability: 0,
       decision_strength_index: 0,
@@ -1064,6 +1050,7 @@ async function haalDecisionIntelligenceData(organisatieId) {
     gegenereerd_op: nuIso(),
     organisatie_id: organisatieId || null,
     irreversibility_score: afronden(toNum(currentMetrics?.irreversibility, 0), 1),
+    ownership_clarity_score: afronden(toNum(currentMetrics?.ownership, 0), 1),
     ownership_clarity: afronden(toNum(currentMetrics?.ownership, 0), 1),
     execution_probability: afronden(toNum(currentMetrics?.execution, 0), 1),
     decision_strength_index: afronden(toNum(currentMetrics?.strength, 0), 1),
