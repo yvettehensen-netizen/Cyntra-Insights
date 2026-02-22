@@ -47,6 +47,7 @@ export interface HGBCOCard {
 export interface AnalysisResult {
   title?: string;
   executive_summary?: string;
+  raw_markdown?: string;
 
   /** ✅ HGBCO PRIMARY BACKBONE */
   hgbco?: HGBCOCard;
@@ -105,17 +106,60 @@ const LINE = 7.4;
 const BLACK: RGB = [0, 0, 0];
 const GOLD: RGB = [184, 151, 68];
 const WHITE: RGB = [255, 255, 255];
+const EXECUTIVE_TITLE: RGB = [10, 37, 64];
+const EXECUTIVE_TEXT: RGB = [20, 28, 40];
+const EXECUTIVE_CARD: RGB = [248, 250, 252];
+const DECISION_FRAME: RGB = [61, 61, 61];
 
 /* ================= CANONICAL ORDER ================= */
 
-const CANONICAL_SECTION_ORDER = [
-  "waar_staan_we_nu_echt",
-  "wat_hier_fundamenteel_schuurt",
-  "wat_er_gebeurt_als_er_niets_verandert",
-  "de_keuzes_die_nu_voorliggen",
-  "wat_dit_vraagt_van_bestuur_en_organisatie",
-  "het_besluit_dat_nu_nodig_is",
-];
+const EXECUTIVE_SECTION_CATALOG = [
+  {
+    key: "dominante_bestuurlijke_these",
+    title: "Dominante Bestuurlijke These",
+    aliases: ["bestuurlijke_these", "waar_staan_we_nu_echt"],
+  },
+  {
+    key: "kernconflict",
+    title: "Kernconflict",
+    aliases: ["het_kernconflict", "wat_hier_fundamenteel_schuurt"],
+  },
+  {
+    key: "expliciete_tradeoffs",
+    title: "Expliciete Trade-offs",
+    aliases: ["de_keuzes_die_nu_voorliggen", "tradeoffs"],
+  },
+  {
+    key: "opportunity_cost",
+    title: "Opportunity Cost",
+    aliases: ["wat_er_gebeurt_als_er_niets_verandert"],
+  },
+  {
+    key: "governance_impact",
+    title: "Governance Impact",
+    aliases: ["wat_dit_vraagt_van_bestuur_en_organisatie"],
+  },
+  {
+    key: "machtsdynamiek_onderstroom",
+    title: "Machtsdynamiek & Onderstroom",
+    aliases: ["machtsdynamiek__onderstroom"],
+  },
+  {
+    key: "executierisico",
+    title: "Executierisico",
+    aliases: [],
+  },
+  {
+    key: "interventieplan_90dagen",
+    title: "90-Dagen Interventieplan",
+    aliases: ["90dagen_interventieplan", "90_dagen_actieplan"],
+  },
+  {
+    key: "decision_contract",
+    title: "Decision Contract",
+    aliases: ["het_besluit_dat_nu_nodig_is"],
+  },
+] as const;
 
 /* ================= HELPERS ================= */
 
@@ -137,6 +181,56 @@ const normalize = (v: unknown): string => {
 };
 
 const mutableRGB = (c: RGB): [number, number, number] => [...c];
+
+function splitOpportunityWindows(text: string): Array<{ label: string; content: string }> {
+  const lines = text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const segments = {
+    "30 dagen": [] as string[],
+    "90 dagen": [] as string[],
+    "365 dagen": [] as string[],
+  };
+
+  let active: keyof typeof segments = "30 dagen";
+  for (const line of lines) {
+    if (/(^|\s)(30|0)\s*dagen?/i.test(line) || /dag\s*0/i.test(line)) {
+      active = "30 dagen";
+      continue;
+    }
+    if (/(^|\s)90\s*dagen?/i.test(line)) {
+      active = "90 dagen";
+      continue;
+    }
+    if (/(^|\s)365\s*dagen?/i.test(line) || /\b1\s*jaar\b/i.test(line)) {
+      active = "365 dagen";
+      continue;
+    }
+    segments[active].push(line);
+  }
+
+  const fallback = text
+    .split(/\n\s*\n+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  return [
+    {
+      label: "30 dagen",
+      content: segments["30 dagen"].join(" ").trim() || fallback[0] || "Niet gespecificeerd.",
+    },
+    {
+      label: "90 dagen",
+      content: segments["90 dagen"].join(" ").trim() || fallback[1] || fallback[0] || "Niet gespecificeerd.",
+    },
+    {
+      label: "365 dagen",
+      content: segments["365 dagen"].join(" ").trim() || fallback[2] || fallback[1] || fallback[0] || "Niet gespecificeerd.",
+    },
+  ];
+}
 
 /* ============================================================
    PDF GENERATOR — HGBCO CANON
@@ -323,42 +417,191 @@ export function generateAureliusPDF(
   /* ================= CORE SECTIONS ================= */
 
   if (report.sections) {
-    for (const key of CANONICAL_SECTION_ORDER) {
-      const s = report.sections[key];
-      if (!s) continue;
+    const sections = report.sections ?? {};
 
-      sectionIndex++;
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(14);
-      doc.setTextColor(...GOLD);
-      doc.text(`${sectionIndex}. ${s.title}`, M.x, y);
-
-      y += 12;
-      resetBodyFont(doc);
-
-      const paragraphs = normalize(s.content)
-        .split(/\n\s*\n+/)
-        .map((p) => p.trim())
-        .filter(Boolean);
-
-      for (const para of paragraphs) {
-        ensure(18);
-        const lines = doc.splitTextToSize(
-          para,
-          PAGE.w - M.x * 2 - 4
-        );
-        for (const line of lines) {
-          doc.text(line, M.x, y);
-          y += LINE;
-        }
-        y += 6;
+    const resolvedSections = EXECUTIVE_SECTION_CATALOG.map((entry) => {
+      const direct = sections[entry.key];
+      if (direct) {
+        return {
+          key: entry.key,
+          title: entry.title,
+          text: normalize(direct.content).trim(),
+        };
       }
 
-      y += 4;
+      for (const alias of entry.aliases) {
+        const aliased = sections[alias];
+        if (!aliased) continue;
+        const text = normalize(aliased.content).trim();
+        if (text) {
+          return {
+            key: entry.key,
+            title: entry.title,
+            text,
+          };
+        }
+      }
+
+      return {
+        key: entry.key,
+        title: entry.title,
+        text: "",
+      };
+    }).filter((entry) => entry.text.length > 0);
+
+    const decisionSection = resolvedSections.find(
+      (entry) => entry.key === "decision_contract"
+    );
+    const regularSections = resolvedSections.filter(
+      (entry) => entry.key !== "decision_contract"
+    );
+
+    const contentWidth = PAGE.w - M.x * 2 - 12;
+    const lineHeight = 5.2;
+
+    for (const section of regularSections) {
+      sectionIndex++;
+
+      if (section.key === "opportunity_cost") {
+        const windows = splitOpportunityWindows(section.text).map((item) => ({
+          label: item.label,
+          lines: doc.splitTextToSize(item.content, contentWidth),
+        }));
+
+        const windowsHeight = windows.reduce(
+          (total, item) => total + item.lines.length * lineHeight + 12,
+          0
+        );
+        const cardHeight = Math.max(42, windowsHeight + 14);
+        ensure(cardHeight + 18);
+
+        doc.setFillColor(...EXECUTIVE_CARD);
+        doc.setDrawColor(...EXECUTIVE_TITLE);
+        doc.setLineWidth(0.3);
+        doc.roundedRect(
+          M.x - 2,
+          y + 2,
+          PAGE.w - M.x * 2 + 4,
+          cardHeight,
+          2.5,
+          2.5,
+          "FD"
+        );
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(13.5);
+        doc.setTextColor(...EXECUTIVE_TITLE);
+        doc.text(`${sectionIndex}. ${section.title}`, M.x, y);
+
+        let cursorY = y + 11;
+        for (const item of windows) {
+          doc.setDrawColor(...EXECUTIVE_TITLE);
+          doc.setLineWidth(1.2);
+          doc.line(M.x + 4, cursorY, PAGE.w - M.x - 4, cursorY);
+          cursorY += 5;
+
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(10.5);
+          doc.setTextColor(...EXECUTIVE_TITLE);
+          doc.text(item.label, M.x + 4, cursorY);
+          cursorY += 5;
+
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(10.1);
+          doc.setTextColor(...EXECUTIVE_TEXT);
+          for (const line of item.lines) {
+            doc.text(line, M.x + 4, cursorY);
+            cursorY += lineHeight;
+          }
+          cursorY += 3;
+        }
+
+        y += cardHeight + 14;
+        continue;
+      }
+
+      const paragraphs = section.text
+        .split(/\n\s*\n+/)
+        .map((part) => part.trim())
+        .filter(Boolean);
+      const lines = paragraphs.flatMap((part, index) => {
+        const splitLines = doc.splitTextToSize(part, contentWidth);
+        return index === 0 ? splitLines : ["", ...splitLines];
+      });
+
+      const cardHeight = Math.max(30, 16 + lines.length * lineHeight);
+      ensure(cardHeight + 18);
+
+      doc.setFillColor(...EXECUTIVE_CARD);
+      doc.setDrawColor(...EXECUTIVE_TITLE);
+      doc.setLineWidth(0.3);
+      doc.roundedRect(
+        M.x - 2,
+        y + 2,
+        PAGE.w - M.x * 2 + 4,
+        cardHeight,
+        2.5,
+        2.5,
+        "FD"
+      );
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(13.5);
+      doc.setTextColor(...EXECUTIVE_TITLE);
+      doc.text(`${sectionIndex}. ${section.title}`, M.x, y);
+
+      let cursorY = y + 11;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10.1);
+      doc.setTextColor(...EXECUTIVE_TEXT);
+      for (const line of lines) {
+        if (!line) {
+          cursorY += lineHeight * 0.45;
+          continue;
+        }
+        doc.text(line, M.x + 4, cursorY);
+        cursorY += lineHeight;
+      }
+
+      y += cardHeight + 14;
+    }
+
+    if (decisionSection) {
+      newPage();
+      sectionIndex++;
+
+      const frameX = M.x - 3;
+      const frameY = HEADER_H + M.y - 8;
+      const frameW = PAGE.w - frameX * 2;
+      const frameH = PAGE.h - frameY - FOOTER_H - 8;
+
+      doc.setFillColor(...EXECUTIVE_CARD);
+      doc.rect(frameX, frameY, frameW, frameH, "F");
+      doc.setDrawColor(...DECISION_FRAME);
+      doc.setLineWidth(1.4);
+      doc.rect(frameX, frameY, frameW, frameH);
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14.5);
+      doc.setTextColor(...EXECUTIVE_TITLE);
+      doc.text(`${sectionIndex}. ${decisionSection.title}`, frameX + 6, frameY + 12);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10.2);
+      doc.setTextColor(...EXECUTIVE_TEXT);
+
+      const decisionLines = doc.splitTextToSize(
+        decisionSection.text,
+        frameW - 12
+      );
+      let decisionY = frameY + 22;
+      for (const line of decisionLines) {
+        if (decisionY > frameY + frameH - 8) break;
+        doc.text(line, frameX + 6, decisionY);
+        decisionY += 5.4;
+      }
     }
   }
 
-  newPage();
   doc.save(`${company.replace(/[^\w]+/g, "_")}_Aurelius_Report.pdf`);
 }
