@@ -851,6 +851,77 @@ function sanitizeSectionOpeners(text: string): string {
   return output;
 }
 
+function chunkSentencesIntoParagraphs(
+  sentences: string[],
+  maxSentences = 2,
+  maxChars = 220
+): string[] {
+  const paragraphs: string[] = [];
+  let bucket: string[] = [];
+
+  const flush = () => {
+    if (!bucket.length) return;
+    paragraphs.push(bucket.join(" ").trim());
+    bucket = [];
+  };
+
+  for (const sentence of sentences) {
+    const next = sentence.trim();
+    if (!next) continue;
+
+    if (!bucket.length) {
+      bucket.push(next);
+      continue;
+    }
+
+    const candidate = `${bucket.join(" ")} ${next}`;
+    if (bucket.length >= maxSentences || candidate.length > maxChars) {
+      flush();
+      bucket.push(next);
+      continue;
+    }
+
+    bucket.push(next);
+  }
+
+  flush();
+  return paragraphs.filter(Boolean);
+}
+
+function enforceReadableParagraphRhythm(text: string): string {
+  let output = text;
+
+  for (const heading of STRUCTURE_HEADINGS) {
+    const section = extractSection(output, heading);
+    if (!section) continue;
+
+    const lines = section
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    const bulletLines = lines.filter((line) => /^[-*•]\s+/.test(line));
+    if (bulletLines.length >= 2) {
+      const intro = lines.find((line) => !/^[-*•]\s+/.test(line));
+      const normalizedBullets = bulletLines.map((line) =>
+        `- ${line.replace(/^[-*•]\s+/, "").trim()}`
+      );
+      const rebuilt = intro
+        ? [intro, ...normalizedBullets].join("\n")
+        : normalizedBullets.join("\n");
+      output = replaceSection(output, heading, rebuilt);
+      continue;
+    }
+
+    const sentences = splitIntoSentences(section);
+    if (!sentences.length) continue;
+    const rebuilt = chunkSentencesIntoParagraphs(sentences, 2, 220).join("\n\n");
+    output = replaceSection(output, heading, rebuilt || section.trim());
+  }
+
+  return output;
+}
+
 function removeRepeatedSectionSentences(text: string): string {
   let output = text;
   const seen = new Set<string>();
@@ -858,6 +929,33 @@ function removeRepeatedSectionSentences(text: string): string {
   for (const heading of STRUCTURE_HEADINGS) {
     const section = extractSection(output, heading);
     if (!section) continue;
+
+    const lines = section
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const hasBullets = lines.some((line) => /^[-*•]\s+/.test(line));
+    if (hasBullets) {
+      const cleanedBulletLines: string[] = [];
+      for (const line of lines) {
+        if (!/^[-*•]\s+/.test(line)) {
+          cleanedBulletLines.push(line);
+          continue;
+        }
+        const bulletText = line.replace(/^[-*•]\s+/, "").trim();
+        const key = normalizeSentenceKey(bulletText);
+        if (key.length >= 24 && seen.has(key)) {
+          continue;
+        }
+        if (key.length >= 24) {
+          seen.add(key);
+        }
+        cleanedBulletLines.push(`- ${bulletText}`);
+      }
+      const cleanedBulletSection = cleanedBulletLines.join("\n").trim() || section.trim();
+      output = replaceSection(output, heading, cleanedBulletSection);
+      continue;
+    }
 
     const sentences = splitIntoSentences(section);
     const filtered: string[] = [];
@@ -872,7 +970,8 @@ function removeRepeatedSectionSentences(text: string): string {
       filtered.push(sentence);
     }
 
-    const cleanedSection = filtered.join(" ").trim() || section.trim();
+    const cleanedSection =
+      chunkSentencesIntoParagraphs(filtered, 2, 220).join("\n\n").trim() || section.trim();
     output = replaceSection(output, heading, cleanedSection);
   }
 
@@ -1097,6 +1196,7 @@ function hardenNarrativeCandidate(
   output = enforceSignatureLayer(output);
   output = sanitizeSectionOpeners(output);
   output = removeRepeatedSectionSentences(output);
+  output = enforceReadableParagraphRhythm(output);
   output = enforceMinimumWords(output, minWords, maxWords);
   output = enforceConcreteNarrativeMarkdown(
     output,
@@ -1104,6 +1204,7 @@ function hardenNarrativeCandidate(
   );
   output = sanitizeSectionOpeners(output);
   output = removeRepeatedSectionSentences(output);
+  output = enforceReadableParagraphRhythm(output);
   return trimToMaxWords(output, maxWords);
 }
 

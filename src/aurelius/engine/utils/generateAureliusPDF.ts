@@ -93,27 +93,33 @@ export interface CyntraCoverMeta {
 /* ================= CONSTANTS ================= */
 
 const PAGE = { w: 210, h: 297 };
-const M = { x: 28, y: 30 };
+const M = { x: 22, y: 24 };
 
-const HEADER_H = 22;
-const FOOTER_H = 12;
+const HEADER_H = 14;
+const FOOTER_H = 14;
 
-const FONT_BODY = 10.6;
-const LINE = 7.4;
+const FONT_BODY = 10.2;
+const LINE = 5.4;
 
 /* ================= THEME ================= */
 
-const BLACK: RGB = [0, 0, 0];
-const GOLD: RGB = [184, 151, 68];
+const COVER_BG: RGB = [0, 31, 63]; // #001F3F
+const COVER_GRID: RGB = [6, 43, 78];
+const INNER_BG: RGB = [10, 15, 28]; // #0A0F1C
+const GOLD: RGB = [212, 175, 55]; // #D4AF37
 const WHITE: RGB = [255, 255, 255];
-const EXECUTIVE_TITLE: RGB = [10, 37, 64];
-const EXECUTIVE_TEXT: RGB = [20, 28, 40];
-const EXECUTIVE_CARD: RGB = [248, 250, 252];
+const EXECUTIVE_TITLE: RGB = [212, 175, 55];
+const EXECUTIVE_TEXT: RGB = [232, 238, 247];
+const EXECUTIVE_MUTED: RGB = [160, 172, 191];
+const EXECUTIVE_CARD: RGB = [16, 24, 38];
+const EXECUTIVE_CARD_BORDER: RGB = [26, 47, 77];
+const SECTION_DIVIDER: RGB = [10, 37, 64]; // #0A2540
 const LOSS_TEXT_RED: RGB = [255, 77, 77]; // #FF4D4D
 const DECISION_CONTRACT_BG: RGB = [28, 37, 38]; // #1C2526
-const DECISION_CONTRACT_BORDER: RGB = [10, 37, 64]; // #0A2540
-const SECTION_TITLE_MARGIN_BOTTOM = 7; // ~1.2rem visual spacing
-const DECISION_CONTRACT_BORDER_WIDTH_MM = 0.7; // ~2px equivalent
+const DECISION_CONTRACT_BORDER: RGB = [212, 175, 55];
+const SECTION_TITLE_MARGIN_BOTTOM = 8;
+const DECISION_CONTRACT_BORDER_WIDTH_MM = 0.8;
+const COVER_GLOBE_RADIUS = 84;
 const FALLBACK_WARNING_MARKERS = [
   /\[CYNTRA_FALLBACK_WARNING\]/gi,
   /SIGNATURE LAYER WAARSCHUWING:[^\n]*\n?/gi,
@@ -180,7 +186,7 @@ const EXECUTIVE_SECTION_CATALOG = [
 const resetBodyFont = (doc: jsPDF) => {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(FONT_BODY);
-  doc.setTextColor(...WHITE);
+  doc.setTextColor(...EXECUTIVE_TEXT);
 };
 
 function sanitizeReportText(value: string): string {
@@ -188,6 +194,12 @@ function sanitizeReportText(value: string): string {
   for (const marker of FALLBACK_WARNING_MARKERS) {
     cleaned = cleaned.replace(marker, "");
   }
+  cleaned = cleaned
+    .replace(
+      /^\s*(SIGNATURE LAYER WAARSCHUWING|Aanname:|Contextanker:|Contextsignaal:)[^\n]*\n?/gim,
+      ""
+    )
+    .replace(/\b(duid structureel|werk uit structureel|beperkte context)\b/gi, "");
   cleaned = cleaned
     .replace(/\n{3,}/g, "\n\n")
     .trim();
@@ -208,6 +220,88 @@ const normalize = (v: unknown): string => {
 };
 
 const mutableRGB = (c: RGB): [number, number, number] => [...c];
+
+function formatReportDate(date: Date): string {
+  return date.toLocaleDateString("nl-NL", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
+function splitIntoSentences(text: string): string[] {
+  return (text.match(/[^.!?\n]+[.!?]?/g) ?? [])
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+}
+
+function splitIntoReadableParagraphs(
+  text: string,
+  maxSentences = 2,
+  maxChars = 260
+): string[] {
+  const source = sanitizeReportText(text);
+  if (!source) return [];
+
+  const blocks = source
+    .split(/\n\s*\n+/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+
+  const paragraphs: string[] = [];
+
+  for (const block of blocks) {
+    const lines = block
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    const bulletLines = lines.filter((line) =>
+      /^([-*•]|\d+[.)])\s+/.test(line)
+    );
+    if (bulletLines.length > 0) {
+      paragraphs.push(
+        ...bulletLines.map((line) =>
+          line.replace(/^([-*•]|\d+[.)])\s+/, "").trim()
+        )
+      );
+      continue;
+    }
+
+    const sentences = splitIntoSentences(block);
+    if (sentences.length <= maxSentences && block.length <= maxChars) {
+      paragraphs.push(block);
+      continue;
+    }
+
+    let cursor = "";
+    let count = 0;
+    for (const sentence of sentences) {
+      const candidate = cursor ? `${cursor} ${sentence}` : sentence;
+      if (!cursor) {
+        cursor = sentence;
+        count = 1;
+        continue;
+      }
+
+      if (count >= maxSentences || candidate.length > maxChars) {
+        paragraphs.push(cursor.trim());
+        cursor = sentence;
+        count = 1;
+        continue;
+      }
+
+      cursor = candidate;
+      count += 1;
+    }
+
+    if (cursor.trim()) {
+      paragraphs.push(cursor.trim());
+    }
+  }
+
+  return paragraphs.filter(Boolean);
+}
 
 function splitOpportunityWindows(text: string): Array<{ label: string; content: string }> {
   const lines = text
@@ -276,69 +370,160 @@ export function generateAureliusPDF(
   meta?: CyntraCoverMeta
 ) {
   const doc = new jsPDF("p", "mm", "a4");
+  const generatedAt = new Date();
+  const dateLabel = formatReportDate(generatedAt);
+  const organizationName =
+    sanitizeReportText(company || report.organisation || "Onbenoemd") || "Onbenoemd";
 
   let y = HEADER_H + M.y;
-  let page = 1;
+  let page = 0;
   let sectionIndex = 0;
 
-  const paintBlackBackground = () => {
-    doc.setFillColor(...BLACK);
+  const paintInnerBackground = () => {
+    doc.setFillColor(...INNER_BG);
     doc.rect(0, 0, PAGE.w, PAGE.h, "F");
   };
 
+  const drawCoverGrid = () => {
+    const centerX = PAGE.w / 2;
+    const centerY = PAGE.h / 2 - 32;
+
+    doc.setDrawColor(...COVER_GRID);
+    doc.setLineWidth(0.26);
+    doc.ellipse(centerX, centerY, COVER_GLOBE_RADIUS, COVER_GLOBE_RADIUS * 0.72);
+
+    for (let i = 1; i <= 4; i++) {
+      const ratio = 1 - i * 0.16;
+      doc.ellipse(
+        centerX,
+        centerY,
+        COVER_GLOBE_RADIUS * ratio,
+        COVER_GLOBE_RADIUS * 0.72 * ratio
+      );
+    }
+
+    for (let i = -4; i <= 4; i++) {
+      const radiusX = Math.max(8, Math.abs(i) * 7 + 6);
+      doc.ellipse(centerX, centerY, radiusX, COVER_GLOBE_RADIUS * 0.72);
+    }
+  };
+
   const header = () => {
+    doc.setDrawColor(...SECTION_DIVIDER);
+    doc.setLineWidth(0.4);
+    doc.line(M.x, 12, PAGE.w - M.x, 12);
+
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
+    doc.setFontSize(8.8);
     doc.setTextColor(...GOLD);
-    doc.text("AURELIUS DECISION ENGINE™", M.x, 16);
-    resetBodyFont(doc);
+    doc.text("CYNTRA INSIGHTS", M.x, 9.2);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.1);
+    doc.setTextColor(...EXECUTIVE_MUTED);
+    doc.text("Strategisch Besluitrapport", PAGE.w - M.x, 9.2, { align: "right" });
   };
 
   const footer = () => {
-    doc.setFontSize(7.5);
-    doc.setTextColor(...GOLD);
-    doc.text(`© ${new Date().getFullYear()} Aurelius`, M.x, PAGE.h - 5);
-    doc.text(`${page}`, PAGE.w - M.x, PAGE.h - 5, { align: "right" });
+    const footerY = PAGE.h - 6.4;
+    doc.setDrawColor(...SECTION_DIVIDER);
+    doc.setLineWidth(0.35);
+    doc.line(M.x, PAGE.h - FOOTER_H + 2.8, PAGE.w - M.x, PAGE.h - FOOTER_H + 2.8);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.9);
+    doc.setTextColor(...EXECUTIVE_MUTED);
+    doc.text("Cyntra Insights – Executive Operating System", M.x, footerY);
+    doc.text("Vertrouwelijk", PAGE.w / 2, footerY, { align: "center" });
+    doc.text(`${page}`, PAGE.w - M.x, footerY, { align: "right" });
+
     resetBodyFont(doc);
   };
 
   const newPage = () => {
     doc.addPage();
-    page++;
-    paintBlackBackground();
+    page += 1;
+    paintInnerBackground();
     header();
     footer();
     y = HEADER_H + M.y;
   };
 
   const ensure = (h: number) => {
-    if (y + h > PAGE.h - FOOTER_H - 14) newPage();
+    if (y + h > PAGE.h - FOOTER_H - 10) newPage();
+  };
+
+  const drawSectionHeading = (index: number, heading: string) => {
+    doc.setDrawColor(...SECTION_DIVIDER);
+    doc.setLineWidth(0.45);
+    doc.line(M.x, y - 3.2, PAGE.w - M.x, y - 3.2);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(13.6);
+    doc.setTextColor(...EXECUTIVE_TITLE);
+    doc.text(`${index}. ${heading}`, M.x, y + 1.2);
   };
 
   /* ================= COVER ================= */
 
-  paintBlackBackground();
+  doc.setFillColor(...COVER_BG);
+  doc.rect(0, 0, PAGE.w, PAGE.h, "F");
+  drawCoverGrid();
+
+  const coverCenterX = PAGE.w / 2;
+  doc.setDrawColor(...GOLD);
+  doc.setFillColor(...COVER_BG);
+  doc.setLineWidth(1.1);
+  doc.circle(coverCenterX, 98, 16, "S");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(25);
+  doc.setTextColor(...GOLD);
+  doc.text("C", coverCenterX, 101, { align: "center" });
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(36);
-  doc.setTextColor(...WHITE);
-  doc.text(company, M.x, 118, { maxWidth: 150 });
-
-  doc.setFont("helvetica", "italic");
-  doc.setFontSize(15);
+  doc.setFontSize(43);
   doc.setTextColor(...GOLD);
-  doc.text(title, M.x, 144, { maxWidth: 150 });
+  doc.text("CYNTRA", coverCenterX, 124, { align: "center" });
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(16);
+  doc.setTextColor(...WHITE);
+  doc.text("INSIGHTS", coverCenterX, 133, { align: "center" });
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(16.8);
+  doc.setTextColor(...WHITE);
+  doc.text("STRATEGISCH BESLUITRAPPORT", coverCenterX, 165, { align: "center" });
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(11.2);
+  doc.setTextColor(...WHITE);
+  doc.text(`${organizationName} – ${dateLabel}`, coverCenterX, 176, {
+    align: "center",
+    maxWidth: PAGE.w - M.x * 2,
+  });
 
   if (meta?.confidence !== undefined) {
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.setTextColor(...WHITE);
+    doc.setFontSize(9.6);
+    doc.setTextColor(...EXECUTIVE_MUTED);
     doc.text(
       `Besluitbetrouwbaarheid: ${(meta.confidence * 100).toFixed(0)}%`,
-      M.x,
-      168
+      coverCenterX,
+      186.5,
+      { align: "center" }
     );
   }
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.8);
+  doc.setTextColor(...WHITE);
+  doc.text("Vertrouwelijk – Raad van Bestuur", coverCenterX, PAGE.h - 22, {
+    align: "center",
+  });
+  doc.text(`© Cyntra Insights ${generatedAt.getFullYear()}`, coverCenterX, PAGE.h - 14, {
+    align: "center",
+  });
 
   newPage();
 
@@ -346,13 +531,9 @@ export function generateAureliusPDF(
 
   if (report.hgbco) {
     sectionIndex++;
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(15);
-    doc.setTextColor(...GOLD);
-    doc.text(`${sectionIndex}. HGBCO Besluitkaart`, M.x, y);
-
-    y += 10;
+    ensure(24);
+    drawSectionHeading(sectionIndex, "HGBCO Besluitkaart");
+    y += 8;
 
     const hgbcoBody = [
       ["H — Huidige realiteit", report.hgbco.H],
@@ -376,7 +557,10 @@ export function generateAureliusPDF(
       hgbcoBody.push(["Interne/externe balans", report.hgbco.internal_external_balance]);
     }
     if (report.hgbco.objectives_key_results) {
-      hgbcoBody.push(["Doelstellingen met meetbare resultaten", report.hgbco.objectives_key_results]);
+      hgbcoBody.push([
+        "Doelstellingen met meetbare resultaten",
+        report.hgbco.objectives_key_results,
+      ]);
     }
 
     if (report.hgbco.governance_readiness) {
@@ -385,19 +569,33 @@ export function generateAureliusPDF(
 
     autoTable(doc, {
       startY: y,
+      margin: { left: M.x, right: M.x },
       theme: "grid",
       styles: {
         font: "helvetica",
-        fontSize: 9,
-        textColor: mutableRGB(WHITE),
-        fillColor: mutableRGB(BLACK),
-        lineColor: mutableRGB(GOLD),
+        fontSize: 8.7,
+        cellPadding: 2.2,
+        textColor: mutableRGB(EXECUTIVE_TEXT),
+        fillColor: mutableRGB(EXECUTIVE_CARD),
+        lineColor: mutableRGB(EXECUTIVE_CARD_BORDER),
+      },
+      headStyles: {
+        fillColor: mutableRGB(SECTION_DIVIDER),
+        textColor: mutableRGB(GOLD),
+        fontStyle: "bold",
+      },
+      alternateRowStyles: {
+        fillColor: mutableRGB([13, 20, 33]),
       },
       head: [["Dimensie", "Inhoud"]],
       body: hgbcoBody,
+      columnStyles: {
+        0: { cellWidth: 48 },
+      },
     });
 
-    newPage();
+    y = ((doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? y) + 10;
+    if (y > PAGE.h - FOOTER_H - 24) newPage();
   }
 
   /* ================= INTERVENTIES ================= */
@@ -412,38 +610,55 @@ export function generateAureliusPDF(
           x.title,
           x.owner,
           x.deliverable,
-          `${x.deadline_days}d`,
-          x.trade_off || "", // ADD ONLY: Trade-off kolom.
-          x.measurable_result || "", // ADD ONLY: Meetbare resultaat kolom (impliciet OKR).
+          `${x.deadline_days} dagen`,
+          x.trade_off || "",
+          x.measurable_result || "",
         ])
       );
     }
 
     if (rows.length > 0) {
       sectionIndex++;
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(14);
-      doc.setTextColor(...GOLD);
-      doc.text(`${sectionIndex}. Interventieplan`, M.x, y);
-
-      y += 10;
+      ensure(24);
+      drawSectionHeading(sectionIndex, "Interventieplan");
+      y += 8;
 
       autoTable(doc, {
         startY: y,
+        margin: { left: M.x, right: M.x },
         theme: "grid",
         styles: {
           font: "helvetica",
-          fontSize: 8.5,
-          textColor: mutableRGB(WHITE),
-          fillColor: mutableRGB(BLACK),
-          lineColor: mutableRGB(GOLD),
+          fontSize: 8.1,
+          cellPadding: 2,
+          textColor: mutableRGB(EXECUTIVE_TEXT),
+          fillColor: mutableRGB(EXECUTIVE_CARD),
+          lineColor: mutableRGB(EXECUTIVE_CARD_BORDER),
         },
-        head: [["#", "Interventie", "Owner", "Deliverable", "Deadline", "Trade-off", "Meetbaar resultaat"]],
+        headStyles: {
+          fillColor: mutableRGB(SECTION_DIVIDER),
+          textColor: mutableRGB(GOLD),
+          fontStyle: "bold",
+        },
+        alternateRowStyles: {
+          fillColor: mutableRGB([13, 20, 33]),
+        },
+        head: [
+          [
+            "#",
+            "Interventie",
+            "Owner",
+            "Deliverable",
+            "Deadline",
+            "Trade-off",
+            "Meetbaar resultaat",
+          ],
+        ],
         body: rows,
       });
 
-      newPage();
+      y = ((doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? y) + 10;
+      if (y > PAGE.h - FOOTER_H - 24) newPage();
     }
   }
 
@@ -489,174 +704,172 @@ export function generateAureliusPDF(
       (entry) => entry.key !== "decision_contract"
     );
 
-    const contentWidth = PAGE.w - M.x * 2 - 12;
-    const lineHeight = 5.2;
-
     for (const section of regularSections) {
       sectionIndex++;
 
       if (section.key === "opportunity_cost") {
-        const windows = splitOpportunityWindows(section.text).map((item) => ({
-          label: item.label,
-          lines: doc.splitTextToSize(item.content, contentWidth),
-        }));
-
-        const windowsHeight = windows.reduce(
-          (total, item, index) =>
-            total +
-            5 + // subtitle
-            item.lines.length * lineHeight +
-            (index < windows.length - 1 ? 7 : 3), // separator rhythm
-          0
-        );
-        const cardHeight = Math.max(
-          42,
-          SECTION_TITLE_MARGIN_BOTTOM + windowsHeight + 10
-        );
-        ensure(cardHeight + 18);
-
-        doc.setFillColor(...EXECUTIVE_CARD);
-        doc.setDrawColor(...EXECUTIVE_TITLE);
-        doc.setLineWidth(0.3);
-        doc.roundedRect(
-          M.x - 2,
-          y + 2,
-          PAGE.w - M.x * 2 + 4,
-          cardHeight,
-          2.5,
-          2.5,
-          "FD"
-        );
-
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(13.5);
-        doc.setTextColor(...EXECUTIVE_TITLE);
-        doc.text(`${sectionIndex}. ${section.title}`, M.x, y);
-
-        let cursorY = y + SECTION_TITLE_MARGIN_BOTTOM;
-        windows.forEach((item, index) => {
-          cursorY += 2;
-
-          doc.setFont("helvetica", "bold");
-          doc.setFontSize(10.5);
-          doc.setTextColor(...EXECUTIVE_TITLE);
-          doc.text(item.label, M.x + 4, cursorY);
-          cursorY += 5;
-
-          doc.setFont("helvetica", "normal");
-          doc.setFontSize(10.1);
-          for (const line of item.lines) {
-            doc.setTextColor(
-              ...(hasExplicitLossLanguage(line) ? LOSS_TEXT_RED : EXECUTIVE_TEXT)
-            );
-            doc.text(line, M.x + 4, cursorY);
-            cursorY += lineHeight;
-          }
-
-          if (index < windows.length - 1) {
-            cursorY += 2;
-            doc.setDrawColor(...EXECUTIVE_TITLE);
-            doc.setLineWidth(0.35);
-            doc.line(M.x + 4, cursorY, PAGE.w - M.x - 4, cursorY);
-            cursorY += 3;
-          }
+        const windows = splitOpportunityWindows(section.text).map((item) => {
+          const paragraphs = splitIntoReadableParagraphs(item.content, 2, 180);
+          const lineSets = paragraphs.map((paragraph) =>
+            doc.splitTextToSize(paragraph, PAGE.w - M.x * 2 - 16)
+          );
+          const lineCount = lineSets.reduce((count, lines) => count + lines.length, 0);
+          const blockHeight = Math.max(
+            28,
+            10 + lineCount * LINE + Math.max(0, paragraphs.length - 1) * 2.1
+          );
+          return { label: item.label, paragraphs, lineSets, blockHeight };
         });
 
-        y += cardHeight + 14;
+        const totalBlocksHeight =
+          windows.reduce((sum, item) => sum + item.blockHeight, 0) +
+          Math.max(0, windows.length - 1) * 5.5;
+        const totalHeight = 10 + totalBlocksHeight + 8;
+        ensure(totalHeight + 16);
+
+        drawSectionHeading(sectionIndex, section.title);
+        y += 6;
+
+        let blockY = y + 2;
+        windows.forEach((window, index) => {
+          doc.setFillColor(...EXECUTIVE_CARD);
+          doc.setDrawColor(...EXECUTIVE_CARD_BORDER);
+          doc.setLineWidth(0.35);
+          doc.roundedRect(
+            M.x,
+            blockY,
+            PAGE.w - M.x * 2,
+            window.blockHeight,
+            2.6,
+            2.6,
+            "FD"
+          );
+
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(10.8);
+          doc.setTextColor(...EXECUTIVE_TITLE);
+          doc.text(window.label, M.x + 5, blockY + 7);
+
+          let lineY = blockY + 12;
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(10.05);
+          window.lineSets.forEach((lines, paragraphIndex) => {
+            lines.forEach((line) => {
+              doc.setTextColor(
+                ...(hasExplicitLossLanguage(line) ? LOSS_TEXT_RED : EXECUTIVE_TEXT)
+              );
+              doc.text(line, M.x + 5, lineY);
+              lineY += LINE;
+            });
+            if (paragraphIndex < window.lineSets.length - 1) {
+              lineY += 1.8;
+            }
+          });
+
+          blockY += window.blockHeight + (index < windows.length - 1 ? 5.5 : 0);
+        });
+
+        y = blockY + 8;
         continue;
       }
 
-      const paragraphs = section.text
-        .split(/\n\s*\n+/)
-        .map((part) => part.trim())
-        .filter(Boolean);
-      const lines = paragraphs.flatMap((part, index) => {
-        const splitLines = doc.splitTextToSize(part, contentWidth);
-        return index === 0 ? splitLines : ["", ...splitLines];
-      });
-
+      const paragraphs = splitIntoReadableParagraphs(section.text, 2, 220);
+      const lineSets = paragraphs.map((paragraph) =>
+        doc.splitTextToSize(paragraph, PAGE.w - M.x * 2 - 16)
+      );
+      const lineCount = lineSets.reduce((count, lines) => count + lines.length, 0);
       const cardHeight = Math.max(
-        30,
-        SECTION_TITLE_MARGIN_BOTTOM + 6 + lines.length * lineHeight
+        34,
+        10 + lineCount * LINE + Math.max(0, paragraphs.length - 1) * 2.1
       );
       ensure(cardHeight + 18);
 
+      drawSectionHeading(sectionIndex, section.title);
+      y += 6;
+
       doc.setFillColor(...EXECUTIVE_CARD);
-      doc.setDrawColor(...EXECUTIVE_TITLE);
-      doc.setLineWidth(0.3);
+      doc.setDrawColor(...EXECUTIVE_CARD_BORDER);
+      doc.setLineWidth(0.35);
       doc.roundedRect(
-        M.x - 2,
+        M.x,
         y + 2,
-        PAGE.w - M.x * 2 + 4,
+        PAGE.w - M.x * 2,
         cardHeight,
-        2.5,
-        2.5,
+        2.6,
+        2.6,
         "FD"
       );
 
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(13.5);
-      doc.setTextColor(...EXECUTIVE_TITLE);
-      doc.text(`${sectionIndex}. ${section.title}`, M.x, y);
-
-      let cursorY = y + SECTION_TITLE_MARGIN_BOTTOM;
       doc.setFont("helvetica", "normal");
       doc.setFontSize(10.1);
-      for (const line of lines) {
-        if (!line) {
-          cursorY += lineHeight * 0.45;
-          continue;
-        }
-        doc.setTextColor(
-          ...(hasExplicitLossLanguage(line) ? LOSS_TEXT_RED : EXECUTIVE_TEXT)
-        );
-        doc.text(line, M.x + 4, cursorY);
-        cursorY += lineHeight;
-      }
 
-      y += cardHeight + 14;
+      let cursorY = y + 9;
+      lineSets.forEach((lines, paragraphIndex) => {
+        lines.forEach((line) => {
+          doc.setTextColor(
+            ...(hasExplicitLossLanguage(line) ? LOSS_TEXT_RED : EXECUTIVE_TEXT)
+          );
+          doc.text(line, M.x + 5, cursorY);
+          cursorY += LINE;
+        });
+        if (paragraphIndex < lineSets.length - 1) {
+          cursorY += 1.9;
+        }
+      });
+
+      y += cardHeight + 12;
     }
 
     if (decisionSection) {
       newPage();
       sectionIndex++;
 
-      const frameX = 0;
-      const frameY = HEADER_H + 4;
-      const frameW = PAGE.w;
-      const frameH = PAGE.h - frameY - FOOTER_H - 2;
-      const framePaddingX = M.x;
+      const frameX = M.x - 2;
+      const frameY = HEADER_H + 8;
+      const frameW = PAGE.w - frameX * 2;
+      const frameH = PAGE.h - frameY - FOOTER_H - 6;
+      const framePaddingX = M.x + 4;
+      const frameInnerWidth = frameW - 12;
 
       doc.setFillColor(...DECISION_CONTRACT_BG);
-      doc.rect(frameX, frameY, frameW, frameH, "F");
+      doc.roundedRect(frameX, frameY, frameW, frameH, 3.2, 3.2, "F");
       doc.setDrawColor(...DECISION_CONTRACT_BORDER);
       doc.setLineWidth(DECISION_CONTRACT_BORDER_WIDTH_MM);
-      doc.rect(frameX, frameY, frameW, frameH);
+      doc.roundedRect(frameX, frameY, frameW, frameH, 3.2, 3.2, "S");
+
+      doc.setDrawColor(...SECTION_DIVIDER);
+      doc.setLineWidth(0.35);
+      doc.line(framePaddingX, frameY + 8.5, PAGE.w - framePaddingX, frameY + 8.5);
 
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(14.5);
+      doc.setFontSize(14.2);
       doc.setTextColor(...WHITE);
-      doc.text(
-        `${sectionIndex}. ${decisionSection.title}`,
-        framePaddingX,
-        frameY + 12
+      doc.text(`${sectionIndex}. ${decisionSection.title}`, framePaddingX, frameY + 6.2);
+
+      const decisionParagraphs = splitIntoReadableParagraphs(decisionSection.text, 2, 220);
+      const decisionLineSets = decisionParagraphs.map((paragraph) =>
+        doc.splitTextToSize(paragraph, frameInnerWidth - 2)
       );
 
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(10.2);
+      doc.setFontSize(10.1);
 
-      const decisionLines = doc.splitTextToSize(
-        decisionSection.text,
-        frameW - framePaddingX * 2
-      );
-      let decisionY = frameY + 12 + SECTION_TITLE_MARGIN_BOTTOM;
-      for (const line of decisionLines) {
+      let decisionY = frameY + 15;
+      for (let i = 0; i < decisionLineSets.length; i += 1) {
+        const lines = decisionLineSets[i];
+        for (const line of lines) {
+          if (decisionY > frameY + frameH - 8) break;
+          doc.setTextColor(
+            ...(hasExplicitLossLanguage(line) ? LOSS_TEXT_RED : WHITE)
+          );
+          doc.text(line, framePaddingX, decisionY);
+          decisionY += LINE;
+        }
+
         if (decisionY > frameY + frameH - 8) break;
-        doc.setTextColor(
-          ...(hasExplicitLossLanguage(line) ? LOSS_TEXT_RED : WHITE)
-        );
-        doc.text(line, framePaddingX, decisionY);
-        decisionY += 5.4;
+        if (i < decisionLineSets.length - 1) {
+          decisionY += 2;
+        }
       }
     }
   }
