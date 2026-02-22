@@ -31,6 +31,7 @@ import {
   CYNTRA_SIGNATURE_LAYER_VIOLATION,
   enforceConcreteNarrativeMarkdown,
   enforceConcreteOutputMap,
+  SIGNATURE_LAYER_WARNING_PREFIX,
 } from "../../narrative/guards/enforceConcreteOutput";
 
 import type { AnalysisType as AureliusAnalysisType } from "../../types";
@@ -73,6 +74,8 @@ const MIN_NARRATIVE_WORDS = 3500;
 const MAX_NARRATIVE_WORDS = 7000;
 const MODEL_NARRATIVE_MAX_WORDS = 6200;
 const SIGNATURE_VIOLATION_TEXT = CYNTRA_SIGNATURE_LAYER_VIOLATION;
+const SIGNATURE_WARNING_TEXT =
+  "Waarschuwing: output voldoet niet volledig aan Cyntra-standaard \u2192 fallback gegenereerd. Rapport is bruikbaar maar minder scherp.";
 
 type GuaranteedExecutiveReport = {
   dominantThesis: string;
@@ -288,6 +291,10 @@ function firstNonEmpty(...values: Array<string | undefined>): string {
     if (value && value.trim()) return value.trim();
   }
   return "";
+}
+
+function hasSignatureFallbackWarning(value: unknown): boolean {
+  return typeof value === "string" && value.includes(SIGNATURE_LAYER_WARNING_PREFIX);
 }
 
 function buildGuaranteedExecutiveReport(params: {
@@ -715,6 +722,7 @@ export default function UnifiedAnalysisPage() {
   const [powerOutput, setPowerOutput] =
     useState<PowerPipelineOutput | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [signatureFallbackWarning, setSignatureFallbackWarning] = useState(false);
   const [pdfPreflightError, setPdfPreflightError] =
     useState<string | null>(null);
   const [isBuilding, setIsBuilding] = useState(false);
@@ -739,6 +747,9 @@ export default function UnifiedAnalysisPage() {
   const isSignatureViolation = Boolean(
     runtimeErrorMessage &&
       runtimeErrorMessage.includes(CYNTRA_SIGNATURE_LAYER_VIOLATION)
+  );
+  const showSignatureWarningBanner = Boolean(
+    signatureFallbackWarning || (runtimeErrorMessage && isSignatureViolation)
   );
   const safeSubtitle = String(analysis.subtitle ?? "").replace(
     /\bmoet\b/gi,
@@ -826,6 +837,7 @@ export default function UnifiedAnalysisPage() {
     if (analysisRunning) return;
 
     setLocalError(null);
+    setSignatureFallbackWarning(false);
     setPdfPreflightError(null);
     setIsBuilding(true);
     setFlowStageIndex(1);
@@ -882,6 +894,7 @@ export default function UnifiedAnalysisPage() {
         typeof crypto.randomUUID === "function"
           ? crypto.randomUUID()
           : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      let usedSignatureFallback = false;
       let narrativeText = createFallbackNarrative(
         safeContext,
         reportText
@@ -917,7 +930,11 @@ export default function UnifiedAnalysisPage() {
           narrativeError instanceof Error &&
           narrativeError.message === SIGNATURE_VIOLATION_TEXT
         ) {
-          throw narrativeError;
+          usedSignatureFallback = true;
+          console.warn("Signature violation bypassed \u2192 fallback narrative used", {
+            stage: "generateBoardroomNarrative",
+            analysisType,
+          });
         }
         // Fallback narrative blijft leidend wanneer narratiefgeneratie op niet-signature fouten uitvalt.
       }
@@ -926,6 +943,9 @@ export default function UnifiedAnalysisPage() {
         narrativeText,
         safeContext
       );
+      if (hasSignatureFallbackWarning(narrativeText)) {
+        usedSignatureFallback = true;
+      }
 
       const parsedNarrative = safeParseReport(narrativeText, analysisType);
 
@@ -961,15 +981,20 @@ export default function UnifiedAnalysisPage() {
       );
 
       setFlowStageIndex(7);
+      const nextExecutiveReport = buildGuaranteedExecutiveReport({
+        report: reportSource,
+        power,
+        safeContext,
+      });
+      const executiveHasFallbackWarning = Object.values(nextExecutiveReport).some(
+        (value) => hasSignatureFallbackWarning(value)
+      );
       startTransition(() => {
         setReport(enrichDecisionSection(parsedWithPower, power));
         setPowerOutput(power);
-        setExecutiveReport(
-          buildGuaranteedExecutiveReport({
-            report: reportSource,
-            power,
-            safeContext,
-          })
+        setExecutiveReport(nextExecutiveReport);
+        setSignatureFallbackWarning(
+          usedSignatureFallback || executiveHasFallbackWarning
         );
       });
     } catch (err) {
@@ -1048,6 +1073,7 @@ export default function UnifiedAnalysisPage() {
     setExecutiveReport(null);
     setPowerOutput(null);
     setLocalError(null);
+    setSignatureFallbackWarning(false);
     setPdfPreflightError(null);
     setIsBuilding(false);
     setFlowStageIndex(0);
@@ -1075,15 +1101,13 @@ export default function UnifiedAnalysisPage() {
         </div>
       )}
 
-      {runtimeErrorMessage && isSignatureViolation && (
-        <div className="mb-8 rounded-xl border border-red-500/70 bg-red-950/60 p-4 text-sm text-red-100">
+      {showSignatureWarningBanner && (
+        <div className="mb-8 rounded-xl border border-amber-500/70 bg-amber-950/40 p-4 text-sm text-amber-100">
           <div className="flex items-start gap-2">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
             <div>
-              <div className="font-semibold">
-                {CYNTRA_SIGNATURE_LAYER_VIOLATION}
-              </div>
-              <div className="mt-1 text-red-100/90">{runtimeErrorMessage}</div>
+              <div className="font-semibold">Signature Layer Waarschuwing</div>
+              <div className="mt-1 text-amber-100/90">{SIGNATURE_WARNING_TEXT}</div>
             </div>
           </div>
         </div>

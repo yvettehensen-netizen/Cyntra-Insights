@@ -3,6 +3,8 @@ export const CONCRETE_REPROMPT_DIRECTIVE =
 
 export const CYNTRA_SIGNATURE_LAYER_VIOLATION =
   "CYNTRA SIGNATURE LAYER VIOLATIE";
+export const SIGNATURE_LAYER_WARNING_PREFIX =
+  "SIGNATURE LAYER WAARSCHUWING: output bevat zwakke elementen. Geforceerde fallback gebruikt.";
 const MAX_CONCRETE_REPROMPT_ATTEMPTS = 2;
 
 const FORBIDDEN_PATTERNS = [
@@ -129,6 +131,21 @@ function concreteRepromptFallback(
   );
 }
 
+function buildSignatureFallbackOutput(
+  sectionKey: string,
+  contextHint?: string,
+  residualScore = 0
+): string {
+  console.warn("Signature violation bypassed → fallback used", {
+    sectionKey,
+    residualScore,
+  });
+  return `${SIGNATURE_LAYER_WARNING_PREFIX}\n\n${concreteFallback(
+    sectionKey,
+    contextHint
+  )}`;
+}
+
 export function enforceConcreteString(
   input: string,
   sectionKey: string,
@@ -152,8 +169,9 @@ export function enforceConcreteString(
     );
   }
 
-  if (hasForbiddenConcretePattern(candidate) || concreteWeaknessScore(candidate) > 0) {
-    throw new Error(CYNTRA_SIGNATURE_LAYER_VIOLATION);
+  const residualScore = concreteWeaknessScore(candidate);
+  if (hasForbiddenConcretePattern(candidate) || residualScore > 0) {
+    return buildSignatureFallbackOutput(sectionKey, contextHint, residualScore);
   }
 
   return candidate;
@@ -198,7 +216,7 @@ export function enforceConcreteNarrativeMarkdown(
 ): string {
   const text = String(markdown || "").trim();
   if (!text) {
-    throw new Error(CYNTRA_SIGNATURE_LAYER_VIOLATION);
+    return buildSignatureFallbackOutput("narrative", contextHint, 4);
   }
 
   if (!text.includes("###")) {
@@ -220,8 +238,9 @@ export function enforceConcreteNarrativeMarkdown(
   });
 
   const merged = rewritten.join("\n\n").trim();
-  if (hasForbiddenConcretePattern(merged) || concreteWeaknessScore(merged) > 0) {
-    throw new Error(CYNTRA_SIGNATURE_LAYER_VIOLATION);
+  const residualScore = concreteWeaknessScore(merged);
+  if (hasForbiddenConcretePattern(merged) || residualScore > 0) {
+    return buildSignatureFallbackOutput("narrative", contextHint, residualScore);
   }
 
   return merged;

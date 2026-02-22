@@ -16,6 +16,8 @@ import {
 const SIGNATURE_LAYER_ERROR_TEXT = CYNTRA_SIGNATURE_LAYER_VIOLATION;
 const OPPORTUNITY_GOVERNANCE_DEPTH_DIRECTIVE =
   "Opportunity Cost MOET drie concrete tijdshorizons bevatten (30/90/365 dagen: 30 dagen, 90 dagen, 365 dagen) met euro-bedragen of % en irreversibiliteit. Governance Impact MOET benoemen: formele machtsverschuiving + informele tegenkracht + verwachte escalaties.";
+const HARD_FALLBACK_PROMPT_RULE =
+  "Als input te kort/vaag is, maak realistische bestuurlijke assumpties en lever direct concrete output. Gebruik NOOIT woorden als 'moet', 'lijkt erop dat', 'mogelijk', 'zou kunnen'. Altijd harde stellingen met verlies, macht, tijd.";
 
 function hasNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
@@ -188,6 +190,8 @@ export async function synthesizeBoardroomBrief(
   analysis: AureliusAnalysisResult
 ): Promise<BoardroomBrief> {
   const systemPrompt = `
+${HARD_FALLBACK_PROMPT_RULE}
+
 Jij bent de Executive Kernel van de bestuurskamer.
 Je schrijft niet adviserend.
 Je schrijft niet beschrijvend.
@@ -217,6 +221,8 @@ Expliciet verlies.
 `;
 
   const userPrompt = `
+${HARD_FALLBACK_PROMPT_RULE}
+
 INPUT — VOLLEDIGE AURELIUS ANALYSE:
 ${JSON.stringify(analysis, null, 2)}
 
