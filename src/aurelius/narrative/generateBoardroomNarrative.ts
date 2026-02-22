@@ -121,7 +121,7 @@ const MAX_LOOPS = 8;
 const CHUNK_TOKENS = 4200;
 const RESERVED_STRUCTURE_WORDS = 320;
 const EXECUTIVE_PROMPT_INJECT =
-  "Schrijf als een menselijke, ervaren senior partner die rechtstreeks spreekt tot een Raad van Bestuur. Combineer harde bovenstroom (strategie, governance, cijfers, structuur) met messcherpe onderstroom (machtsverlies, informele blokkades, sabotage, toxische patronen, verborgen agenda's en menselijke drijfveren). Schrijf natuurlijk, direct en confronterend maar nooit agressief. Geen AI-taal, geen herhaling, geen meta-zinnen. Bij vage input activeer de juiste sector-template en maak het direct herkenbaar voor iemand die al 15 jaar in die sector werkt.";
+  "Schrijf als een menselijke, ervaren senior partner die rechtstreeks spreekt tot een Raad van Bestuur. Combineer harde bovenstroom (strategie, governance, cijfers, structuur) met messcherpe onderstroom (machtsverlies, informele blokkades, sabotage, toxische patronen, verborgen agenda's en menselijke drijfveren). Schrijf in natuurlijk, direct en helder Nederlands zoals in een boardroom — nooit agressief, altijd concreet. Geen AI-taal, geen herhaling, geen meta-zinnen. Bij vage input activeer de juiste sector-template en maak het direct herkenbaar voor iemand die al 15 jaar in die sector werkt.";
 const HARD_FALLBACK_PROMPT_RULE =
   "Als input te kort of vaag is, activeer direct een sectorsjabloon en lever concrete, menselijk verwoordde output met keuze, verlies, macht en tijdsdruk. Gebruik NOOIT woorden als 'lijkt erop dat', 'mogelijk', 'zou kunnen'.";
 const INTELLIGENT_SECTOR_FALLBACK_RULE =

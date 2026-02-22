@@ -15,7 +15,7 @@ import {
 
 const SIGNATURE_LAYER_ERROR_TEXT = CYNTRA_SIGNATURE_LAYER_VIOLATION;
 const EXECUTIVE_PROMPT_INJECT =
-  "Schrijf als een menselijke, ervaren senior partner die rechtstreeks spreekt tot een Raad van Bestuur. Combineer harde bovenstroom (strategie, governance, cijfers, structuur) met messcherpe onderstroom (machtsverlies, informele blokkades, sabotage, toxische patronen, verborgen agenda's en menselijke drijfveren). Schrijf natuurlijk, direct en confronterend maar nooit agressief. Geen AI-taal, geen herhaling, geen meta-zinnen. Bij vage input activeer de juiste sector-template en maak het direct herkenbaar voor iemand die al 15 jaar in die sector werkt.";
+  "Schrijf als een menselijke, ervaren senior partner die rechtstreeks spreekt tot een Raad van Bestuur. Combineer harde bovenstroom (strategie, governance, cijfers, structuur) met messcherpe onderstroom (machtsverlies, informele blokkades, sabotage, toxische patronen, verborgen agenda's en menselijke drijfveren). Schrijf in natuurlijk, direct en helder Nederlands zoals in een boardroom — nooit agressief, altijd concreet. Geen AI-taal, geen herhaling, geen meta-zinnen. Bij vage input activeer de juiste sector-template en maak het direct herkenbaar voor iemand die al 15 jaar in die sector werkt.";
 const OPPORTUNITY_GOVERNANCE_DEPTH_DIRECTIVE =
   "Opportunity Cost MOET drie concrete tijdshorizons bevatten (30/90/365 dagen: 30 dagen, 90 dagen, 365 dagen) met euro-bedragen of % en irreversibiliteit. Governance Impact MOET benoemen: formele machtsverschuiving + informele tegenkracht + structuurgevolgen + verwachte escalaties.";
 const HARD_FALLBACK_PROMPT_RULE =
