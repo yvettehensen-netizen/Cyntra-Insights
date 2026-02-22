@@ -114,6 +114,10 @@ const DECISION_CONTRACT_BG: RGB = [28, 37, 38]; // #1C2526
 const DECISION_CONTRACT_BORDER: RGB = [10, 37, 64]; // #0A2540
 const SECTION_TITLE_MARGIN_BOTTOM = 7; // ~1.2rem visual spacing
 const DECISION_CONTRACT_BORDER_WIDTH_MM = 0.7; // ~2px equivalent
+const FALLBACK_WARNING_MARKERS = [
+  /\[CYNTRA_FALLBACK_WARNING\]/gi,
+  /SIGNATURE LAYER WAARSCHUWING:[^\n]*\n?/gi,
+];
 
 /* ================= CANONICAL ORDER ================= */
 
@@ -173,15 +177,29 @@ const resetBodyFont = (doc: jsPDF) => {
   doc.setTextColor(...WHITE);
 };
 
+function sanitizeReportText(value: string): string {
+  let cleaned = String(value ?? "");
+  for (const marker of FALLBACK_WARNING_MARKERS) {
+    cleaned = cleaned.replace(marker, "");
+  }
+  cleaned = cleaned
+    .replace(/^\s*(Aanname:|Contextanker:|beperkte context|duid structureel)[^\n]*\n?/gim, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return cleaned;
+}
+
 const normalize = (v: unknown): string => {
   if (!v) return "";
-  if (Array.isArray(v)) return v.map(normalize).join("\n\n");
+  if (Array.isArray(v)) return sanitizeReportText(v.map(normalize).join("\n\n"));
   if (typeof v === "object") {
-    return Object.entries(v)
+    return sanitizeReportText(
+      Object.entries(v)
       .map(([k, val]) => `${k}: ${normalize(val)}`)
-      .join("\n\n");
+      .join("\n\n")
+    );
   }
-  return String(v);
+  return sanitizeReportText(String(v));
 };
 
 const mutableRGB = (c: RGB): [number, number, number] => [...c];

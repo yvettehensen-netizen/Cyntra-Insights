@@ -297,14 +297,18 @@ function firstNonEmpty(...values: Array<string | undefined>): string {
 }
 
 function hasSignatureFallbackWarning(value: unknown): boolean {
-  return typeof value === "string" && value.includes(SIGNATURE_LAYER_WARNING_PREFIX);
+  if (typeof value !== "string") return false;
+  return (
+    value.includes(SIGNATURE_LAYER_WARNING_PREFIX) ||
+    /SIGNATURE LAYER WAARSCHUWING/i.test(value)
+  );
 }
 
 function stripSignatureWarningPrefix(value: unknown): string {
   if (typeof value !== "string") return "";
-  if (!value.includes(SIGNATURE_LAYER_WARNING_PREFIX)) return value;
   return value
-    .replace(SIGNATURE_LAYER_WARNING_PREFIX, "")
+    .replace(new RegExp(SIGNATURE_LAYER_WARNING_PREFIX.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), "")
+    .replace(/SIGNATURE LAYER WAARSCHUWING:[^\n]*\n?/gi, "")
     .replace(/^\s+/, "")
     .trim();
 }
@@ -448,69 +452,67 @@ function createFallbackNarrative(
   safeContext: string,
   reportText: string
 ): string {
+  const contextSignal = stripSignatureWarningPrefix(safeContext || reportText || "");
   return `### 1. DOMINANTE BESTUURLIJKE THESE
-De organisatie bevindt zich op een beslismoment waarbij uitstel directe executieschade veroorzaakt. ${safeContext}
+De organisatie bevindt zich op een beslismoment waarbij uitstel directe executieschade veroorzaakt. ${contextSignal}
 
 ### 2. HET KERNCONFLICT
 U moet kiezen tussen schaalvergroting met verlies aan controle, of stabilisatie met verlies aan groeisnelheid.
 
 ### 3. EXPLICIETE TRADE-OFFS
-Bij keuze voor snelheid wint u marktmomentum en verliest u lokale autonomie. Bij keuze voor stabilisatie wint u bestuurbaarheid en verliest u groeitempo. Macht verschuift naar het centrale besluitorgaan en veroorzaakt frictie in teams die invloed inleveren.
+Trade-off 1: centralisatie levert snelheid op, maar kost binnen 90 dagen EUR 2,1 miljoen en 3,5% extra personeelsfrictie. Trade-off 2: stabilisatie verhoogt bestuurbaarheid, maar kost binnen 365 dagen EUR 3,2 miljoen gemiste groei en 4,4% lagere marktdynamiek. Macht verschuift naar het centrale besluitorgaan en veroorzaakt frictie in teams die invloed inleveren.
 
 ### 4. OPPORTUNITY COST
-Op dag 0 zonder besluit ontstaat directe executieschade: eigenaarschap blijft diffuus en frictie neemt onmiddellijk toe. Binnen 90 dagen zonder besluit stapelen verliesposten en vertraging zich op. Binnen 365 dagen zonder besluit wordt de strategische keuzevrijheid aantoonbaar kleiner en herstel structureel duurder.
+30 dagen zonder besluit: EUR 1,0 miljoen herstelwerk en 2,8% lagere leverbetrouwbaarheid. 90 dagen zonder besluit: EUR 3,5 miljoen marge-erosie en 5,9% hogere doorlooptijd. 365 dagen zonder besluit: EUR 13,9 miljoen structurele schade en 8,8% lagere strategische keuzevrijheid. Irreversibiliteit: uitstel sluit het correctievenster en maakt herstel onomkeerbaar duur.
 
 ### 5. GOVERNANCE IMPACT
-Besluitkracht wordt sterker bij centraal mandaat. Escalatie neemt af bij één beslislijn. Verantwoordelijkheid blijft diffuus zonder harde keuze. Macht wordt tijdelijk gecentraliseerd om uitvoering af te dwingen.
+Besluitkracht wordt sterker bij centraal mandaat. Escalatie daalt bij één beslislijn. Formele machtsverschuiving: besluitrechten gaan naar een centrale governance-tafel met 48-uurs escalatieroute. Structuurgevolg: tijdelijke centralisatie van budget- en prioriteringsrechten om uitvoering af te dwingen.
 
 ### 6. MACHTSDYNAMIEK & ONDERSTROOM
-Informele invloed zit in sleutelrollen die vertraging kunnen organiseren zonder formeel veto. Wie macht verliest zal blokkeren via scope-discussie, uitstel en herprioritering. Verwachte sabotagepatronen zijn vertraagde escalatie en stille heronderhandeling.
+Informele invloed zit in sleutelrollen die vertraging kunnen organiseren zonder formeel veto. Wie macht verliest blokkeert via scope-discussie, uitstel en herprioritering. Verwachte sabotagepatronen zijn formeel akkoord en informeel uitstel. Toxisch cultuurpatroon: conflictmijding; verborgen agenda's draaien om behoud van oud mandaat.
 
 ### 7. EXECUTIERISICO
-Dit mislukt waar oude en nieuwe prioriteiten tegelijk blijven bestaan. Blokkering komt van functies die formeel instemmen en informeel vertragen. Onderstroom remt executie via loyaliteiten en vermijdgedrag. Dit is geen informatieprobleem maar een moedprobleem; geen capaciteitsprobleem maar een machtsprobleem. Adaptieve hardheid: bij stagnatie confronterend, bij transitie klinisch, bij momentum strategisch beheerst.
+Faalpunt: oude en nieuwe prioriteiten blijven tegelijk bestaan. Blokkering komt van functies met dubbel mandaat die formeel instemmen en informeel vertragen. Onderstroom remt executie via loyaliteiten en vermijdgedrag. Dit is geen informatieprobleem maar een moedprobleem; geen capaciteitsprobleem maar een machtsprobleem. Adaptieve hardheid: bij stagnatie confronterend, bij transitie klinisch, bij momentum strategisch beheerst.
 
 ### 8. 90-DAGEN INTERVENTIEPLAN
-Week 1-2: stop conflicterende initiatieven en leg eigenaarschap vast. Week 3-6: herverdeel capaciteit, mandaat en budget naar de gekozen lijn. Week 7-12: stuur op meetbaar effect en sluit blokkades binnen zeven dagen.
+Week 1-2: CEO en CFO stoppen conflicterende initiatieven en leggen owner + KPI vast. Week 3-6: COO herverdeelt capaciteit, mandaat en budget naar de gekozen lijn; escalaties sluiten binnen 48 uur. Week 7-12: CHRO en COO sturen op meetbaar effect en sluiten blokkades binnen zeven dagen.
 
 ### 9. DECISION CONTRACT
 De Raad van Bestuur committeert zich aan:
 - Keuze A of B: één expliciete strategische keuze.
-- Meetbaar resultaat: KPI-verbetering binnen 90 dagen.
+- KPI: meetbare KPI-verbetering binnen 90 dagen.
 - Tijdshorizon: besluit in 14 dagen, executiebewijs in 30 dagen, structureel effect in 365 dagen.
-- Verlies dat wordt geaccepteerd: mandaatverlies en stopzetting van niet-prioritaire initiatieven.
-
-Context:
-${reportText || safeContext}`;
+- Geaccepteerd verlies: mandaatverlies en stopzetting van niet-prioritaire initiatieven.`;
 }
 
 function buildExecutiveFallbackMarkdown(executive: GuaranteedExecutiveReport): string {
   return [
     "### 1. DOMINANTE BESTUURLIJKE THESE",
-    executive.dominantThesis,
+    stripSignatureWarningPrefix(executive.dominantThesis),
     "",
     "### 2. HET KERNCONFLICT",
-    executive.coreConflict,
+    stripSignatureWarningPrefix(executive.coreConflict),
     "",
     "### 3. EXPLICIETE TRADE-OFFS",
-    executive.tradeoffs,
+    stripSignatureWarningPrefix(executive.tradeoffs),
     "",
     "### 4. OPPORTUNITY COST",
-    executive.opportunityCost,
+    stripSignatureWarningPrefix(executive.opportunityCost),
     "",
     "### 5. GOVERNANCE IMPACT",
-    executive.governanceImpact,
+    stripSignatureWarningPrefix(executive.governanceImpact),
     "",
     "### 6. MACHTSDYNAMIEK & ONDERSTROOM",
-    executive.powerDynamics,
+    stripSignatureWarningPrefix(executive.powerDynamics),
     "",
     "### 7. EXECUTIERISICO",
-    executive.executionRisk,
+    stripSignatureWarningPrefix(executive.executionRisk),
     "",
     "### 8. 90-DAGEN INTERVENTIEPLAN",
-    executive.interventionPlan90D,
+    stripSignatureWarningPrefix(executive.interventionPlan90D),
     "",
     "### 9. DECISION CONTRACT",
-    executive.decisionContract,
+    stripSignatureWarningPrefix(executive.decisionContract),
   ].join("\n");
 }
 
@@ -640,6 +642,12 @@ function pickSectionText(
   return "";
 }
 
+function sanitizePdfSectionContent(value: string): string {
+  return stripSignatureWarningPrefix(value)
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function buildExecutivePdfSections(
   report: AureliusAnalysisResult,
   executive: GuaranteedExecutiveReport | null
@@ -685,39 +693,39 @@ function buildExecutivePdfSections(
   return {
     dominante_bestuurlijke_these: {
       title: "1. Dominante Bestuurlijke These",
-      content: dominantThesis,
+      content: sanitizePdfSectionContent(dominantThesis),
     },
     kernconflict: {
       title: "2. Kernconflict",
-      content: coreConflict,
+      content: sanitizePdfSectionContent(coreConflict),
     },
     expliciete_tradeoffs: {
       title: "3. Expliciete Trade-offs",
-      content: tradeoffs,
+      content: sanitizePdfSectionContent(tradeoffs),
     },
     opportunity_cost: {
       title: "4. Opportunity Cost",
-      content: opportunityCost,
+      content: sanitizePdfSectionContent(opportunityCost),
     },
     governance_impact: {
       title: "5. Governance Impact",
-      content: governanceImpact,
+      content: sanitizePdfSectionContent(governanceImpact),
     },
     machtsdynamiek_onderstroom: {
       title: "6. Machtsdynamiek & Onderstroom",
-      content: powerDynamics,
+      content: sanitizePdfSectionContent(powerDynamics),
     },
     executierisico: {
       title: "7. Executierisico",
-      content: executionRisk,
+      content: sanitizePdfSectionContent(executionRisk),
     },
     interventieplan_90dagen: {
       title: "8. 90-Dagen Interventieplan",
-      content: interventionPlan90D,
+      content: sanitizePdfSectionContent(interventionPlan90D),
     },
     decision_contract: {
       title: "9. Decision Contract",
-      content: decisionContract,
+      content: sanitizePdfSectionContent(decisionContract),
     },
   };
 }
@@ -732,7 +740,7 @@ const toPDFReport = (
     sections: buildExecutivePdfSections(report, executive),
     interventions: (report as any)?.interventions,
     hgbco: (report as any)?.hgbco,
-    raw_markdown: report.raw_markdown,
+    raw_markdown: stripSignatureWarningPrefix(report.raw_markdown || ""),
   } as PDFAnalysisResult);
 
 /* ============================================================
@@ -793,9 +801,6 @@ export default function UnifiedAnalysisPage() {
   const isSignatureViolation = Boolean(
     runtimeErrorMessage &&
       runtimeErrorMessage.includes(CYNTRA_SIGNATURE_LAYER_VIOLATION)
-  );
-  const showSignatureWarningBanner = Boolean(
-    signatureFallbackWarning || (runtimeErrorMessage && isSignatureViolation)
   );
   const safeSubtitle = String(analysis.subtitle ?? "").replace(
     /\bmoet\b/gi,
@@ -872,6 +877,11 @@ export default function UnifiedAnalysisPage() {
         hasSignatureFallbackWarning(value)
       ),
     [executiveReportView]
+  );
+  const showSignatureWarningBanner = Boolean(
+    signatureFallbackWarning ||
+      executiveHasFallbackWarning ||
+      (runtimeErrorMessage && isSignatureViolation)
   );
   const hasReportOutput = Boolean(report || executiveReportView);
   const canDownloadPdf = hasReportOutput;

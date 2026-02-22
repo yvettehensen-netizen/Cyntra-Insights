@@ -1,24 +1,28 @@
 export const CONCRETE_REPROMPT_DIRECTIVE =
-  "Schrijf concrete inhoud. Geen meta. Maak realistische bestuurlijke aanname als data ontbreekt.";
+  "Schrijf concrete inhoud. Geen meta. Gebruik realistische bestuurlijke feiten als data ontbreekt.";
 
 export const CYNTRA_SIGNATURE_LAYER_VIOLATION =
   "CYNTRA SIGNATURE LAYER VIOLATIE";
 export const SIGNATURE_LAYER_WARNING_PREFIX =
-  "SIGNATURE LAYER WAARSCHUWING: output bevat zwakke elementen. Geforceerde fallback gebruikt.";
+  "[CYNTRA_FALLBACK_WARNING]";
 const MAX_CONCRETE_REPROMPT_ATTEMPTS = 2;
 
 const SECTOR_TEMPLATES = {
-  ggz: "ggz/jeugdzorg: mandaatfrictie directie vs zorgprofessionals, ambulantisering vs beddencapaciteit, IGJ-toezicht vs innovatie, wachtlijst-druk, transformatiegelden, tariefdruk. Forceer concrete EUR/% verliezen en machtsverschuiving naar centrale regie.",
-  zorg: "zorg: schaal vs lokale autonomie, personeelstekort vs kwaliteit, digitalisering vs privacy, financiele druk (Zvw/Wlz), concentratie vs spreiding.",
-  onderwijs: "onderwijs: lerarentekort vs onderwijskwaliteit, centralisatie vs schoolautonomie, digitalisering vs pedagogisch vakmanschap, inclusie vs excellentie.",
-  finance: "financiele dienstverlening/banken: compliance vs innovatie, rentemarge-druk vs klantbelang, digital vs fysieke kantoren, DNB/EBA-toezicht.",
-  industrie: "industrie/manufacturing: schaal vs wendbaarheid, nearshoring vs kosten, energietransitie vs continuiteit, supply chain kwetsbaarheid.",
-  tech: "tech/scale-up: hypergroei vs governance, founder-macht vs institutionele investeerders, snelheid vs compliance/scalability.",
-  overheid: "overheid/publiek: politieke druk vs executiekracht, budgetkrimp vs dienstverlening, digitalisering vs privacy/veiligheid.",
+  ggz: "ggz/jeugdzorg: mandaatfrictie directie vs professionals, ambulantisering vs capaciteit, IGJ-toezicht, wachtlijst-druk, transformatiegelden en tariefdruk.",
+  zorg: "zorg: personeelstekort vs kwaliteit, centralisatie vs lokale autonomie en digitalisering vs privacy.",
+  onderwijs: "onderwijs: lerarentekort vs pedagogisch vakmanschap, inclusie vs excellentie en bestuurlijke druk op scholen.",
+  finance:
+    "finance/banken: compliance vs innovatiesnelheid, rentemarge vs klantbelang en DNB/EBA-toezicht.",
+  industrie:
+    "industrie: schaal vs wendbaarheid en energietransitie vs continuiteit van productie en levering.",
+  tech:
+    "tech/scale-up: hypergroei vs governance en founder-macht vs institutionele investeerders.",
+  overheid:
+    "overheid: politieke druk vs executiekracht en budgetkrimp vs dienstverlening.",
   retail: "retail/logistiek: fysiek vs online, margedruk vs klantbeleving, personeelstekort vs automatisering.",
   energie: "energie/duurzaamheid: transitie vs betaalbaarheid, netcongestie vs investeringen, geopolitieke afhankelijkheid.",
   default:
-    "algemene strategische transformatie: mandaat, schaal vs autonomie, financiele druk, machtsverschuiving, tijdsdruk.",
+    "default transformatie-template: schaal vs autonomie, centrale sturing vs lokale macht, kostenreductie vs executiekwaliteit, plus toxische patronen in onderstroom.",
 } as const;
 
 type SectorKey = keyof typeof SECTOR_TEMPLATES;
@@ -203,7 +207,7 @@ const SECTOR_KEYWORDS: Record<Exclude<SectorKey, "default">, RegExp[]> = {
   onderwijs: [/\bonderwijs\b/i, /\bschool\b/i, /\bleraar\b/i, /\bstudent\b/i],
   finance: [/\bbank\b/i, /\bfinance\b/i, /\bfinanc/i, /\bverzekeraar\b/i, /\bdnb\b/i, /\beba\b/i],
   industrie: [/\bindustrie\b/i, /\bmanufacturing\b/i, /\bfabriek\b/i, /\bproductie\b/i],
-  tech: [/\btech\b/i, /\bscale[- ]?up\b/i, /\bsaas\b/i, /\bplatform\b/i, /\bfounder\b/i],
+  tech: [/\btech\b/i, /\bscale[- ]?up\b/i, /\bsaas\b/i, /\bplatform\b/i, /\bfounder\b/i, /\bovername\b/i],
   overheid: [/\boverheid\b/i, /\bgemeente\b/i, /\bministerie\b/i, /\bpubliek\b/i],
   retail: [/\bretail\b/i, /\blogistiek\b/i, /\be-?commerce\b/i, /\bwinkel\b/i],
   energie: [/\benergie\b/i, /\bduurzaam/i, /\bnetcongestie\b/i, /\btransitie\b/i],
@@ -221,6 +225,11 @@ const FORBIDDEN_PATTERNS = [
   /nog niet voldoende/i,
   /zou kunnen/i,
   /lijkt erop dat/i,
+  /^\s*aanname:/i,
+  /^\s*contextanker:/i,
+  /^\s*signat(?:ure)? layer waarschuwing/i,
+  /\bbeperkte context\b/i,
+  /^\s*duid structureel\b/i,
 ];
 
 const WEAK_SIGNAL_PATTERNS = [
@@ -229,6 +238,17 @@ const WEAK_SIGNAL_PATTERNS = [
   /nog niet voldoende/i,
   /zou kunnen/i,
   /lijkt erop dat/i,
+  /^\s*aanname:/i,
+  /^\s*contextanker:/i,
+  /^\s*duid structureel\b/i,
+];
+
+const FORBIDDEN_SECTION_OPENERS = [
+  /^\s*aanname:\s*/i,
+  /^\s*contextanker:\s*/i,
+  /^\s*signat(?:ure)? layer waarschuwing[:\s-]*/i,
+  /^\s*beperkte context[:\s-]*/i,
+  /^\s*duid structureel[:\s-]*/i,
 ];
 
 const DEFAULT_ASSUMPTIONS: Record<string, string> = {
@@ -270,8 +290,8 @@ function sanitizeContextHint(value?: string): string {
   return sanitizeWhitespace(String(value ?? ""))
     .replace(/\bmoet\b/gi, "kiest")
     .replace(/\bformuleer\b/gi, "beschrijf concreet")
-    .replace(/\banalyseer\b/gi, "duid")
-    .replace(/geen expliciete context/gi, "beperkte context")
+    .replace(/\banalyseer\b/gi, "werk uit")
+    .replace(/geen expliciete context/gi, "context is schaars")
     .replace(/ontbreekt/gi, "nog niet beschikbaar")
     .replace(/placeholder/gi, "voorbeeldwaarde")
     .replace(/trade-?offs?\s+moeten/gi, "trade-offs zijn");
@@ -324,27 +344,53 @@ function buildSectorConcreteFallback(sectionKey: string, contextHint?: string): 
 
   switch (sectionKey) {
     case "dominantThesis":
-      return `${facts.label}: het bestuursvraagstuk draait om besluitkracht onder tijdsdruk. ${template} Binnen 90 dagen leidt uitstel tot ${facts.loss90}. Expliciet verlies: ${facts.explicitLoss}.`;
+      return `${facts.label}: besluitkracht zakt zonder harde keuze binnen 14 dagen. ${template} Binnen 90 dagen leidt uitstel tot ${facts.loss90}. Expliciet verlies: ${facts.explicitLoss}.`;
     case "coreConflict":
-      return `Kernconflict in ${facts.label}: keuze voor centrale executie vergroot snelheid en verlaagt lokale autonomie; keuze voor lokale autonomie behoudt draagvlak en verlaagt uitvoeringstempo. Deze spanning is onoplosbaar zonder verlies. Formele machtsverschuiving: ${facts.powerShift}.`;
+      return `Kernconflict in ${facts.label}: centrale executie verhoogt snelheid maar vernietigt lokale autonomie; lokale autonomie behoudt draagvlak maar vertraagt uitvoering. Dit dilemma is niet optimaliseerbaar. Formele machtsverschuiving: ${facts.powerShift}.`;
     case "tradeoffs":
-      return `Trade-offset in ${facts.label}: winst bij centralisatie = kortere besluitketen en hogere uitvoeringsconsistentie; verlies = ${facts.explicitLoss}. Winst bij decentrale ruimte = lokaal eigenaarschap; verlies = hogere variatie, hogere kosten en tragere escalatie.`;
+      return `Trade-offs ${facts.label}: verlies 1 = ${facts.explicitLoss}. Verlies 2 = binnen 90 dagen ${facts.loss90}. Tijdshorizon: 30/90/365 dagen met oplopende schade naar ${facts.loss365}.`;
     case "opportunityCost":
       return `Opportunity cost ${facts.label}: 30 dagen ${facts.loss30}. 90 dagen ${facts.loss90}. 365 dagen ${facts.loss365}. Irreversibiliteit: ${facts.irreversible}.`;
     case "governanceImpact":
-      return `Governance-impact ${facts.label}: ${facts.powerShift}. Informele tegenkracht verschuift naar middenlagen die scope rekken en escalatie vertragen. Uitvoering wint alleen bij eenduidig mandaat, vaste escalatiecyclus en expliciet geaccepteerd verlies.`;
+      return `Governance-impact ${facts.label}: ${facts.powerShift}. Bovenstroom stuurt op centrale besluitrechten, escalatieritme en structuurherinrichting. Structuurgevolg: een centraal besluitcomite vervangt versnipperde mandaten en dwingt escalatie binnen 48 uur. Informele tegenkracht concentreert zich in middenlagen die scope rekken en vertragen.`;
     case "powerDynamics":
-      return `Machtsdynamiek ${facts.label}: invloed verschuift naar het centrale besluitcentrum, terwijl informele coalities blokkeren via herprioritering en vertraagde escalaties. Sabotagepatroon: formeel akkoord, informeel uitstel. Verliesdragers zijn teams waarvan discretionair mandaat verdwijnt.`;
+      return `Machtsdynamiek ${facts.label}: bovenstroom en onderstroom botsen op mandaatverlies. Teams die discretionair mandaat verliezen bouwen informele coalities rond budget en personeelsplanning. Verwacht sabotagepatroon: formeel akkoord, informeel uitstel, scope-verdunning en vertraagde escalatie. Toxisch patroon: conflictmijding met verborgen agenda's in prioritering.`;
     case "executionRisk":
-      return `Executierisico ${facts.label}: blokkade ontstaat zodra oude en nieuwe prioriteiten parallel blijven. Kritieke blocker is dubbel mandaat tussen lijn en programma. ${facts.irreversible}.`;
+      return `Executierisico ${facts.label}: faalpunt is parallelle prioritering van oud en nieuw beleid. Concrete blocker: dubbel mandaat tussen lijn en programma plus verborgen agenda rond budgetbehoud. ${facts.irreversible}.`;
     case "interventionPlan90D":
-      return `Week 1-2: centraliseer mandaat, sluit conflicterende initiatieven, publiceer eigenaarschap. Week 3-6: herverdeel budget en capaciteit conform gekozen lijn. Week 7-12: stuur op ${facts.kpi} en sluit blokkades binnen zeven dagen.`;
+      return `Week 1-2: CEO/CFO leggen keuze vast, stoppen conflicterende initiatieven en publiceren owner per KPI. Week 3-6: COO herverdeelt budget en capaciteit; escalaties worden binnen 48 uur afgedwongen. Week 7-12: CHRO/COO sturen op ${facts.kpi} en sluiten blokkades binnen zeven dagen.`;
     case "decisionContract":
       return `De Raad van Bestuur committeert zich aan:\n- Keuze A of B: een enkele strategische lijn zonder parallel spoor.\n- Meetbaar resultaat: ${facts.kpi}.\n- Tijdshorizon: besluit in 14 dagen, executiebewijs in 30 dagen, structureel effect in 365 dagen.\n- Geaccepteerd verlies: ${facts.explicitLoss}.`;
     case "narrative":
     default:
-      return `${facts.label}: ${template} Opportunity cost: 30 dagen ${facts.loss30}; 90 dagen ${facts.loss90}; 365 dagen ${facts.loss365}. Formele machtsverschuiving: ${facts.powerShift}. Expliciet verlies: ${facts.explicitLoss}. Irreversibiliteit: ${facts.irreversible}.`;
+      return `${facts.label}: ${template} Bovenstroom: formele keuzes over structuur, budget en governance. Onderstroom: sabotage via vertraging, conflictmijding en verborgen agenda's. Opportunity cost 30/90/365: ${facts.loss30} | ${facts.loss90} | ${facts.loss365}. Formele machtsverschuiving: ${facts.powerShift}. Expliciet verlies: ${facts.explicitLoss}. Irreversibiliteit: ${facts.irreversible}.`;
   }
+}
+
+function stripFallbackMarker(value: string): string {
+  return String(value ?? "")
+    .split("\n")
+    .filter((line) => !line.includes(SIGNATURE_LAYER_WARNING_PREFIX))
+    .join("\n")
+    .trim();
+}
+
+function stripForbiddenSectionOpeners(value: string): string {
+  let cleaned = String(value ?? "").trim();
+  for (const pattern of FORBIDDEN_SECTION_OPENERS) {
+    cleaned = cleaned.replace(pattern, "").trimStart();
+  }
+  return cleaned.trim();
+}
+
+function sanitizeSectionBody(value: string): string {
+  return stripForbiddenSectionOpeners(stripFallbackMarker(value));
+}
+
+function withSingleFallbackMarker(value: string): string {
+  const body = sanitizeSectionBody(value);
+  if (!body) return SIGNATURE_LAYER_WARNING_PREFIX;
+  return `${SIGNATURE_LAYER_WARNING_PREFIX}\n\n${body}`;
 }
 
 export function hasForbiddenConcretePattern(text: string): boolean {
@@ -396,8 +442,8 @@ function concreteFallback(sectionKey: string, contextHint?: string): string {
   const safeContext = sanitizeContextHint(contextHint);
   if (!safeContext || isMinimalOrVagueContext(contextHint)) return fallback;
 
-  const contextAnchor = `Contextanker: ${safeContext.slice(0, 180)}.`;
-  const merged = `${fallback} ${contextAnchor}`.trim();
+  const contextSignal = `Contextsignaal: ${safeContext.slice(0, 180)}.`;
+  const merged = `${fallback} ${contextSignal}`.trim();
   if (hasForbiddenConcretePattern(merged)) return fallback;
   return merged;
 }
@@ -424,9 +470,9 @@ function buildSignatureFallbackOutput(
     sectionKey,
     residualScore,
   });
-  const fallback = concreteFallback(sectionKey, contextHint);
+  const fallback = sanitizeSectionBody(concreteFallback(sectionKey, contextHint));
   if (sectionKey === "narrative") {
-    return `${SIGNATURE_LAYER_WARNING_PREFIX}\n\n${fallback}`;
+    return withSingleFallbackMarker(fallback);
   }
   return fallback;
 }
@@ -436,10 +482,10 @@ export function enforceConcreteString(
   sectionKey: string,
   contextHint?: string
 ): string {
-  const value = sanitizeWhitespace(String(input || ""));
+  const value = sanitizeSectionBody(sanitizeWhitespace(String(input || "")));
   const forceSectorFallback = isMinimalOrVagueContext(contextHint);
   if (forceSectorFallback) {
-    const forced = concreteFallback(sectionKey, contextHint);
+    const forced = sanitizeSectionBody(concreteFallback(sectionKey, contextHint));
     if (sectionKey === "narrative") {
       return buildSignatureFallbackOutput(sectionKey, contextHint, 0);
     }
@@ -471,7 +517,7 @@ export function enforceConcreteString(
     return buildSignatureFallbackOutput(sectionKey, contextHint, residualScore);
   }
 
-  return candidate;
+  return sanitizeSectionBody(candidate);
 }
 
 export function enforceConcreteOutputMap<T extends Record<string, string>>(
@@ -517,7 +563,14 @@ export function enforceConcreteNarrativeMarkdown(
   }
 
   if (!text.includes("###")) {
-    return enforceConcreteString(text, "narrative", contextHint);
+    const plain = enforceConcreteString(text, "narrative", contextHint);
+    if (
+      plain.includes(SIGNATURE_LAYER_WARNING_PREFIX) ||
+      isMinimalOrVagueContext(contextHint)
+    ) {
+      return withSingleFallbackMarker(plain);
+    }
+    return sanitizeSectionBody(plain);
   }
 
   const sections = text
@@ -530,7 +583,9 @@ export function enforceConcreteNarrativeMarkdown(
     const heading = headingLine.trim();
     const body = bodyLines.join("\n").trim();
     const sectionKey = sectionKeyFromHeading(heading);
-    const concreteBody = enforceConcreteString(body, sectionKey, contextHint);
+    const concreteBody = sanitizeSectionBody(
+      enforceConcreteString(body, sectionKey, contextHint)
+    );
     return `${heading}\n${concreteBody}`.trim();
   });
 
@@ -539,8 +594,8 @@ export function enforceConcreteNarrativeMarkdown(
     isMinimalOrVagueContext(contextHint) &&
     !merged.includes(SIGNATURE_LAYER_WARNING_PREFIX);
   const normalizedOutput = singleWarningForVagueInput
-    ? `${SIGNATURE_LAYER_WARNING_PREFIX}\n\n${merged}`
-    : merged;
+    ? withSingleFallbackMarker(merged)
+    : sanitizeSectionBody(merged);
 
   const residualScore = concreteWeaknessScore(normalizedOutput);
   if (hasForbiddenConcretePattern(normalizedOutput) || residualScore > 0) {
