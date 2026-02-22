@@ -17,6 +17,8 @@ export default function PortalGuard() {
   const [loading, setLoading] = useState(true);
   const [authenticated, setAuthenticated] = useState(false);
 
+  const isAureliusIntakeRoute = location.pathname.startsWith("/portal/aurelius/");
+
   /* ============================================================
      ✅ BOOTSTRAP SESSION
   ============================================================ */
@@ -43,6 +45,10 @@ export default function PortalGuard() {
      LOADING SCREEN
   ============================================================ */
   if (loading) {
+    if (isAureliusIntakeRoute) {
+      return <Outlet />;
+    }
+
     return (
       <div className="min-h-screen flex items-center justify-center bg-black">
         <Loader2 className="animate-spin text-[#D4AF37]" size={48} />
@@ -54,6 +60,10 @@ export default function PortalGuard() {
      ✅ NOT LOGGED IN → LOGIN WITH RETURN PATH
   ============================================================ */
   if (!authenticated) {
+    if (isAureliusIntakeRoute) {
+      return <Outlet />;
+    }
+
     return (
       <Navigate
         to="/aurelius/login"
