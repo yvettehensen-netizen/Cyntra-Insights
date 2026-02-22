@@ -300,6 +300,15 @@ function hasSignatureFallbackWarning(value: unknown): boolean {
   return typeof value === "string" && value.includes(SIGNATURE_LAYER_WARNING_PREFIX);
 }
 
+function stripSignatureWarningPrefix(value: unknown): string {
+  if (typeof value !== "string") return "";
+  if (!value.includes(SIGNATURE_LAYER_WARNING_PREFIX)) return value;
+  return value
+    .replace(SIGNATURE_LAYER_WARNING_PREFIX, "")
+    .replace(/^\s+/, "")
+    .trim();
+}
+
 function buildGuaranteedExecutiveReport(params: {
   report: unknown;
   power: PowerPipelineOutput | null;
@@ -819,39 +828,39 @@ export default function UnifiedAnalysisPage() {
         ? [
             {
               title: "1. Dominante Bestuurlijke These",
-              content: executiveReportView.dominantThesis,
+              content: stripSignatureWarningPrefix(executiveReportView.dominantThesis),
             },
             {
               title: "2. Kernconflict",
-              content: executiveReportView.coreConflict,
+              content: stripSignatureWarningPrefix(executiveReportView.coreConflict),
             },
             {
               title: "3. Expliciete Trade-offs",
-              content: executiveReportView.tradeoffs,
+              content: stripSignatureWarningPrefix(executiveReportView.tradeoffs),
             },
             {
               title: "4. Opportunity Cost (0 / 90 / 365 dagen)",
-              content: executiveReportView.opportunityCost,
+              content: stripSignatureWarningPrefix(executiveReportView.opportunityCost),
             },
             {
               title: "5. Governance Impact",
-              content: executiveReportView.governanceImpact,
+              content: stripSignatureWarningPrefix(executiveReportView.governanceImpact),
             },
             {
               title: "6. Machtsdynamiek & Onderstroom",
-              content: executiveReportView.powerDynamics,
+              content: stripSignatureWarningPrefix(executiveReportView.powerDynamics),
             },
             {
               title: "7. Executierisico",
-              content: executiveReportView.executionRisk,
+              content: stripSignatureWarningPrefix(executiveReportView.executionRisk),
             },
             {
               title: "8. 90-Dagen Interventieplan",
-              content: executiveReportView.interventionPlan90D,
+              content: stripSignatureWarningPrefix(executiveReportView.interventionPlan90D),
             },
             {
               title: "9. Decision Contract",
-              content: executiveReportView.decisionContract,
+              content: stripSignatureWarningPrefix(executiveReportView.decisionContract),
             },
           ]
         : [],
@@ -859,10 +868,10 @@ export default function UnifiedAnalysisPage() {
   );
   const executiveHasFallbackWarning = useMemo(
     () =>
-      executiveSections.some((section) =>
-        hasSignatureFallbackWarning(section.content)
+      Object.values(executiveReportView ?? {}).some((value) =>
+        hasSignatureFallbackWarning(value)
       ),
-    [executiveSections]
+    [executiveReportView]
   );
   const hasReportOutput = Boolean(report || executiveReportView);
   const canDownloadPdf = hasReportOutput;
@@ -1341,7 +1350,8 @@ export default function UnifiedAnalysisPage() {
             </button>
           </div>
 
-          {(signatureFallbackWarning || executiveHasFallbackWarning) && (
+          {!showSignatureWarningBanner &&
+            (signatureFallbackWarning || executiveHasFallbackWarning) && (
             <div className="mb-6 rounded-xl border border-amber-500/70 bg-amber-950/35 p-4 text-sm text-amber-100">
               Fallbackrapport actief in Control Surface. Download gereed.
             </div>

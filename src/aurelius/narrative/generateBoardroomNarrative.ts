@@ -122,6 +122,8 @@ const CHUNK_TOKENS = 4200;
 const RESERVED_STRUCTURE_WORDS = 320;
 const HARD_FALLBACK_PROMPT_RULE =
   "Als input te kort/vaag is, maak realistische bestuurlijke assumpties en lever direct concrete output. Gebruik NOOIT woorden als 'moet', 'lijkt erop dat', 'mogelijk', 'zou kunnen'. Altijd harde stellingen met verlies, macht, tijd.";
+const INTELLIGENT_SECTOR_FALLBACK_RULE =
+  "Bij minimale/vage input: detecteer sector en activeer de bijbehorende intelligente template. Lever direct een keihard, sectorspecifiek, bestuurlijk rapport zonder enige meta-zin, zonder herhaling van waarschuwing, zonder 'aanname'. Plaats slechts een enkele gele waarschuwing bovenaan het gehele rapport.";
 const SHARPNESS_ERROR_TEXT = "Onvoldoende bestuurlijke scherpte";
 const SIGNATURE_LAYER_ERROR_TEXT = CYNTRA_SIGNATURE_LAYER_VIOLATION;
 const OPPORTUNITY_GOVERNANCE_DEPTH_DIRECTIVE =
@@ -828,6 +830,7 @@ function buildSystemPrompt(): string {
   return `
 ${enforceLanguagePrompt("nl")}
 ${HARD_FALLBACK_PROMPT_RULE}
+${INTELLIGENT_SECTOR_FALLBACK_RULE}
 
 JE BENT AURELIUS EXECUTIVE KERNEL.
 JE RAPPORT IS NIET ADVISEREND.
@@ -957,6 +960,7 @@ ${d.content}
       role: "user",
       content: `
 ${HARD_FALLBACK_PROMPT_RULE}
+${INTELLIGENT_SECTOR_FALLBACK_RULE}
 
 ORGANISATIE: ${input.company_name ?? "Onbenoemd"}
 
@@ -996,7 +1000,7 @@ ${legacyContext || "GEEN LEGACY CONTEXT BESCHIKBAAR."}
         messages.push({
           role: "user",
           content:
-            `${HARD_FALLBACK_PROMPT_RULE} Ga verder. Behoud exact de 9 secties. Veranker de Cyntra Signature Layer: besluitkracht als centrale variabele, onoplosbaar spanningsveld, expliciet verlies, machtsverschuiving, tijdsdruk en cognitieve volwassenheidsreflectie. Werk opportunity cost uit op 0/90/365, houd het 90-dagenplan op week 1-2 / 3-6 / 7-12 en sluit af met een hard decision contract. ${OPPORTUNITY_GOVERNANCE_DEPTH_DIRECTIVE} ${CONCRETE_REPROMPT_DIRECTIVE}`,
+            `${HARD_FALLBACK_PROMPT_RULE} ${INTELLIGENT_SECTOR_FALLBACK_RULE} Ga verder. Behoud exact de 9 secties. Veranker de Cyntra Signature Layer: besluitkracht als centrale variabele, onoplosbaar spanningsveld, expliciet verlies, machtsverschuiving, tijdsdruk en cognitieve volwassenheidsreflectie. Werk opportunity cost uit op 0/90/365, houd het 90-dagenplan op week 1-2 / 3-6 / 7-12 en sluit af met een hard decision contract. ${OPPORTUNITY_GOVERNANCE_DEPTH_DIRECTIVE} ${CONCRETE_REPROMPT_DIRECTIVE}`,
         });
       }
     } catch {
