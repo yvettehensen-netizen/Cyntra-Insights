@@ -15,18 +15,18 @@ import {
 
 const SIGNATURE_LAYER_ERROR_TEXT = CYNTRA_SIGNATURE_LAYER_VIOLATION;
 const EXECUTIVE_PROMPT_INJECT =
-  "Schrijf als een zeer ervaren, licht cynische senior ggz-partner die rechtstreeks spreekt tot de Raad van Bestuur. Combineer harde bovenstroom (strategie, governance, cijfers, structuur) met confronterende onderstroom (machtsverlies, informele blokkades, sabotage, toxische patronen, verborgen agenda's en menselijke drijfveren). Schrijf vloeiend, natuurlijk en direct Nederlands. Geen generieke consultancy-taal, geen filler, geen herhaling, geen AI-sporen. Bij vage input activeer de ggz-template met echte pijnpunten: IGJ-sanctierisico, wachtlijst-MAC-druk, ambulantisering vs klinische capaciteit, transformatiegelden opdrogen, zorgzwaartebekostiging onder druk, personeelstekort en burn-out realiteit.";
+  "Schrijf als een zeer ervaren, licht cynische senior ggz-partner die rechtstreeks spreekt tot de Raad van Bestuur. Combineer harde bovenstroom (strategie, governance, cijfers, structuur) met confronterende onderstroom (machtsverlies, informele blokkades, sabotage, toxische patronen, verborgen agenda's en menselijke drijfveren). Schrijf vloeiend, natuurlijk en direct Nederlands. Geen generieke consultancy-taal, geen filler, geen herhaling, geen AI-sporen. Bij vage input activeer de ggz-template met echte pijnpunten: IGJ-sanctierisico, wachtlijst-MAC-druk, ambulantisering vs klinische capaciteit, transformatiegelden opdrogen, zorgzwaartebekostiging onder druk, personeelstekort en burn-out realiteit. Zorg dat elke sectie een vloeiende, menselijke alinea vormt.";
 const OPPORTUNITY_GOVERNANCE_DEPTH_DIRECTIVE =
   "Opportunity Cost MOET drie unieke lagen bevatten: 30 dagen (direct signaalverlies + eerste gedragsverschuiving), 90 dagen (zichtbare machtsverschuiving + structurele erosie), 365 dagen (systeemverschuiving + onomkeerbare positie + dominante coalitie). Maak na 12 maanden concreet wat niet zonder reputatieschade terug te draaien is.";
 const HARD_FALLBACK_PROMPT_RULE =
   "Als input dun is, begin zonder excuus met: 'Op basis van bestuurlijke patronen in de ggz:'. Maak realistische aannames die direct besluitdruk zetten. Gebruik nooit woorden als 'lijkt erop dat', 'mogelijk', 'zou kunnen' of 'men zou'.";
 const INTELLIGENT_SECTOR_FALLBACK_RULE =
-  "Bij minimale of vage input: detecteer sector en activeer direct het sectorsjabloon. ggz/jeugdzorg: mandaatfrictie directie vs professionals, ambulantisering vs capaciteit, IGJ-toezicht, wachtlijstdruk, transformatiegelden, tariefdruk. zorg: personeelstekort vs kwaliteit, centralisatie vs lokale autonomie, digitalisering vs privacy. onderwijs: lerarentekort vs pedagogisch vakmanschap, inclusie vs excellentie, bestuurlijke druk. finance/banken: compliance vs innovatiesnelheid, rentemarge vs klantbelang, DNB/EBA-toezicht. tech/scale-up: hypergroei vs governance, founder-macht vs institutionele investeerders. industrie: schaal vs wendbaarheid, energietransitie vs continuiteit. overheid: politieke druk vs executiekracht, budgetkrimp vs dienstverlening. Onbekende sector: transformatie-template met voelbare onderstroom.";
+  "Bij minimale of vage input: detecteer sector en activeer direct het sectorsjabloon. ggz/jeugdzorg: mandaatfrictie directie vs professionals, ambulantisering vs capaciteit, IGJ-toezicht, wachtlijstdruk, transformatiegelden, tariefdruk. zorg: personeelstekort vs kwaliteit, centralisatie vs lokale autonomie, digitalisering vs privacy. onderwijs: lerarentekort vs pedagogisch vakmanschap, inclusie vs excellentie, bestuurlijke druk. finance/banken: compliance vs innovatiesnelheid, rentemarge vs klantbelang, DNB/EBA-toezicht. tech/scale-up: hypergroei vs governance, founder-macht vs institutionele investeerders. industrie: schaal vs wendbaarheid, energietransitie vs continuiteit. overheid: politieke druk vs executiekracht, budgetkrimp vs dienstverlening. Onbekende sector: transformatieroute met voelbare onderstroom.";
 const ANTI_FILLER_RULE =
-  "Geen sectie mag starten met 'SIGNATURE LAYER WAARSCHUWING', 'Contextsignaal', 'Aanname:', 'Contextanker:', 'beperkte context' of 'duid structureel'. Verbied generieke taal zoals 'default template', 'governance-technisch', 'patroon', 'context is schaars', 'werk uit', 'mogelijk', 'lijkt erop dat', 'zou kunnen', 'men zou', 'belangrijke succesfactor', 'quick win' en 'low hanging fruit'.";
+  "Geen sectie mag starten met 'SIGNATURE LAYER WAARSCHUWING', 'Contextsignaal', 'Aanname:', 'Contextanker:', 'beperkte context' of 'duid structureel'. Verbied generieke taal zoals 'default template', 'transformatie-template', 'governance-technisch', 'patroon', 'context is schaars', 'werk uit', 'mogelijk', 'lijkt erop dat', 'zou kunnen', 'men zou', 'belangrijke succesfactor', 'quick win' en 'low hanging fruit'.";
 
 const STRICT_BANNED_LANGUAGE_GUARD =
-  /\b(default template|governance-technisch|patroon|context is schaars|werk uit|mogelijk|lijkt erop dat|zou kunnen|men zou|belangrijke succesfactor|quick win|quick wins|low-hanging fruit|low hanging fruit|aanname|contextanker)\b/i;
+  /\b(default template|transformatie-template|governance-technisch|patroon|context is schaars|werk uit|mogelijk|lijkt erop dat|zou kunnen|men zou|belangrijke succesfactor|quick win|quick wins|low-hanging fruit|low hanging fruit|aanname|contextanker)\b/i;
 
 const DOMINANT_HYPOTHESIS_GUARD =
   /\bde werkelijke bestuurlijke kern is niet\b[\s\S]{0,180}\bmaar\b/i;
@@ -46,11 +46,14 @@ const GGZ_SIGNAL_GUARD =
 const GGZ_DEPTH_GUARDS = {
   igj: /\b(igj|sanctie|toezicht)\b/i,
   wachtlijstMac: /\b(wachtlijst[\s-]*mac|mac-druk|wachtlijstdruk)\b/i,
+  wachtlijstMacVast: /\b(wachtlijst[\s-]*mac)\b[\s\S]{0,80}\b(vast|hardnekkig|structureel)\b/i,
   ambulantVsKlinisch: /\b(ambulantisering)\b/i,
   klinischeCapaciteit: /\b(klinische capaciteit)\b/i,
   transformatiegelden: /\b(transformatiegelden|opdrogen)\b/i,
   zorgzwaartebekostiging: /\b(zorgzwaartebekostiging|bekostiging onder druk)\b/i,
   personeelBurnout: /\b(personeelstekort|burn-out)\b/i,
+  centraleRegiePermanent:
+    /\b(centrale regie|centrale sturing)\b[\s\S]{0,80}\b(permanent|structureel)\b/i,
 };
 
 function hasNonEmptyString(value: unknown): value is string {
@@ -93,6 +96,7 @@ function scrubForbiddenLanguage(text: string): string {
     [/\bquick wins?\b/gi, "directe ingrepen"],
     [/\blow[- ]hanging fruit\b/gi, "direct uitvoerbare ingrepen"],
     [/\bdefault template\b/gi, "standaardbouwsteen"],
+    [/\btransformatie-template\b/gi, "transformatieroute"],
     [/\bgovernance-technisch\b/gi, "bestuurlijk concreet"],
   ];
 
@@ -166,13 +170,19 @@ function assertExecutiveHardRequirements(brief: BoardroomBrief) {
   ]
     .map((part) => String(part || ""))
     .join(" ");
+  const strategicNarrative = String(brief.strategic_narrative || "");
   const openingBundle = `${dominantThesis} ${coreConflict}`;
+  const sectorInformationBundle = `${strategicNarrative} ${dominantThesis} ${coreConflict}`;
 
   if (!DOMINANT_HYPOTHESIS_GUARD.test(dominantThesis)) {
     throw new Error(SIGNATURE_LAYER_ERROR_TEXT);
   }
 
   if (!UNCOMFORTABLE_TRUTH_GUARD.test(`${openingBundle} ${executionRisk} ${contract}`)) {
+    throw new Error(SIGNATURE_LAYER_ERROR_TEXT);
+  }
+
+  if (!/\bsectorinformatie\s*:/i.test(sectorInformationBundle)) {
     throw new Error(SIGNATURE_LAYER_ERROR_TEXT);
   }
 
@@ -300,6 +310,11 @@ function assertExecutiveHardRequirements(brief: BoardroomBrief) {
     /\bmag niet meer\b[\s\S]{0,80}\bge[ëe]scaleerd\b/i.test(contract) ||
     /\bniet meer\b[\s\S]{0,80}\bescalatie\b/i.test(contract);
   const hasExplicitImpact = /\b(€\s*\d|eur\s*\d|\d+(?:[.,]\d+)?\s*%)\b/i.test(contract);
+  const hasActorImpact =
+    /\b(impact op|raakt|treft|actor-impact|voor de)\b/i.test(contract) &&
+    /\b(ceo|cfo|coo|chro|raad van bestuur|rvb|raad van toezicht|rvt|medisch directeur|regiodirecteur|programmadirecteur)\b/i.test(
+      contract
+    );
 
   if (
     !/\bkeuze\b/i.test(contract) ||
@@ -311,7 +326,8 @@ function assertExecutiveHardRequirements(brief: BoardroomBrief) {
     !hasDecisionMonopoly ||
     !hasImmediateStop ||
     !hasNoEscalation ||
-    !hasExplicitImpact
+    !hasExplicitImpact ||
+    !hasActorImpact
   ) {
     throw new Error(SIGNATURE_LAYER_ERROR_TEXT);
   }
@@ -515,6 +531,12 @@ function assertNoForbiddenLanguageInBrief(brief: BoardroomBrief) {
   }
 }
 
+function assertNoForbiddenLanguageInRawPayload(payload: unknown) {
+  if (hasForbiddenGenericLanguage(JSON.stringify(payload))) {
+    throw new Error(SIGNATURE_LAYER_ERROR_TEXT);
+  }
+}
+
 function assertGGZSpecificDepthInBrief(
   brief: BoardroomBrief,
   enforce: boolean
@@ -688,6 +710,8 @@ Dominante Cyntra Signature Layer:
 - Gebruik expliciet: Wie tempo controleert, controleert macht.
 - Besluit eindigt contractueel, niet adviserend.
 - Cognitieve volwassenheid is expliciet: informatie versus moed, capaciteit versus macht.
+- Neem een aparte alinea op die start met: Sectorinformatie:
+- Verbind in elke sectie expliciet bovenstroom en onderstroom.
 - Als ggz-signaal aanwezig is: benoem expliciet IGJ-sanctierisico, wachtlijst-MAC-druk, ambulantisering versus klinische capaciteit, opdrogende transformatiegelden, zorgzwaartebekostiging onder druk en personeelstekort met burn-out realiteit.
 - ${CONCRETE_REPROMPT_DIRECTIVE}
 - ${OPPORTUNITY_GOVERNANCE_DEPTH_DIRECTIVE}
@@ -721,6 +745,7 @@ INHOUDSEISEN:
 - Opportunity cost voor 30 dagen, 90 dagen en 365 dagen met irreversibiliteit
 - Opportunity cost werkt drie unieke lagen uit: 30 dagen signaalverlies, 90 dagen machtsverschuiving, 365 dagen systeemverschuiving
 - Na 12 maanden expliciet: permanente positieverschuiving, dominante coalitie en wat niet zonder reputatieschade terug te draaien is
+- In ggz-context expliciet: 365 dagen = IGJ-sanctiedruk, wachtlijst-MAC structureel vast en centrale regie permanent
 - Governance impact op besluitkracht, escalatie, formele machtsverschuiving en structuurgevolgen
 - ${OPPORTUNITY_GOVERNANCE_DEPTH_DIRECTIVE}
 - Machtsdynamiek en onderstroom: minimaal 3 concrete machtsactoren met wat zij verliezen, winnen, hoe zij vertragen/saboteren en welk instrument zij gebruiken
@@ -731,13 +756,16 @@ INHOUDSEISEN:
 - Hard decision contract met exacte openingszin: De Raad van Bestuur committeert zich aan:
 - Contract bevat keuze + KPI + tijdshorizon + geaccepteerd verlies
 - Contract bevat expliciet: formeel machtsverlies, informeel machtsverlies, beslismonopolie, per-direct stop, niet-escalatie en verliesimpact in €/%/capaciteit
+- Contract bevat expliciet actor-impact (rol + €/% impact) voor minimaal één sleutelactor
+- Strategic narrative bevat een aparte alinea die start met: Sectorinformatie:
+- Elk inhoudsblok benoemt zowel bovenstroom als onderstroom
 
 REGELS:
 - Geen markdown
 - Geen bullets buiten decision contract tekstvelden
 - Geen consultant-cliche
 - Als context dun is: gebruik exact "Op basis van bestuurlijke patronen in de ggz:"
-- Verboden woorden: default template, governance-technisch, patroon, context is schaars, werk uit, mogelijk, lijkt erop dat, zou kunnen, men zou, belangrijke succesfactor, quick win, low hanging fruit
+- Verboden woorden: default template, transformatie-template, governance-technisch, patroon, context is schaars, werk uit, aanname, contextanker, mogelijk, lijkt erop dat, zou kunnen, men zou, belangrijke succesfactor, quick win, low hanging fruit
 - Geen technisch jargon
 - Alleen JSON
 - REJECT direct elke output met verboden generieke taal of AI-sporen
@@ -839,9 +867,9 @@ OUTPUT — STRICT JSON (VOLG EXACT):
 `;
 
   const parseAndValidate = (raw: string): BoardroomBrief => {
-    const parsed = sanitizeBriefLanguage(
-      enforceConcreteBrief(JSON.parse(raw) as BoardroomBrief)
-    );
+    const rawParsed = JSON.parse(raw) as BoardroomBrief;
+    assertNoForbiddenLanguageInRawPayload(rawParsed);
+    const parsed = sanitizeBriefLanguage(enforceConcreteBrief(rawParsed));
     assertSignatureLayerCompliance(parsed);
     assertExecutiveHardRequirements(parsed);
     assertGGZSpecificDepthInBrief(parsed, enforceGGZDepth);

@@ -121,13 +121,13 @@ const MAX_LOOPS = 8;
 const CHUNK_TOKENS = 4200;
 const RESERVED_STRUCTURE_WORDS = 320;
 const EXECUTIVE_PROMPT_INJECT =
-  "Schrijf als een zeer ervaren, licht cynische senior ggz-partner die rechtstreeks spreekt tot de Raad van Bestuur. Combineer harde bovenstroom (strategie, governance, cijfers, structuur) met confronterende onderstroom (machtsverlies, informele blokkades, sabotage, toxische patronen, verborgen agenda's en menselijke drijfveren). Schrijf vloeiend, natuurlijk en direct Nederlands. Geen generieke consultancy-taal, geen filler, geen herhaling, geen AI-sporen. Bij vage input activeer de ggz-template met echte pijnpunten: IGJ-sanctierisico, wachtlijst-MAC-druk, ambulantisering vs klinische capaciteit, transformatiegelden opdrogen, zorgzwaartebekostiging onder druk, personeelstekort en burn-out realiteit.";
+  "Schrijf als een zeer ervaren, licht cynische senior ggz-partner die rechtstreeks spreekt tot de Raad van Bestuur. Combineer harde bovenstroom (strategie, governance, cijfers, structuur) met confronterende onderstroom (machtsverlies, informele blokkades, sabotage, toxische patronen, verborgen agenda's en menselijke drijfveren). Schrijf vloeiend, natuurlijk en direct Nederlands. Geen generieke consultancy-taal, geen filler, geen herhaling, geen AI-sporen. Bij vage input activeer de ggz-template met echte pijnpunten: IGJ-sanctierisico, wachtlijst-MAC-druk, ambulantisering vs klinische capaciteit, transformatiegelden opdrogen, zorgzwaartebekostiging onder druk, personeelstekort en burn-out realiteit. Zorg dat elke sectie een vloeiende, menselijke alinea vormt.";
 const HARD_FALLBACK_PROMPT_RULE =
   "Als input dun is, begin zonder excuus met: 'Op basis van bestuurlijke patronen in de ggz:'. Maak realistische aannames die direct besluitdruk zetten. Gebruik nooit woorden als 'lijkt erop dat', 'mogelijk', 'zou kunnen' of 'men zou'.";
 const INTELLIGENT_SECTOR_FALLBACK_RULE =
-  "Bij minimale of vage input: detecteer sector en activeer direct het sectorsjabloon. ggz/jeugdzorg: mandaatfrictie directie vs professionals, ambulantisering vs capaciteit, IGJ-toezicht, wachtlijstdruk, transformatiegelden, tariefdruk. zorg: personeelstekort vs kwaliteit, centralisatie vs lokale autonomie, digitalisering vs privacy. onderwijs: lerarentekort vs pedagogisch vakmanschap, inclusie vs excellentie, bestuurlijke druk. finance/banken: compliance vs innovatiesnelheid, rentemarge vs klantbelang, DNB/EBA-toezicht. tech/scale-up: hypergroei vs governance, founder-macht vs institutionele investeerders. industrie: schaal vs wendbaarheid, energietransitie vs continuiteit. overheid: politieke druk vs executiekracht, budgetkrimp vs dienstverlening. Onbekende sector: transformatie-template met voelbare onderstroom.";
+  "Bij minimale of vage input: detecteer sector en activeer direct het sectorsjabloon. ggz/jeugdzorg: mandaatfrictie directie vs professionals, ambulantisering vs capaciteit, IGJ-toezicht, wachtlijstdruk, transformatiegelden, tariefdruk. zorg: personeelstekort vs kwaliteit, centralisatie vs lokale autonomie, digitalisering vs privacy. onderwijs: lerarentekort vs pedagogisch vakmanschap, inclusie vs excellentie, bestuurlijke druk. finance/banken: compliance vs innovatiesnelheid, rentemarge vs klantbelang, DNB/EBA-toezicht. tech/scale-up: hypergroei vs governance, founder-macht vs institutionele investeerders. industrie: schaal vs wendbaarheid, energietransitie vs continuiteit. overheid: politieke druk vs executiekracht, budgetkrimp vs dienstverlening. Onbekende sector: transformatieroute met voelbare onderstroom.";
 const ANTI_FILLER_RULE =
-  "Geen sectie mag starten met 'SIGNATURE LAYER WAARSCHUWING', 'Contextsignaal', 'Aanname:', 'Contextanker:', 'beperkte context' of 'duid structureel'. Verbied generieke taal zoals 'default template', 'governance-technisch', 'patroon', 'context is schaars', 'werk uit', 'mogelijk', 'lijkt erop dat', 'zou kunnen', 'men zou', 'belangrijke succesfactor', 'quick win' en 'low hanging fruit'.";
+  "Geen sectie mag starten met 'SIGNATURE LAYER WAARSCHUWING', 'Contextsignaal', 'Aanname:', 'Contextanker:', 'beperkte context' of 'duid structureel'. Verbied generieke taal zoals 'default template', 'transformatie-template', 'governance-technisch', 'patroon', 'context is schaars', 'werk uit', 'mogelijk', 'lijkt erop dat', 'zou kunnen', 'men zou', 'belangrijke succesfactor', 'quick win' en 'low hanging fruit'.";
 const SHARPNESS_ERROR_TEXT = "Onvoldoende bestuurlijke scherpte";
 const SIGNATURE_LAYER_ERROR_TEXT = CYNTRA_SIGNATURE_LAYER_VIOLATION;
 const OPPORTUNITY_GOVERNANCE_DEPTH_DIRECTIVE =
@@ -146,10 +146,10 @@ const FORBIDDEN_GPT_STYLE_GUARD =
   /\b(op basis van de analyse|het lijkt erop dat|als ai|als taalmodel|mogelijk is het)\b/i;
 
 const CONSULTANT_CLICHE_GUARD =
-  /\b(belangrijke succesfactor|quick win|quick wins|low-hanging fruit|low hanging fruit|governance-technisch|default template)\b/i;
+  /\b(belangrijke succesfactor|quick win|quick wins|low-hanging fruit|low hanging fruit|governance-technisch|default template|transformatie-template)\b/i;
 
 const STRICT_BANNED_LANGUAGE_GUARD =
-  /\b(default template|governance-technisch|patroon|context is schaars|werk uit|mogelijk|lijkt erop dat|zou kunnen|men zou|belangrijke succesfactor|quick win|quick wins|low-hanging fruit|low hanging fruit|aanname|contextanker)\b/i;
+  /\b(default template|transformatie-template|governance-technisch|patroon|context is schaars|werk uit|mogelijk|lijkt erop dat|zou kunnen|men zou|belangrijke succesfactor|quick win|quick wins|low-hanging fruit|low hanging fruit|aanname|contextanker)\b/i;
 
 const DOMINANT_HYPOTHESIS_GUARD =
   /\bde werkelijke bestuurlijke kern is niet\b[\s\S]{0,180}\bmaar\b/i;
@@ -181,11 +181,14 @@ const GGZ_SIGNAL_GUARD =
 const GGZ_DEPTH_GUARDS = {
   igj: /\b(igj|sanctie|toezicht)\b/i,
   wachtlijstMac: /\b(wachtlijst[\s-]*mac|mac-druk|wachtlijstdruk)\b/i,
+  wachtlijstMacVast: /\b(wachtlijst[\s-]*mac)\b[\s\S]{0,80}\b(vast|hardnekkig|structureel)\b/i,
   ambulantVsKlinisch: /\b(ambulantisering)\b/i,
   klinischeCapaciteit: /\b(klinische capaciteit)\b/i,
   transformatiegelden: /\b(transformatiegelden|opdrogen)\b/i,
   zorgzwaartebekostiging: /\b(zorgzwaartebekostiging|bekostiging onder druk)\b/i,
   personeelBurnout: /\b(personeelstekort|burn-out)\b/i,
+  centraleRegiePermanent:
+    /\b(centrale regie|centrale sturing)\b[\s\S]{0,80}\b(permanent|structureel)\b/i,
 };
 
 const FORBIDDEN_SECTION_START_PATTERNS = [
@@ -208,9 +211,30 @@ const STRUCTURE_HEADINGS = [
   "### 9. DECISION CONTRACT",
 ] as const;
 
+const TOP_UNDER_BRIDGE_LINES: Record<(typeof STRUCTURE_HEADINGS)[number], string> = {
+  "### 1. DOMINANTE BESTUURLIJKE THESE":
+    "In de bovenstroom staat de formele koers op papier; in de onderstroom bepaalt verliesangst welke keuze echt doorleeft.",
+  "### 2. HET KERNCONFLICT":
+    "Bovenstroom stuurt op KPI-logica en mandaat, onderstroom stuurt op loyaliteit en territoriumdrang; die botsing maakt dit conflict hard.",
+  "### 3. EXPLICIETE TRADE-OFFS":
+    "In de bovenstroom heet dit prioritering, in de onderstroom is dit een gevecht om wie pijn incasseert en wie zijn positie bewaart.",
+  "### 4. OPPORTUNITY COST":
+    "De bovenstroom ziet een oplopende verliescurve, de onderstroom normaliseert uitstel totdat de machtsverschuiving onomkeerbaar is.",
+  "### 5. GOVERNANCE IMPACT":
+    "Bovenstroom tekent mandaatlijnen en escalatiepad, onderstroom test die lijnen via informatiefiltering en uitzonderingsdruk.",
+  "### 6. MACHTSDYNAMIEK & ONDERSTROOM":
+    "In de bovenstroom wordt verantwoordelijkheid toegewezen, in de onderstroom wordt tempo gebruikt als stille hefboom voor macht.",
+  "### 7. EXECUTIERISICO":
+    "De bovenstroom benoemt blockers en eigenaarschap, de onderstroom laat vertraging lopen via conflictmijding en beschermde uitzonderingen.",
+  "### 8. 90-DAGEN INTERVENTIEPLAN":
+    "Bovenstroom vertaalt zich naar weekritme en KPI-afrekening, onderstroom naar wie feitelijk informatie doseert en escalatie opent of sluit.",
+  "### 9. DECISION CONTRACT":
+    "De bovenstroom sluit het besluit formeel af, de onderstroom voelt direct wie macht verliest en wie geen uitwijkroute meer heeft.",
+};
+
 const SECTION_DEFAULTS: Record<(typeof STRUCTURE_HEADINGS)[number], string> = {
   "### 1. DOMINANTE BESTUURLIJKE THESE":
-    "De werkelijke bestuurlijke kern is niet strategie, maar besluituitstel dat als zorgvuldigheid wordt verkocht. De ongemakkelijke waarheid is: dit bestuur houdt iedereen politiek heel, maar offert daarmee besluitkracht op. De bovenstroom oogt ordelijk met KPI's en escalatiepaden, terwijl de onderstroom via loyaliteiten en budgetreflexen elke harde keuze afzwakt. Dit bestuur moet nu één lijn kiezen en concurrerende lijnen beëindigen. De bestuurlijke toetsvraag is eenvoudig: versterkt deze keuze de besluitkracht van de top of ondermijnt zij die.",
+    "De werkelijke bestuurlijke kern is niet strategie, maar besluituitstel dat als zorgvuldigheid wordt verkocht. De ongemakkelijke waarheid is: dit bestuur houdt iedereen politiek heel, maar offert daarmee besluitkracht op. De bovenstroom oogt ordelijk met KPI's en escalatiepaden, terwijl de onderstroom via loyaliteiten en budgetreflexen elke harde keuze afzwakt. Sectorinformatie: in de ggz stapelen IGJ-toezicht, wachtlijst-MAC-druk, ambulantisering en personeelstekort zich op tot directe bestuursdruk. Dit bestuur moet nu één lijn kiezen en concurrerende lijnen beëindigen. De bestuurlijke toetsvraag is eenvoudig: versterkt deze keuze de besluitkracht van de top of ondermijnt zij die.",
 
   "### 2. HET KERNCONFLICT":
     "U moet kiezen tussen schaalvergroting met verlies aan lokale controle, of stabilisatie met verlies aan groeisnelheid en marktmomentum. Er bestaat geen derde route die beide doelen tegelijk veiligstelt. De formele redenering zegt dat zorgvuldigheid tijd vraagt; de feitelijke onderstroom zegt dat uitstel vooral posities beschermt. De ongemakkelijke waarheid is: wie nu niet verliest, verliest later veel harder.",
@@ -234,7 +258,7 @@ const SECTION_DEFAULTS: Record<(typeof STRUCTURE_HEADINGS)[number], string> = {
     "Week 1-2: CEO en CFO zetten één koers vast, stoppen conflicterende initiatieven per direct en publiceren eigenaar, mandaat en KPI per prioriteit. Week 3-6: COO herverdeelt capaciteit, budget en besluitrechten; escalaties worden binnen 48 uur afgedwongen en uitzonderingsroutes gesloten. Week 7-12: CHRO en COO sturen op doorlooptijd, kwaliteit en financieel effect; blokkades worden binnen zeven dagen opgelost of als expliciet verlies geboekt. Wie tempo controleert, controleert macht.",
 
   "### 9. DECISION CONTRACT":
-    "De Raad van Bestuur committeert zich aan:\n- Keuze A of B met beslismonopolie bij de COO op capaciteitsvolgorde en prioritering.\n- Formele macht: de CFO verliest het extra veto op portfolio-uitzonderingen; informele macht: lokale mandaatdragers verliezen het stille uitstelcircuit.\n- Per direct stopt elk initiatief zonder benoemde owner en KPI; deze dossiers mogen niet meer via informele lijn geëscaleerd worden.\n- KPI en tijdshorizon: binnen 30 dagen eerste executiesignalen, binnen 90 dagen meetbaar effect op marge en doorlooptijd, binnen 365 dagen structurele trendbreuk.\n- Expliciet geaccepteerd verlies: EUR 2,4 miljoen aan stopzettingen en 18% minder lokale beslisruimte in jaar 1.\n- De ongemakkelijke waarheid is: dit contract verdeelt macht opnieuw en maakt reputatieschade zichtbaar voor wie vertraagt.",
+    "De Raad van Bestuur committeert zich aan:\n- Keuze A of B met beslismonopolie bij de COO op capaciteitsvolgorde en prioritering.\n- Formele macht: de CFO verliest het extra veto op portfolio-uitzonderingen; informele macht: lokale mandaatdragers verliezen het stille uitstelcircuit.\n- Per direct stopt elk initiatief zonder benoemde owner en KPI; deze dossiers mogen niet meer via informele lijn geëscaleerd worden.\n- KPI en tijdshorizon: binnen 30 dagen eerste executiesignalen, binnen 90 dagen meetbaar effect op marge en doorlooptijd, binnen 365 dagen structurele trendbreuk.\n- Expliciet geaccepteerd verlies: EUR 2,4 miljoen aan stopzettingen en 18% minder lokale beslisruimte in jaar 1, met directe impact op CFO-vetoruimte en regiodirecteur-mandaat.\n- De ongemakkelijke waarheid is: dit contract verdeelt macht opnieuw en maakt reputatieschade zichtbaar voor wie vertraagt.",
 };
 
 /* ============================================================
@@ -548,6 +572,24 @@ function assertStructure(text: string) {
   }
 }
 
+function assertSectorInformationParagraph(text: string) {
+  if (!/(^|\n)\s*sectorinformatie\s*:/i.test(text)) {
+    throw new Error(SHARPNESS_ERROR_TEXT);
+  }
+}
+
+function assertTopUnderstreamBalancePerSection(text: string) {
+  for (const heading of STRUCTURE_HEADINGS) {
+    const section = extractSection(text, heading);
+    if (!section) {
+      throw new Error(SHARPNESS_ERROR_TEXT);
+    }
+    if (!/\bbovenstroom\b/i.test(section) || !/\bonderstroom\b/i.test(section)) {
+      throw new Error(SHARPNESS_ERROR_TEXT);
+    }
+  }
+}
+
 function assertNoForbiddenSectionStarts(text: string) {
   for (const heading of STRUCTURE_HEADINGS) {
     const section = extractSection(text, heading);
@@ -804,6 +846,11 @@ function assertDecisionContract(text: string) {
     /\bmag niet meer\b[\s\S]{0,80}\bge[ëe]scaleerd\b/i.test(section) ||
     /\bniet meer\b[\s\S]{0,80}\bescalatie\b/i.test(section);
   const hasExplicitImpact = /\b(€\s*\d|eur\s*\d|\d+(?:[.,]\d+)?\s*%)\b/i.test(section);
+  const hasActorImpact =
+    /\b(impact op|raakt|treft|actor-impact|voor de)\b/i.test(section) &&
+    /\b(ceo|cfo|coo|chro|raad van bestuur|rvb|raad van toezicht|rvt|medisch directeur|regiodirecteur|programmadirecteur)\b/i.test(
+      section
+    );
 
   if (
     !hasOpening ||
@@ -817,7 +864,8 @@ function assertDecisionContract(text: string) {
     !hasDecisionMonopoly ||
     !hasImmediateStop ||
     !hasNoEscalation ||
-    !hasExplicitImpact
+    !hasExplicitImpact ||
+    !hasActorImpact
   ) {
     throw new Error(SHARPNESS_ERROR_TEXT);
   }
@@ -934,6 +982,8 @@ function assertCyntraSignatureLayer(text: string) {
 
 function assertExecutiveKernelQuality(text: string, enforceGGZDepth: boolean) {
   assertStructure(text);
+  assertSectorInformationParagraph(text);
+  assertTopUnderstreamBalancePerSection(text);
   assertNoForbiddenSectionStarts(text);
   assertDominantThesis(text);
   assertUncomfortableTruth(text);
@@ -1253,8 +1303,8 @@ function enforceSignatureLayer(text: string): string {
   output = injectLineIntoSection(
     output,
     "### 9. DECISION CONTRACT",
-    "Contractpijn is expliciet: formele en informele macht verliezen terrein, beslismonopolie wordt toegewezen, directe stop geldt en informele escalatie is beëindigd.",
-    /\b(formele macht|informele macht|beslismonopolie|per direct|escalatie)\b/i
+    "Contractpijn is expliciet: formele en informele macht verliezen terrein, beslismonopolie wordt toegewezen, directe stop geldt, informele escalatie is beëindigd en de actor-impact in EUR/% ligt vast voor CFO, COO en regiodirecteur.",
+    /\b(actor-impact|impact op|raakt|treft)\b/i
   );
 
   return output;
@@ -1286,6 +1336,91 @@ function enforceCyntraBridge(text: string): string {
   return `${text}\n\nBovenstroom en onderstroom worden expliciet verbonden: formeel besluit, informele macht en zichtbaar gedrag worden in dezelfde bestuurscyclus gestuurd.`;
 }
 
+function detectSectorLabelFromInput(input: BoardroomInput): string {
+  const corpus = [
+    toSafeString(input.company_name),
+    toSafeString(input.company_context),
+    toSafeString(input.executive_thesis),
+    toSafeString(input.central_tension),
+    toSafeString(input.strategic_narrative),
+    ...(Array.isArray(input.documents)
+      ? input.documents.flatMap((doc) => [
+          toSafeString(doc?.filename),
+          toSafeString(doc?.content).slice(0, 1800),
+        ])
+      : []),
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  if (/\b(ggz|geestelijke gezondheidszorg|jeugdzorg|igj|wachtlijst|mac)\b/.test(corpus)) {
+    return "ggz";
+  }
+  if (/\b(ziekenhuis|care|vvt|ouderenzorg|zorginstelling)\b/.test(corpus)) {
+    return "zorg";
+  }
+  if (/\b(school|onderwijs|docent|leerling)\b/.test(corpus)) {
+    return "onderwijs";
+  }
+  if (/\b(bank|verzekeraar|compliance|dnb|eba|finance)\b/.test(corpus)) {
+    return "finance";
+  }
+  if (/\b(scale-up|software|saas|platform|tech)\b/.test(corpus)) {
+    return "tech";
+  }
+  if (/\b(fabriek|productie|industrie|supply chain)\b/.test(corpus)) {
+    return "industrie";
+  }
+  if (/\b(gemeente|ministerie|publiek|overheid)\b/.test(corpus)) {
+    return "overheid";
+  }
+  return "transformatie";
+}
+
+function buildSectorInformationParagraph(input: BoardroomInput): string {
+  const sector = detectSectorLabelFromInput(input);
+  switch (sector) {
+    case "ggz":
+      return "Sectorinformatie: de ggz draait nu op een breekpunt waar IGJ-sanctierisico, wachtlijst-MAC-druk, spanning tussen ambulantisering en klinische capaciteit, opdrogende transformatiegelden, druk op zorgzwaartebekostiging en burn-out samenkomen.";
+    case "zorg":
+      return "Sectorinformatie: in de zorg sturen personeelstekort, kwaliteitseisen en centralisatiekeuzes tegelijk op kosten, tempo en publieke legitimiteit.";
+    case "onderwijs":
+      return "Sectorinformatie: in het onderwijs vergroten lerarentekort, kwaliteitsdruk en bestuurlijke fragmentatie de kans op structureel leerverlies.";
+    case "finance":
+      return "Sectorinformatie: in finance bepaalt de combinatie van compliance-druk, marge-erosie en toezichtstempo de feitelijke bestuurlijke speelruimte.";
+    case "tech":
+      return "Sectorinformatie: in tech botsen groeitempo, governance-discipline en kapitaalverwachting, waardoor uitstel snel waardeverlies wordt.";
+    case "industrie":
+      return "Sectorinformatie: in industrie trekt de combinatie van leverbetrouwbaarheid, kosteninflatie en capaciteitsdruk direct door naar contractrisico.";
+    case "overheid":
+      return "Sectorinformatie: in de publieke sector duwen politieke druk, uitvoeringstekorten en budgetkrapte het bestuur in permanente prioriteringspijn.";
+    default:
+      return "Sectorinformatie: in deze transformatieroute lopen mandaatverschuiving, budgetdruk en informatiecontrole tegelijk op, waardoor uitstel direct machtsverlies wordt.";
+  }
+}
+
+function enforceSectorInformationParagraph(text: string, input: BoardroomInput): string {
+  return injectLineIntoSection(
+    text,
+    "### 1. DOMINANTE BESTUURLIJKE THESE",
+    buildSectorInformationParagraph(input),
+    /(^|\n)\s*sectorinformatie\s*:/i
+  );
+}
+
+function enforceTopUnderstreamBalance(text: string): string {
+  let output = text;
+  for (const heading of STRUCTURE_HEADINGS) {
+    output = injectLineIntoSection(
+      output,
+      heading,
+      TOP_UNDER_BRIDGE_LINES[heading],
+      /\bbovenstroom\b[\s\S]{0,240}\bonderstroom\b|\bonderstroom\b[\s\S]{0,240}\bbovenstroom\b/i
+    );
+  }
+  return output;
+}
+
 function scrubForbiddenLanguage(text: string): string {
   let output = String(text ?? "");
   const GGZ_CONTEXT_SENTINEL = "__GGZ_CONTEXT_SENTINEL__";
@@ -1306,6 +1441,7 @@ function scrubForbiddenLanguage(text: string): string {
     [/\bquick wins?\b/gi, "directe ingrepen"],
     [/\blow[- ]hanging fruit\b/gi, "direct uitvoerbare ingrepen"],
     [/\bdefault template\b/gi, "standaardbouwsteen"],
+    [/\btransformatie-template\b/gi, "transformatieroute"],
     [/\bgovernance-technisch\b/gi, "bestuurlijk concreet"],
   ];
 
@@ -1319,6 +1455,13 @@ function scrubForbiddenLanguage(text: string): string {
   );
 
   return output;
+}
+
+function hasForbiddenGenericLanguage(text: string): boolean {
+  const normalized = String(text ?? "")
+    .replace(/op basis van bestuurlijke patronen in de ggz:/gi, "")
+    .replace(/op basis van bestuurlijke patronen in vergelijkbare organisaties:/gi, "");
+  return STRICT_BANNED_LANGUAGE_GUARD.test(normalized);
 }
 
 function hasThinBoardroomInput(input: BoardroomInput): boolean {
@@ -1376,13 +1519,13 @@ function enforceGGZDepthHints(text: string, input: BoardroomInput): string {
   output = injectLineIntoSection(
     output,
     "### 4. OPPORTUNITY COST",
-    "GGZ-specifiek: bij uitstel stijgt IGJ-sanctierisico, blijft wachtlijst-MAC-druk hard, wordt ambulantisering losgekoppeld van klinische capaciteit en schuift herstel buiten bestuurlijke controle.",
+    "GGZ-specifiek: bij uitstel stijgt IGJ-sanctierisico binnen 365 dagen van risico naar sanctiedruk, raakt wachtlijst-MAC structureel vast, loopt ambulantisering los van klinische capaciteit en schuift herstel buiten bestuurlijke controle.",
     /\b(igj|wachtlijst[\s-]*mac|ambulantisering|klinische capaciteit)\b/i
   );
   output = injectLineIntoSection(
     output,
     "### 5. GOVERNANCE IMPACT",
-    "Bestuurlijke prijs in de ggz: transformatiegelden drogen op, zorgzwaartebekostiging blijft onder druk en centrale regie wordt dan niet tijdelijk maar structureel.",
+    "Bestuurlijke prijs in de ggz: transformatiegelden drogen op, zorgzwaartebekostiging blijft onder druk en centrale regie wordt dan niet tijdelijk maar permanent.",
     /\b(transformatiegelden|zorgzwaartebekostiging)\b/i
   );
   output = injectLineIntoSection(
@@ -1421,7 +1564,7 @@ function buildFallbackNarrative(
   const company = input.company_name ?? "de organisatie";
 
 const base = `### 1. DOMINANTE BESTUURLIJKE THESE
-De werkelijke bestuurlijke kern is niet strategie, maar besluituitstel dat als zorgvuldigheid wordt verkocht. De ongemakkelijke waarheid is: ${company} houdt iedereen politiek veilig, maar verliest daarmee bestuurlijke regie. In de bovenstroom zijn doelen en KPI's netjes, in de onderstroom bepaalt mandaatbehoud wie daadwerkelijk tempo maakt. Het bestuur moet nu één dominante lijn kiezen en concurrerende lijnen sluiten. De toets is hard: versterkt dit de besluitkracht van de top of ondermijnt het die.
+De werkelijke bestuurlijke kern is niet strategie, maar besluituitstel dat als zorgvuldigheid wordt verkocht. De ongemakkelijke waarheid is: ${company} houdt iedereen politiek veilig, maar verliest daarmee bestuurlijke regie. In de bovenstroom zijn doelen en KPI's netjes, in de onderstroom bepaalt mandaatbehoud wie daadwerkelijk tempo maakt. Sectorinformatie: in de ggz stapelen IGJ-toezicht, wachtlijst-MAC-druk, ambulantisering, bekostigingsdruk en personele uitval zich op tot directe besluitdwang. Het bestuur moet nu één dominante lijn kiezen en concurrerende lijnen sluiten. De toets is hard: versterkt dit de besluitkracht van de top of ondermijnt het die.
 
 ### 2. HET KERNCONFLICT
 U moet kiezen tussen schaalvergroting met verlies aan lokale controle, of stabilisatie met verlies aan groeisnelheid en marktmomentum. Beide doelen tegelijk maximaliseren is onmogelijk en houdt besluitvorming gevangen. Dit is een onoplosbaar spanningsveld waarin de formele logica om zorgvuldigheid vraagt, terwijl de onderstroom vooral posities probeert te behouden.
@@ -1432,7 +1575,7 @@ Trade-off 1: centralisatie levert snelheid op, maar kost binnen 90 dagen EUR 2,2
 ### 4. OPPORTUNITY COST
 30 dagen zonder besluit: EUR 1,1 miljoen direct signaalverlies, 2,9% lagere leverbetrouwbaarheid en eerste gedragsverschuiving naar defensief rapporteren.
 90 dagen zonder besluit: EUR 3,7 miljoen marge-erosie, 6,0% langere doorlooptijd en zichtbare machtsverschuiving naar functies die tempo kunnen blokkeren.
-365 dagen zonder besluit: EUR 14,2 miljoen structurele schade, 9,0% minder strategische keuzevrijheid en systeemverschuiving waarin uitstel de standaard wordt. In de ggz groeit dan het IGJ-sanctierisico, blijft wachtlijst-MAC-druk hardnekkig en schuift regie structureel weg van uitvoerbaarheid.
+365 dagen zonder besluit: EUR 14,2 miljoen structurele schade, 9,0% minder strategische keuzevrijheid en systeemverschuiving waarin uitstel de standaard wordt. In de ggz groeit dan het IGJ-sanctierisico door naar sanctiedruk, raakt wachtlijst-MAC structureel vast en verschuift centrale regie permanent weg van uitvoerbaarheid.
 Na 12 maanden verschuift de budgetpositie permanent naar de remmende lijn, wordt een behoudscoalitie dominant en is terugdraaien zonder reputatieschade voor de top niet meer geloofwaardig; transformatiegelden drogen op en zorgzwaartebekostiging blijft onder druk.
 
 ### 5. GOVERNANCE IMPACT
@@ -1461,7 +1604,7 @@ De Raad van Bestuur committeert zich aan:
 - Formele macht: de CFO verliest extra veto op portfolio-uitzonderingen; informele macht: lokale mandaatdragers verliezen het stille uitstelcircuit.
 - Per direct stopt elk initiatief zonder benoemde owner en KPI; deze dossiers mogen niet meer via informele lijn geëscaleerd worden.
 - KPI en tijdshorizon: binnen 30 dagen eerste executiesignalen, binnen 90 dagen meetbaar effect op marge en doorlooptijd, binnen 365 dagen structurele trendbreuk.
-- Expliciet geaccepteerd verlies: EUR 2,2 miljoen aan stopzettingen en 16% minder lokale beslisruimte in jaar 1.
+- Expliciet geaccepteerd verlies: EUR 2,2 miljoen aan stopzettingen en 16% minder lokale beslisruimte in jaar 1, met directe impact op CFO-vetoruimte en regiodirecteur-mandaat.
 - De ongemakkelijke waarheid is: dit contract verdeelt macht opnieuw en maakt reputatieschade zichtbaar voor wie vertraagt.`;
 
   return trimToMaxWords(
@@ -1478,12 +1621,15 @@ function hardenNarrativeCandidate(
 ): string {
   let output = scrubForbiddenLanguage(String(candidate ?? "").trim());
   output = ensureMandatorySections(output);
+  output = enforceSectorInformationParagraph(output, input);
   output = enforceComparableOrgAssumption(output, input);
   output = enforceGGZDepthHints(output, input);
+  output = enforceTopUnderstreamBalance(output);
   output = sanitizeSectionOpeners(output);
   output = enforceLossLanguage(output);
   output = enforceCyntraBridge(output);
   output = enforceSignatureLayer(output);
+  output = enforceTopUnderstreamBalance(output);
   output = sanitizeSectionOpeners(output);
   output = removeRepeatedSectionSentences(output);
   output = enforceReadableParagraphRhythm(output);
@@ -1550,6 +1696,7 @@ INHOUDSEISEN:
 - Sectie 1 opent met de denkvorm "De werkelijke bestuurlijke kern is niet X, maar Y."
 - Sectie 1 bevat expliciet "De ongemakkelijke waarheid is: ..."
 - Sectie 1 benoemt expliciet de besluitkrachttoets voor de top.
+- Sectie 1 bevat een aparte alinea die start met "Sectorinformatie:" en benoemt sectorspecifieke druk.
 - Sectie 2 beschrijft een niet-optimaliseerbaar dilemma.
 - Sectie 2 bevat expliciet een onoplosbaar spanningsveld.
 - Sectie 3 benoemt wat wordt gewonnen, wat wordt verloren, wie macht verliest en waar frictie ontstaat.
@@ -1557,6 +1704,7 @@ INHOUDSEISEN:
 - Sectie 4 beschrijft concreet de kosten van niets doen op 30, 90 en 365 dagen.
 - Sectie 4 verwerkt drie unieke lagen: 30 dagen = signaalverlies, 90 dagen = machtsverschuiving, 365 dagen = systeemverschuiving.
 - Sectie 4 maakt na 12 maanden concreet welke positie permanent schuift, welke coalitie dominant wordt en wat niet zonder reputatieschade terug te draaien is.
+- Sectie 4 maakt in ggz-context expliciet: 365 dagen = IGJ-sanctiedruk, wachtlijst-MAC structureel vast en centrale regie permanent.
 - Sectie 5 benoemt expliciet effect op besluitkracht, escalatie, formele machtsverschuiving en structuurgevolgen.
 - ${OPPORTUNITY_GOVERNANCE_DEPTH_DIRECTIVE}
 - Sectie 6 benoemt minimaal drie machtsactoren en maakt per actor verlies, winst, sabotagewijze en instrument expliciet.
@@ -1567,16 +1715,47 @@ INHOUDSEISEN:
 - Sectie 8 bevat expliciet: Wie tempo controleert, controleert macht.
 - Sectie 9 begint exact met: De Raad van Bestuur committeert zich aan:
 - Sectie 9 bevat expliciet: keuze A of B, formeel machtsverlies, informeel machtsverlies, beslismonopolie, directe stop, niet-escalatie en geaccepteerd verlies met impact.
+- Sectie 9 benoemt actor-impact expliciet met €/% en rolgevolg voor minimaal één sleutelactor.
+- Elke sectie verbindt expliciet bovenstroom en onderstroom in dezelfde alinea.
 
 STIJLREGELS:
 - Geen nuanceblokken, geen scenario-lijsten, geen vrijblijvende aanbevelingen.
 - Als context dun is: open exact met "Op basis van bestuurlijke patronen in de ggz:" en maak realistische aannames.
 - Geen termen als "op basis van de analyse", "het lijkt erop dat", "mogelijk", "zou kunnen" of "men zou".
-- Geen termen als "default template", "governance-technisch", "patroon", "context is schaars", "werk uit", "belangrijke succesfactor", "quick win" of "low hanging fruit".
+- Geen termen als "default template", "transformatie-template", "governance-technisch", "patroon", "context is schaars", "werk uit", "aanname", "contextanker", "belangrijke succesfactor", "quick win" of "low hanging fruit".
 - Geen bulletspam: alleen in sectie 9 vier tot zes bullets voor het besluitcontract.
 - Leg causale keten hard vast: oorzaak -> gevolg -> ingreep -> resultaat.
 - Verbind bovenstroom en onderstroom expliciet in governance en executie.
 - Bij ggz-context benoem expliciet: IGJ-sanctierisico, wachtlijst-MAC-druk, ambulantisering vs klinische capaciteit, transformatiegelden opdrogen, zorgzwaartebekostiging onder druk en personeelstekort met burn-out realiteit.
+  `.trim();
+}
+
+function buildContinuationPrompt(rejectReason?: string): string {
+  const rejectLine = rejectReason
+    ? `REJECT: ${rejectReason}`
+    : "REJECT direct elke output met verboden generieke taal of AI-sporen.";
+
+  return `
+${EXECUTIVE_PROMPT_INJECT}
+${HARD_FALLBACK_PROMPT_RULE}
+${INTELLIGENT_SECTOR_FALLBACK_RULE}
+${ANTI_FILLER_RULE}
+
+${rejectLine}
+Ga verder.
+Behoud exact de 9 secties.
+Gebruik expliciet: De werkelijke bestuurlijke kern is niet X, maar Y.
+Gebruik expliciet: De ongemakkelijke waarheid is: ...
+Maak in sectie 6 minimaal drie machtsactoren concreet met verlies, winst, sabotagewijze en instrument.
+Werk opportunity cost uit op 30/90/365 plus 12 maanden met irreversibele machts- en coalitieverschuiving.
+Veranker in sectie 8: Wie tempo controleert, controleert macht.
+Sluit sectie 9 af met formeel/informeel machtsverlies, beslismonopolie, directe stop, niet-escalatie en geaccepteerd verlies met impact.
+Neem in sectie 9 actor-impact op in €/% met rolgevolg voor sleutelactoren.
+Benoem in sectie 1 een aparte alinea die start met: Sectorinformatie:
+Verbind in elke sectie bovenstroom en onderstroom.
+Voeg bij ggz-context expliciet IGJ-sanctierisico, wachtlijst-MAC-druk, ambulantisering versus klinische capaciteit, opdrogende transformatiegelden, zorgzwaartebekostiging onder druk en burn-out realiteit toe.
+${OPPORTUNITY_GOVERNANCE_DEPTH_DIRECTIVE}
+${CONCRETE_REPROMPT_DIRECTIVE}
 `.trim();
 }
 
@@ -1686,15 +1865,24 @@ ${legacyContext || "Op basis van bestuurlijke patronen in de ggz: er is geen leg
       });
 
       if (typeof chunk === "string" && chunk.trim()) {
-        const merged = text ? `${text}\n\n${chunk.trim()}` : chunk.trim();
-        text = trimToMaxWords(merged, generationWordCap);
+        const trimmedChunk = chunk.trim();
+        messages.push({ role: "assistant", content: trimmedChunk });
 
-        messages.push({ role: "assistant", content: chunk });
-        messages.push({
-          role: "user",
-          content:
-            `${EXECUTIVE_PROMPT_INJECT} ${HARD_FALLBACK_PROMPT_RULE} ${INTELLIGENT_SECTOR_FALLBACK_RULE} ${ANTI_FILLER_RULE} REJECT direct elke output met generieke consultancy-taal of AI-sporen. Ga verder. Behoud exact de 9 secties. Gebruik expliciet: De werkelijke bestuurlijke kern is niet X, maar Y. Gebruik expliciet: De ongemakkelijke waarheid is: ... Maak in sectie 6 minimaal drie machtsactoren concreet met verlies, winst, sabotagewijze en instrument. Werk opportunity cost uit op 30/90/365 plus 12 maanden met irreversibele machts- en coalitieverschuiving. Veranker in sectie 8: Wie tempo controleert, controleert macht. Sluit sectie 9 af met formeel/informeel machtsverlies, beslismonopolie, directe stop, niet-escalatie en geaccepteerd verlies met impact. Voeg bij ggz-context expliciet IGJ-sanctierisico, wachtlijst-MAC-druk, ambulantisering versus klinische capaciteit, opdrogende transformatiegelden, zorgzwaartebekostiging onder druk en burn-out realiteit toe. ${OPPORTUNITY_GOVERNANCE_DEPTH_DIRECTIVE} ${CONCRETE_REPROMPT_DIRECTIVE}`,
-        });
+        if (hasForbiddenGenericLanguage(trimmedChunk)) {
+          messages.push({
+            role: "user",
+            content: buildContinuationPrompt(
+              "vorige output bevatte verboden generieke consultancy-taal en is afgekeurd; lever volledige herwerking zonder verboden termen"
+            ),
+          });
+        } else {
+          const merged = text ? `${text}\n\n${trimmedChunk}` : trimmedChunk;
+          text = trimToMaxWords(merged, generationWordCap);
+          messages.push({
+            role: "user",
+            content: buildContinuationPrompt(),
+          });
+        }
       }
     } catch {
       break;
