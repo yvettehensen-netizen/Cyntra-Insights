@@ -15,18 +15,18 @@ import {
 
 const SIGNATURE_LAYER_ERROR_TEXT = CYNTRA_SIGNATURE_LAYER_VIOLATION;
 const EXECUTIVE_PROMPT_INJECT =
-  "Schrijf als een ervaren senior partner met boardroom-gewicht. Open oordelend met: 'De werkelijke bestuurlijke kern is niet X, maar Y.' Voeg direct toe: 'De ongemakkelijke waarheid is: ...'. Maak macht concreet met minimaal drie actoren; per actor benoem je verlies, winst, sabotagewijze en instrument (budget, informatie, personeel, planning, escalatie, reputatie, toezicht of moreel gezag). Verweef bovenstroom en onderstroom in dezelfde redenering. Veranker irreversibiliteit op 30, 90 en 365 dagen en maak na 12 maanden concreet welke positie en coalitie blijvend verschuiven. Gebruik expliciet: 'Wie tempo controleert, controleert macht.' Geen AI-taal, geen meta-zinnen, geen vlakke consultanttoon.";
+  "Schrijf als een zeer ervaren, licht cynische senior ggz-partner die rechtstreeks spreekt tot de Raad van Bestuur. Combineer harde bovenstroom (strategie, governance, cijfers, structuur) met confronterende onderstroom (machtsverlies, informele blokkades, sabotage, toxische patronen, verborgen agenda's en menselijke drijfveren). Schrijf vloeiend, natuurlijk en direct Nederlands. Geen generieke consultancy-taal, geen filler, geen herhaling, geen AI-sporen. Bij vage input activeer de ggz-template met echte pijnpunten: IGJ-sanctierisico, wachtlijst-MAC-druk, ambulantisering vs klinische capaciteit, transformatiegelden opdrogen, zorgzwaartebekostiging onder druk, personeelstekort en burn-out realiteit.";
 const OPPORTUNITY_GOVERNANCE_DEPTH_DIRECTIVE =
   "Opportunity Cost MOET drie unieke lagen bevatten: 30 dagen (direct signaalverlies + eerste gedragsverschuiving), 90 dagen (zichtbare machtsverschuiving + structurele erosie), 365 dagen (systeemverschuiving + onomkeerbare positie + dominante coalitie). Maak na 12 maanden concreet wat niet zonder reputatieschade terug te draaien is.";
 const HARD_FALLBACK_PROMPT_RULE =
-  "Als input dun is, begin zonder excuus met: 'Op basis van bestuurlijke patronen in vergelijkbare organisaties:'. Maak realistische aannames die direct besluitdruk zetten. Gebruik nooit woorden als 'lijkt erop dat', 'mogelijk', 'zou kunnen' of 'men zou'.";
+  "Als input dun is, begin zonder excuus met: 'Op basis van bestuurlijke patronen in de ggz:'. Maak realistische aannames die direct besluitdruk zetten. Gebruik nooit woorden als 'lijkt erop dat', 'mogelijk', 'zou kunnen' of 'men zou'.";
 const INTELLIGENT_SECTOR_FALLBACK_RULE =
   "Bij minimale of vage input: detecteer sector en activeer direct het sectorsjabloon. ggz/jeugdzorg: mandaatfrictie directie vs professionals, ambulantisering vs capaciteit, IGJ-toezicht, wachtlijstdruk, transformatiegelden, tariefdruk. zorg: personeelstekort vs kwaliteit, centralisatie vs lokale autonomie, digitalisering vs privacy. onderwijs: lerarentekort vs pedagogisch vakmanschap, inclusie vs excellentie, bestuurlijke druk. finance/banken: compliance vs innovatiesnelheid, rentemarge vs klantbelang, DNB/EBA-toezicht. tech/scale-up: hypergroei vs governance, founder-macht vs institutionele investeerders. industrie: schaal vs wendbaarheid, energietransitie vs continuiteit. overheid: politieke druk vs executiekracht, budgetkrimp vs dienstverlening. Onbekende sector: transformatie-template met voelbare onderstroom.";
 const ANTI_FILLER_RULE =
   "Geen sectie mag starten met 'SIGNATURE LAYER WAARSCHUWING', 'Contextsignaal', 'Aanname:', 'Contextanker:', 'beperkte context' of 'duid structureel'. Verbied generieke taal zoals 'default template', 'governance-technisch', 'patroon', 'context is schaars', 'werk uit', 'mogelijk', 'lijkt erop dat', 'zou kunnen', 'men zou', 'belangrijke succesfactor', 'quick win' en 'low hanging fruit'.";
 
 const STRICT_BANNED_LANGUAGE_GUARD =
-  /\b(default template|governance-technisch|patroon|context is schaars|werk uit|mogelijk|lijkt erop dat|zou kunnen|men zou|belangrijke succesfactor|quick win|quick wins|low-hanging fruit|low hanging fruit)\b/i;
+  /\b(default template|governance-technisch|patroon|context is schaars|werk uit|mogelijk|lijkt erop dat|zou kunnen|men zou|belangrijke succesfactor|quick win|quick wins|low-hanging fruit|low hanging fruit|aanname|contextanker)\b/i;
 
 const DOMINANT_HYPOTHESIS_GUARD =
   /\bde werkelijke bestuurlijke kern is niet\b[\s\S]{0,180}\bmaar\b/i;
@@ -39,6 +39,19 @@ const TEMPO_POWER_GUARD =
 
 const POWER_ACTOR_EXTRACT_GUARD =
   /\b(ceo|cfo|coo|chro|cto|cmo|raad van bestuur|rvb|raad van toezicht|rvt|or|ondernemingsraad|medisch directeur|medisch manager|regiodirecteur|programmadirecteur|lijnmanager|operationsdirecteur|founder|investeerder|compliance officer)\b/gi;
+
+const GGZ_SIGNAL_GUARD =
+  /\b(ggz|geestelijke gezondheidszorg|jeugdzorg|igj|wachtlijst|mac|ambulantisering|klinische capaciteit|zorgzwaartebekostiging|transformatiegelden|burn-out)\b/i;
+
+const GGZ_DEPTH_GUARDS = {
+  igj: /\b(igj|sanctie|toezicht)\b/i,
+  wachtlijstMac: /\b(wachtlijst[\s-]*mac|mac-druk|wachtlijstdruk)\b/i,
+  ambulantVsKlinisch: /\b(ambulantisering)\b/i,
+  klinischeCapaciteit: /\b(klinische capaciteit)\b/i,
+  transformatiegelden: /\b(transformatiegelden|opdrogen)\b/i,
+  zorgzwaartebekostiging: /\b(zorgzwaartebekostiging|bekostiging onder druk)\b/i,
+  personeelBurnout: /\b(personeelstekort|burn-out)\b/i,
+};
 
 function hasNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
@@ -62,8 +75,13 @@ function collectPowerActors(text: string): string[] {
 
 function scrubForbiddenLanguage(text: string): string {
   let output = String(text ?? "");
+  const GGZ_CONTEXT_SENTINEL = "__GGZ_CONTEXT_SENTINEL__";
+  output = output.replace(
+    /op basis van bestuurlijke patronen in de ggz:/gi,
+    GGZ_CONTEXT_SENTINEL
+  );
+
   const replacements: Array<[RegExp, string]> = [
-    [/\bpatroon\b/gi, "herhaling"],
     [/\bsabotagepatronen\b/gi, "sabotagetechnieken"],
     [/\bcontext is schaars\b/gi, "context vraagt scherpe aannames"],
     [/\bwerk uit\b/gi, "maak concreet"],
@@ -82,7 +100,19 @@ function scrubForbiddenLanguage(text: string): string {
     output = output.replace(pattern, replacement);
   }
 
+  output = output.replace(
+    new RegExp(GGZ_CONTEXT_SENTINEL, "g"),
+    "Op basis van bestuurlijke patronen in de ggz:"
+  );
+
   return output;
+}
+
+function hasForbiddenGenericLanguage(text: string): boolean {
+  const normalized = String(text ?? "")
+    .replace(/op basis van bestuurlijke patronen in de ggz:/gi, "")
+    .replace(/op basis van bestuurlijke patronen in vergelijkbare organisaties:/gi, "");
+  return STRICT_BANNED_LANGUAGE_GUARD.test(normalized);
 }
 
 function assertExecutiveHardRequirements(brief: BoardroomBrief) {
@@ -480,9 +510,26 @@ function sanitizeBriefLanguage(brief: BoardroomBrief): BoardroomBrief {
 
 function assertNoForbiddenLanguageInBrief(brief: BoardroomBrief) {
   const payload = JSON.stringify(brief);
-  if (STRICT_BANNED_LANGUAGE_GUARD.test(payload)) {
+  if (hasForbiddenGenericLanguage(payload)) {
     throw new Error(SIGNATURE_LAYER_ERROR_TEXT);
   }
+}
+
+function assertGGZSpecificDepthInBrief(
+  brief: BoardroomBrief,
+  enforce: boolean
+) {
+  if (!enforce) return;
+
+  const payload = JSON.stringify(brief);
+  const checks = Object.values(GGZ_DEPTH_GUARDS);
+  if (checks.some((guard) => !guard.test(payload))) {
+    throw new Error(SIGNATURE_LAYER_ERROR_TEXT);
+  }
+}
+
+function shouldEnforceGGZDepth(analysis: AureliusAnalysisResult): boolean {
+  return GGZ_SIGNAL_GUARD.test(JSON.stringify(analysis));
 }
 
 function enforceConcreteBrief(brief: BoardroomBrief): BoardroomBrief {
@@ -612,6 +659,7 @@ function enforceConcreteBrief(brief: BoardroomBrief): BoardroomBrief {
 export async function synthesizeBoardroomBrief(
   analysis: AureliusAnalysisResult
 ): Promise<BoardroomBrief> {
+  const enforceGGZDepth = shouldEnforceGGZDepth(analysis);
   const systemPrompt = `
 ${EXECUTIVE_PROMPT_INJECT}
 ${HARD_FALLBACK_PROMPT_RULE}
@@ -640,6 +688,7 @@ Dominante Cyntra Signature Layer:
 - Gebruik expliciet: Wie tempo controleert, controleert macht.
 - Besluit eindigt contractueel, niet adviserend.
 - Cognitieve volwassenheid is expliciet: informatie versus moed, capaciteit versus macht.
+- Als ggz-signaal aanwezig is: benoem expliciet IGJ-sanctierisico, wachtlijst-MAC-druk, ambulantisering versus klinische capaciteit, opdrogende transformatiegelden, zorgzwaartebekostiging onder druk en personeelstekort met burn-out realiteit.
 - ${CONCRETE_REPROMPT_DIRECTIVE}
 - ${OPPORTUNITY_GOVERNANCE_DEPTH_DIRECTIVE}
 
@@ -687,10 +736,11 @@ REGELS:
 - Geen markdown
 - Geen bullets buiten decision contract tekstvelden
 - Geen consultant-cliche
-- Als context dun is: gebruik exact "Op basis van bestuurlijke patronen in vergelijkbare organisaties:"
+- Als context dun is: gebruik exact "Op basis van bestuurlijke patronen in de ggz:"
 - Verboden woorden: default template, governance-technisch, patroon, context is schaars, werk uit, mogelijk, lijkt erop dat, zou kunnen, men zou, belangrijke succesfactor, quick win, low hanging fruit
 - Geen technisch jargon
 - Alleen JSON
+- REJECT direct elke output met verboden generieke taal of AI-sporen
 
 OUTPUT — STRICT JSON (VOLG EXACT):
 {
@@ -788,16 +838,32 @@ OUTPUT — STRICT JSON (VOLG EXACT):
 }
 `;
 
+  const parseAndValidate = (raw: string): BoardroomBrief => {
+    const parsed = sanitizeBriefLanguage(
+      enforceConcreteBrief(JSON.parse(raw) as BoardroomBrief)
+    );
+    assertSignatureLayerCompliance(parsed);
+    assertExecutiveHardRequirements(parsed);
+    assertGGZSpecificDepthInBrief(parsed, enforceGGZDepth);
+    assertNoForbiddenLanguageInBrief(parsed);
+    return parsed;
+  };
+
   const raw = await callAI("gpt-4o", [
     { role: "system", content: systemPrompt },
     { role: "user", content: userPrompt },
   ]);
 
-  const parsed = sanitizeBriefLanguage(
-    enforceConcreteBrief(JSON.parse(raw) as BoardroomBrief)
-  );
-  assertSignatureLayerCompliance(parsed);
-  assertExecutiveHardRequirements(parsed);
-  assertNoForbiddenLanguageInBrief(parsed);
-  return parsed;
+  try {
+    return parseAndValidate(raw);
+  } catch {
+    const retryRaw = await callAI("gpt-4o", [
+      { role: "system", content: systemPrompt },
+      {
+        role: "user",
+        content: `${userPrompt}\n\nREJECT: vorige output bevatte verboden generieke taal of onvoldoende bestuurlijke scherpte. Lever een volledig nieuwe versie die alle verplichte regels strikt volgt.`,
+      },
+    ]);
+    return parseAndValidate(retryRaw);
+  }
 }
