@@ -117,6 +117,10 @@ const DECISION_CONTRACT_BORDER_WIDTH_MM = 0.7; // ~2px equivalent
 const FALLBACK_WARNING_MARKERS = [
   /\[CYNTRA_FALLBACK_WARNING\]/gi,
   /SIGNATURE LAYER WAARSCHUWING:[^\n]*\n?/gi,
+  /^\s*Aanname:[^\n]*\n?/gim,
+  /^\s*Contextanker:[^\n]*\n?/gim,
+  /\bbeperkte context\b/gi,
+  /\bduid structureel\b/gi,
 ];
 
 /* ================= CANONICAL ORDER ================= */
@@ -183,7 +187,6 @@ function sanitizeReportText(value: string): string {
     cleaned = cleaned.replace(marker, "");
   }
   cleaned = cleaned
-    .replace(/^\s*(Aanname:|Contextanker:|beperkte context|duid structureel)[^\n]*\n?/gim, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
   return cleaned;

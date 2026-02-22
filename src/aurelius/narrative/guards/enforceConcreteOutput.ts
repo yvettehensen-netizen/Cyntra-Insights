@@ -6,9 +6,11 @@ export const CYNTRA_SIGNATURE_LAYER_VIOLATION =
 export const SIGNATURE_LAYER_WARNING_PREFIX =
   "[CYNTRA_FALLBACK_WARNING]";
 const MAX_CONCRETE_REPROMPT_ATTEMPTS = 2;
+const GGZ_HARD_REALITY_TEMPLATE =
+  "ggz-realiteit: mandaatfrictie tussen directie en professionals, ambulantisering vs klinische capaciteit, IGJ-sanctierisico, wachtlijst-MAC-druk, transformatiegelden opdrogen, zorgzwaartebekostiging onder druk, personeelstekort vs kwaliteit. Forceer concrete €-bedragen, % marge-impact, machtsverschuiving naar centrale regie, sabotage via stille vertraging en burn-out-verhalen.";
 
 const SECTOR_TEMPLATES = {
-  ggz: "ggz/jeugdzorg: mandaatfrictie directie vs professionals, ambulantisering vs capaciteit, IGJ-toezicht, wachtlijst-druk, transformatiegelden en tariefdruk.",
+  ggz: GGZ_HARD_REALITY_TEMPLATE,
   zorg: "zorg: personeelstekort vs kwaliteit, centralisatie vs lokale autonomie en digitalisering vs privacy.",
   onderwijs: "onderwijs: lerarentekort vs pedagogisch vakmanschap, inclusie vs excellentie en bestuurlijke druk op scholen.",
   finance:
@@ -251,6 +253,14 @@ const FORBIDDEN_SECTION_OPENERS = [
   /^\s*duid structureel[:\s-]*/i,
 ];
 
+const UI_PDF_SANITIZE_PATTERNS = [
+  /SIGNATURE LAYER WAARSCHUWING:[^\n]*\n?/gi,
+  /^\s*Aanname:[^\n]*\n?/gim,
+  /^\s*Contextanker:[^\n]*\n?/gim,
+  /\bbeperkte context\b/gi,
+  /\bduid structureel\b/gi,
+];
+
 const DEFAULT_ASSUMPTIONS: Record<string, string> = {
   dominantThesis:
     "De bestuursraad kiest binnen 14 dagen een enkele strategische lijn en sluit concurrerende initiatieven.",
@@ -259,7 +269,7 @@ const DEFAULT_ASSUMPTIONS: Record<string, string> = {
   tradeoffs:
     "Gekozen focus levert snelheid op; geaccepteerd verlies is afbouw van niet-kritieke programma's en reductie van mandaat op middenniveau.",
   opportunityCost:
-    "Binnen 30 dagen stijgt doorlooptijd en vervagen prioriteiten. Binnen 90 dagen lekt marge door herwerk en besluitvertraging. Binnen 365 dagen krimpt strategische vrijheid en stijgen herstelkosten structureel.",
+    "30 dagen: doorlooptijd stijgt en prioriteiten vervagen. 90 dagen: marge lekt door herwerk en besluitvertraging. 365 dagen: strategische vrijheid krimpt en herstelkosten worden structureel. Irreversibiliteit: contractruimte en bestuurlijk vertrouwen herstellen trager dan de operationele schade oploopt.",
   governanceImpact:
     "Besluitrechten worden tijdelijk gecentreerd bij het bestuurlijk kernteam; escalaties verlopen binnen 48 uur en eigenaarschap is eenduidig per prioriteit.",
   powerDynamics:
@@ -341,28 +351,60 @@ function buildSectorConcreteFallback(sectionKey: string, contextHint?: string): 
   const sectorKey = detectSectorKey(contextHint);
   const template = SECTOR_TEMPLATES[sectorKey];
   const facts = SECTOR_FACTS[sectorKey];
+  const ggzContext =
+    `${GGZ_HARD_REALITY_TEMPLATE} Formele machtsverschuiving: centrale regie over capaciteit, triage en budgetritme.`.trim();
 
   switch (sectionKey) {
     case "dominantThesis":
+      if (sectorKey === "ggz") {
+        return `GGZ/Jeugdzorg: besluitkracht zakt zonder harde keuze binnen 14 dagen. ${ggzContext} Binnen 90 dagen leidt uitstel tot ${facts.loss90}. Expliciet verlies: ${facts.explicitLoss}.`;
+      }
       return `${facts.label}: besluitkracht zakt zonder harde keuze binnen 14 dagen. ${template} Binnen 90 dagen leidt uitstel tot ${facts.loss90}. Expliciet verlies: ${facts.explicitLoss}.`;
     case "coreConflict":
+      if (sectorKey === "ggz") {
+        return `Kernconflict GGZ: ambulantisering verhoogt uitstroomtempo maar vreet klinische capaciteit; klinische borging beschermt kwaliteit maar vertraagt afbouw van wachtlijsten. Dit dilemma is niet optimaliseerbaar. Machtsverschuiving: directie centraliseert regie op capaciteit, professionals verliezen informeel veto op inzet.`;
+      }
       return `Kernconflict in ${facts.label}: centrale executie verhoogt snelheid maar vernietigt lokale autonomie; lokale autonomie behoudt draagvlak maar vertraagt uitvoering. Dit dilemma is niet optimaliseerbaar. Formele machtsverschuiving: ${facts.powerShift}.`;
     case "tradeoffs":
-      return `Trade-offs ${facts.label}: verlies 1 = ${facts.explicitLoss}. Verlies 2 = binnen 90 dagen ${facts.loss90}. Tijdshorizon: 30/90/365 dagen met oplopende schade naar ${facts.loss365}.`;
+      if (sectorKey === "ggz") {
+        return `Trade-offs GGZ: verlies 1 = ${facts.explicitLoss} met 2,9% kwaliteitsdruk in klinische teams binnen 90 dagen. Verlies 2 = 4,8% marge-impact plus EUR 2,6 miljoen extra inzetkosten door zorgzwaartebekostiging onder druk in 365 dagen. Machtsimpact: informele professionele blokkades verliezen terrein door centrale regie op capaciteit en budget.`;
+      }
+      return `Trade-offs ${facts.label}: verlies 1 = ${facts.explicitLoss} met impact in 90 dagen (${facts.loss90}). Verlies 2 = in 365 dagen ${facts.loss365}. Machtsimpact: ${facts.powerShift}.`;
     case "opportunityCost":
-      return `Opportunity cost ${facts.label}: 30 dagen ${facts.loss30}. 90 dagen ${facts.loss90}. 365 dagen ${facts.loss365}. Irreversibiliteit: ${facts.irreversible}.`;
+      if (sectorKey === "ggz") {
+        return `Opportunity cost GGZ: 30 dagen: ${facts.loss30} door triagefrictie en capaciteitsgaten. 90 dagen: ${facts.loss90} door oplopende wachtlijst-MAC-druk en hogere personeelsuitval. 365 dagen: ${facts.loss365} door opdrogende transformatiegelden, structurele margekrimp en contractverlies. Irreversibiliteit: ${facts.irreversible}.`;
+      }
+      return `Opportunity cost ${facts.label}: 30 dagen: ${facts.loss30}. 90 dagen: ${facts.loss90}. 365 dagen: ${facts.loss365}. Irreversibiliteit: ${facts.irreversible}.`;
     case "governanceImpact":
+      if (sectorKey === "ggz") {
+        return `Governance-impact GGZ: formele macht verschuift van behandeloverleg naar centrale regie op capaciteit, triage en budget. Bovenstroom stuurt op 48-uurs escalatie en maandelijkse mandaatreview. Structuurgevolg: één centraal besluitcomite vervangt versnipperde zorglijnbesluiten. Informele tegenkracht concentreert zich bij teams die autonomie verliezen.`;
+      }
       return `Governance-impact ${facts.label}: ${facts.powerShift}. Bovenstroom stuurt op centrale besluitrechten, escalatieritme en structuurherinrichting. Structuurgevolg: een centraal besluitcomite vervangt versnipperde mandaten en dwingt escalatie binnen 48 uur. Informele tegenkracht concentreert zich in middenlagen die scope rekken en vertragen.`;
     case "powerDynamics":
+      if (sectorKey === "ggz") {
+        return `Machtsdynamiek GGZ: bovenstroom en onderstroom botsen op mandaatverlies tussen directie en professionals. Informele invloed verschuift naar roostering, indicatiebesluiten en capaciteitsplanning. Sabotagepatronen: stille vertraging in triage, vertraagde escalatie, burn-out-verhalen als legitimatie voor stilstand. Toxisch patroon: conflictmijding en verborgen agenda's rond behoud van oude behandelautonomie.`;
+      }
       return `Machtsdynamiek ${facts.label}: bovenstroom en onderstroom botsen op mandaatverlies. Teams die discretionair mandaat verliezen bouwen informele coalities rond budget en personeelsplanning. Verwacht sabotagepatroon: formeel akkoord, informeel uitstel, scope-verdunning en vertraagde escalatie. Toxisch patroon: conflictmijding met verborgen agenda's in prioritering.`;
     case "executionRisk":
+      if (sectorKey === "ggz") {
+        return `Executierisico GGZ: faalpunt is parallelle sturing op ambulantisering en klinische capaciteit zonder prioriteitshiërarchie. Concrete blocker: dubbel mandaat tussen directie, medisch leiderschap en zorglijncoördinatie. Sabotage via stille vertraging en burn-out-narratieven blokkeert doorzetting. ${facts.irreversible}.`;
+      }
       return `Executierisico ${facts.label}: faalpunt is parallelle prioritering van oud en nieuw beleid. Concrete blocker: dubbel mandaat tussen lijn en programma plus verborgen agenda rond budgetbehoud. ${facts.irreversible}.`;
     case "interventionPlan90D":
+      if (sectorKey === "ggz") {
+        return `Week 1-2: Raad, CEO en zorgdirectie leggen één prioriteitslijn vast, stoppen conflicterende dossiers en publiceren owner + KPI per zorglijn. Week 3-6: centrale regie herverdeelt klinische capaciteit, ambulante inzet en budget; escalaties sluiten binnen 48 uur. Week 7-12: executie wordt hard gestuurd op ${facts.kpi}, met sluiting van sabotagepatronen binnen zeven dagen.`;
+      }
       return `Week 1-2: CEO/CFO leggen keuze vast, stoppen conflicterende initiatieven en publiceren owner per KPI. Week 3-6: COO herverdeelt budget en capaciteit; escalaties worden binnen 48 uur afgedwongen. Week 7-12: CHRO/COO sturen op ${facts.kpi} en sluiten blokkades binnen zeven dagen.`;
     case "decisionContract":
+      if (sectorKey === "ggz") {
+        return `De Raad van Bestuur committeert zich aan:\n- Keuze A of B: één ggz-strategische lijn zonder parallel spoor.\n- KPI: ${facts.kpi} en marge-impact onder 2,0% binnen 90 dagen.\n- Tijdshorizon: besluit in 14 dagen, executiebewijs in 30 dagen, structureel effect in 365 dagen.\n- Geaccepteerd verlies: ${facts.explicitLoss}.`;
+      }
       return `De Raad van Bestuur committeert zich aan:\n- Keuze A of B: een enkele strategische lijn zonder parallel spoor.\n- Meetbaar resultaat: ${facts.kpi}.\n- Tijdshorizon: besluit in 14 dagen, executiebewijs in 30 dagen, structureel effect in 365 dagen.\n- Geaccepteerd verlies: ${facts.explicitLoss}.`;
     case "narrative":
     default:
+      if (sectorKey === "ggz") {
+        return `GGZ/Jeugdzorg: ${ggzContext} Bovenstroom: harde keuzes over capaciteit, budget en IGJ-risico. Onderstroom: sabotage via stille vertraging, burn-out-verhalen en informele blokkades. Opportunity cost 30/90/365: ${facts.loss30} | ${facts.loss90} | ${facts.loss365}. Expliciet verlies: ${facts.explicitLoss}. Irreversibiliteit: ${facts.irreversible}.`;
+      }
       return `${facts.label}: ${template} Bovenstroom: formele keuzes over structuur, budget en governance. Onderstroom: sabotage via vertraging, conflictmijding en verborgen agenda's. Opportunity cost 30/90/365: ${facts.loss30} | ${facts.loss90} | ${facts.loss365}. Formele machtsverschuiving: ${facts.powerShift}. Expliciet verlies: ${facts.explicitLoss}. Irreversibiliteit: ${facts.irreversible}.`;
   }
 }
@@ -375,8 +417,16 @@ function stripFallbackMarker(value: string): string {
     .trim();
 }
 
+function stripUiPdfWarnings(value: string): string {
+  let output = String(value ?? "");
+  for (const pattern of UI_PDF_SANITIZE_PATTERNS) {
+    output = output.replace(pattern, "");
+  }
+  return output.trim();
+}
+
 function stripForbiddenSectionOpeners(value: string): string {
-  let cleaned = String(value ?? "").trim();
+  let cleaned = stripUiPdfWarnings(String(value ?? "")).trim();
   for (const pattern of FORBIDDEN_SECTION_OPENERS) {
     cleaned = cleaned.replace(pattern, "").trimStart();
   }

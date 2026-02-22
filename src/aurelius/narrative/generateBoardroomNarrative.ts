@@ -121,7 +121,7 @@ const MAX_LOOPS = 8;
 const CHUNK_TOKENS = 4200;
 const RESERVED_STRUCTURE_WORDS = 320;
 const EXECUTIVE_PROMPT_INJECT =
-  "Schrijf als een keiharde, ervaren senior partner die rechtstreeks spreekt tot een Raad van Bestuur. Combineer bovenstroom (cijfers, structuur, governance) met messcherpe onderstroom (macht, informele invloed, sabotage, cultuur, verborgen agenda's). Geen filler, geen herhaling, geen AI-taal. Bij minimale input activeer de juiste sector-template en lever direct executive-kwaliteit.";
+  "Schrijf als een zeer ervaren, licht cynische senior ggz-partner die rechtstreeks spreekt tot de Raad. Geen filler, geen 'aanname', geen 'contextanker', geen 'duid structureel'. Geen herhaling tussen secties. Combineer harde bovenstroom (cijfers, structuur) met confronterende onderstroom (machtsverlies, informele blokkades, sabotagepatronen, toxische cultuur, verborgen agenda's). Bij vage input activeer ggz-template met echte pijnpunten: IGJ, wachtlijsten, ambulantisering, transformatiegelden, zorgzwaarte, personeelstekort.";
 const HARD_FALLBACK_PROMPT_RULE =
   "Als input te kort of vaag is, activeer direct een sectorsjabloon en lever concrete output met keuze, verlies, macht en tijdsdruk. Gebruik NOOIT woorden als 'lijkt erop dat', 'mogelijk', 'zou kunnen'.";
 const INTELLIGENT_SECTOR_FALLBACK_RULE =
@@ -270,6 +270,39 @@ function hasEuroOrPercent(text: string): boolean {
 
 function hasKpiSignal(text: string): boolean {
   return /\bkpi\b|€\s*\d|eur\s*\d|\d+(?:[.,]\d+)?\s*%/i.test(text);
+}
+
+function normalizeComparableText(text: string): string {
+  return String(text ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function extractOpportunityWindowContent(
+  section: string
+): Record<"30" | "90" | "365", string> {
+  const buckets: Record<"30" | "90" | "365", string> = {
+    "30": "",
+    "90": "",
+    "365": "",
+  };
+
+  const matches = [
+    ...section.matchAll(
+      /(30\s*dagen|90\s*dagen|365\s*dagen)\s*[:\-]\s*([\s\S]*?)(?=(?:30\s*dagen|90\s*dagen|365\s*dagen)\s*[:\-]|$)/gi
+    ),
+  ];
+
+  for (const match of matches) {
+    const label = String(match[1] || "");
+    const body = String(match[2] || "").trim();
+    if (/^30/i.test(label)) buckets["30"] = body;
+    if (/^90/i.test(label)) buckets["90"] = body;
+    if (/^365/i.test(label)) buckets["365"] = body;
+  }
+
+  return buckets;
 }
 
 function buildBriefContext(input: BoardroomInput): string {
@@ -527,8 +560,27 @@ function assertTradeOffDepth(text: string) {
     section.match(/\b(verlies|verliest|inleveren|afbouw|stopzetting|machtverlies)\b/gi) ?? [];
   const measurableSignals = section.match(/(€\s*\d|eur\s*\d|\d+(?:[.,]\d+)?\s*%)/gi) ?? [];
   const hasHorizon = /\b(30|90|365)\s*dagen\b/i.test(section);
+  const hasPowerImpact = /\bmacht\b|\bmandaat\b/i.test(section);
+  const loss1 =
+    section.match(/verlies\s*1\s*[:=]\s*([^.\n]+)/i)?.[1] ??
+    section.match(/trade-?off\s*1\s*[:=]\s*([^.\n]+)/i)?.[1] ??
+    "";
+  const loss2 =
+    section.match(/verlies\s*2\s*[:=]\s*([^.\n]+)/i)?.[1] ??
+    section.match(/trade-?off\s*2\s*[:=]\s*([^.\n]+)/i)?.[1] ??
+    "";
+  const hasDistinctLosses =
+    !!loss1 &&
+    !!loss2 &&
+    normalizeComparableText(loss1) !== normalizeComparableText(loss2);
 
-  if (lossSignals.length < 2 || measurableSignals.length < 2 || !hasHorizon) {
+  if (
+    lossSignals.length < 2 ||
+    measurableSignals.length < 2 ||
+    !hasHorizon ||
+    !hasPowerImpact ||
+    !hasDistinctLosses
+  ) {
     throw new Error(SHARPNESS_ERROR_TEXT);
   }
 }
@@ -541,8 +593,23 @@ function assertOpportunityCost(text: string) {
   const measurableSignals = section.match(/(€\s*\d|eur\s*\d|\d+(?:[.,]\d+)?\s*%)/gi) ?? [];
   const hasIrreversible =
     /\b(irreversibel|onomkeerbaar|onomkeerbaarheid|point of no return)\b/i.test(section);
+  const windows = extractOpportunityWindowContent(section);
+  const uniqueWindows =
+    !!windows["30"] &&
+    !!windows["90"] &&
+    !!windows["365"] &&
+    normalizeComparableText(windows["30"]) !== normalizeComparableText(windows["90"]) &&
+    normalizeComparableText(windows["90"]) !== normalizeComparableText(windows["365"]) &&
+    normalizeComparableText(windows["30"]) !== normalizeComparableText(windows["365"]);
 
-  if (!has30 || !has90 || !has365 || measurableSignals.length < 3 || !hasIrreversible) {
+  if (
+    !has30 ||
+    !has90 ||
+    !has365 ||
+    measurableSignals.length < 3 ||
+    !hasIrreversible ||
+    !uniqueWindows
+  ) {
     throw new Error(SHARPNESS_ERROR_TEXT);
   }
 }

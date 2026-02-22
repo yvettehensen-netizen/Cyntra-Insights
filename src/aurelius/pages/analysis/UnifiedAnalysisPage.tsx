@@ -77,6 +77,13 @@ const MODEL_NARRATIVE_MAX_WORDS = 6200;
 const SIGNATURE_VIOLATION_TEXT = CYNTRA_SIGNATURE_LAYER_VIOLATION;
 const SIGNATURE_WARNING_TEXT =
   "Waarschuwing: output voldoet niet volledig aan Cyntra-standaard \u2192 fallback gegenereerd. Rapport is bruikbaar maar minder scherp.";
+const UI_SANITIZE_PATTERNS = [
+  /SIGNATURE LAYER WAARSCHUWING:[^\n]*\n?/gi,
+  /^\s*Aanname:[^\n]*\n?/gim,
+  /^\s*Contextanker:[^\n]*\n?/gim,
+  /\bbeperkte context\b/gi,
+  /\bduid structureel\b/gi,
+];
 
 type GuaranteedExecutiveReport = {
   dominantThesis: string;
@@ -306,11 +313,13 @@ function hasSignatureFallbackWarning(value: unknown): boolean {
 
 function stripSignatureWarningPrefix(value: unknown): string {
   if (typeof value !== "string") return "";
-  return value
+  let cleaned = value
     .replace(new RegExp(SIGNATURE_LAYER_WARNING_PREFIX.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), "")
-    .replace(/SIGNATURE LAYER WAARSCHUWING:[^\n]*\n?/gi, "")
-    .replace(/^\s+/, "")
-    .trim();
+    .replace(/SIGNATURE LAYER WAARSCHUWING:[^\n]*\n?/gi, "");
+  for (const pattern of UI_SANITIZE_PATTERNS) {
+    cleaned = cleaned.replace(pattern, "");
+  }
+  return cleaned.replace(/^\s+/, "").trim();
 }
 
 function buildGuaranteedExecutiveReport(params: {

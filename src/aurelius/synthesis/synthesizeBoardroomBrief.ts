@@ -15,7 +15,7 @@ import {
 
 const SIGNATURE_LAYER_ERROR_TEXT = CYNTRA_SIGNATURE_LAYER_VIOLATION;
 const EXECUTIVE_PROMPT_INJECT =
-  "Schrijf als een keiharde, ervaren senior partner die rechtstreeks spreekt tot een Raad van Bestuur. Combineer bovenstroom (cijfers, structuur, governance) met messcherpe onderstroom (macht, informele invloed, sabotage, cultuur, verborgen agenda's). Geen filler, geen herhaling, geen AI-taal. Bij minimale input activeer de juiste sector-template en lever direct executive-kwaliteit.";
+  "Schrijf als een zeer ervaren, licht cynische senior ggz-partner die rechtstreeks spreekt tot de Raad. Geen filler, geen 'aanname', geen 'contextanker', geen 'duid structureel'. Geen herhaling tussen secties. Combineer harde bovenstroom (cijfers, structuur) met confronterende onderstroom (machtsverlies, informele blokkades, sabotagepatronen, toxische cultuur, verborgen agenda's). Bij vage input activeer ggz-template met echte pijnpunten: IGJ, wachtlijsten, ambulantisering, transformatiegelden, zorgzwaarte, personeelstekort.";
 const OPPORTUNITY_GOVERNANCE_DEPTH_DIRECTIVE =
   "Opportunity Cost MOET drie concrete tijdshorizons bevatten (30/90/365 dagen: 30 dagen, 90 dagen, 365 dagen) met euro-bedragen of % en irreversibiliteit. Governance Impact MOET benoemen: formele machtsverschuiving + informele tegenkracht + structuurgevolgen + verwachte escalaties.";
 const HARD_FALLBACK_PROMPT_RULE =
@@ -31,6 +31,13 @@ function hasNonEmptyString(value: unknown): value is string {
 
 function hasEuroOrPercent(text: string): boolean {
   return /(€\s*\d|eur\s*\d|\d+(?:[.,]\d+)?\s*%)/i.test(text);
+}
+
+function normalizeComparableText(text: string): string {
+  return String(text ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 }
 
 function assertExecutiveHardRequirements(brief: BoardroomBrief) {
@@ -83,7 +90,26 @@ function assertExecutiveHardRequirements(brief: BoardroomBrief) {
 
   const tradeoffLossSignals =
     tradeoffs.match(/\b(verlies|inleveren|machtverlies|afbouw|stopzetting)\b/gi) ?? [];
-  if (tradeoffLossSignals.length < 2 || !hasEuroOrPercent(tradeoffs)) {
+  const hasPowerImpact = /\bmacht\b|\bmandaat\b/i.test(tradeoffs);
+  const loss1 =
+    tradeoffs.match(/verlies\s*1\s*[:=]\s*([^.\n]+)/i)?.[1] ??
+    tradeoffs.match(/trade-?off\s*1\s*[:=]\s*([^.\n]+)/i)?.[1] ??
+    "";
+  const loss2 =
+    tradeoffs.match(/verlies\s*2\s*[:=]\s*([^.\n]+)/i)?.[1] ??
+    tradeoffs.match(/trade-?off\s*2\s*[:=]\s*([^.\n]+)/i)?.[1] ??
+    "";
+  const hasDistinctLosses =
+    !!loss1 &&
+    !!loss2 &&
+    normalizeComparableText(loss1) !== normalizeComparableText(loss2);
+
+  if (
+    tradeoffLossSignals.length < 2 ||
+    !hasEuroOrPercent(tradeoffs) ||
+    !hasPowerImpact ||
+    !hasDistinctLosses
+  ) {
     throw new Error(SIGNATURE_LAYER_ERROR_TEXT);
   }
 
@@ -93,6 +119,10 @@ function assertExecutiveHardRequirements(brief: BoardroomBrief) {
   const hasIrreversible = /\b(irreversibel|onomkeerbaar|point of no return)\b/i.test(
     `${opportunity30} ${opportunity90} ${opportunity365}`
   );
+  const uniqueWindows =
+    normalizeComparableText(opportunity30) !== normalizeComparableText(opportunity90) &&
+    normalizeComparableText(opportunity90) !== normalizeComparableText(opportunity365) &&
+    normalizeComparableText(opportunity30) !== normalizeComparableText(opportunity365);
   if (
     !has30 ||
     !has90 ||
@@ -100,7 +130,8 @@ function assertExecutiveHardRequirements(brief: BoardroomBrief) {
     !hasIrreversible ||
     !hasEuroOrPercent(opportunity30) ||
     !hasEuroOrPercent(opportunity90) ||
-    !hasEuroOrPercent(opportunity365)
+    !hasEuroOrPercent(opportunity365) ||
+    !uniqueWindows
   ) {
     throw new Error(SIGNATURE_LAYER_ERROR_TEXT);
   }
