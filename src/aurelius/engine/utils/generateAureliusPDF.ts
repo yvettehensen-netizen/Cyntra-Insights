@@ -121,6 +121,8 @@ const FALLBACK_WARNING_MARKERS = [
   /^\s*Contextanker:[^\n]*\n?/gim,
   /\bbeperkte context\b/gi,
   /\bduid structureel\b/gi,
+  /\bcontextsignaal\b/gi,
+  /werk uit structureel/gi,
 ];
 
 /* ================= CANONICAL ORDER ================= */

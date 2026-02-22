@@ -83,6 +83,8 @@ const UI_SANITIZE_PATTERNS = [
   /^\s*Contextanker:[^\n]*\n?/gim,
   /\bbeperkte context\b/gi,
   /\bduid structureel\b/gi,
+  /\bcontextsignaal\b/gi,
+  /werk uit structureel/gi,
 ];
 
 type GuaranteedExecutiveReport = {
