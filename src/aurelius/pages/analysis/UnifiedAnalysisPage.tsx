@@ -27,6 +27,11 @@ import {
   type AnalysisResult as PDFAnalysisResult,
 } from "../../utils/generateAureliusPDF";
 import { dumpReportEnvelope } from "../../../core/debug/reportDebugDump";
+import {
+  CYNTRA_SIGNATURE_LAYER_VIOLATION,
+  enforceConcreteNarrativeMarkdown,
+  enforceConcreteOutputMap,
+} from "../../narrative/guards/enforceConcreteOutput";
 
 import type { AnalysisType as AureliusAnalysisType } from "../../types";
 
@@ -67,8 +72,7 @@ const ExecutionPlan90D = lazy(
 const MIN_NARRATIVE_WORDS = 3500;
 const MAX_NARRATIVE_WORDS = 7000;
 const MODEL_NARRATIVE_MAX_WORDS = 6200;
-const SIGNATURE_VIOLATION_TEXT =
-  "CYNTRA SIGNATURE VIOLATION — onvoldoende besluitdiagnostiek";
+const SIGNATURE_VIOLATION_TEXT = CYNTRA_SIGNATURE_LAYER_VIOLATION;
 
 type GuaranteedExecutiveReport = {
   dominantThesis: string;
@@ -395,7 +399,7 @@ function buildGuaranteedExecutiveReport(params: {
     "90-dagen interventieplan ontbreekt: definieer 3 prioriteiten, 3 meetbare outcomes en eigenaar per actie."
   );
 
-  return {
+  const guaranteed = {
     dominantThesis: firstNonEmpty(dominantThesis, narrative),
     coreConflict,
     tradeoffs,
@@ -406,6 +410,10 @@ function buildGuaranteedExecutiveReport(params: {
     decisionContract,
     interventionPlan90D,
   };
+
+  return enforceConcreteOutputMap(guaranteed, {
+    contextHint: safeContext,
+  });
 }
 
 function trimToWordLimit(text: string, maxWords: number): string {
@@ -727,6 +735,15 @@ export default function UnifiedAnalysisPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const analysisRunning = loading || isBuilding || isPending;
+  const runtimeErrorMessage = error || localError;
+  const isSignatureViolation = Boolean(
+    runtimeErrorMessage &&
+      runtimeErrorMessage.includes(CYNTRA_SIGNATURE_LAYER_VIOLATION)
+  );
+  const safeSubtitle = String(analysis.subtitle ?? "").replace(
+    /\bmoet\b/gi,
+    "kiest"
+  );
 
   /* ================= DERIVED ================= */
 
@@ -905,10 +922,12 @@ export default function UnifiedAnalysisPage() {
         // Fallback narrative blijft leidend wanneer narratiefgeneratie op niet-signature fouten uitvalt.
       }
 
-      const parsedNarrative = safeParseReport(
+      narrativeText = enforceConcreteNarrativeMarkdown(
         narrativeText,
-        analysisType
+        safeContext
       );
+
+      const parsedNarrative = safeParseReport(narrativeText, analysisType);
 
       setFlowStageIndex(6);
       const power = await runPowerPipeline({
@@ -1046,7 +1065,7 @@ export default function UnifiedAnalysisPage() {
   /* ================= RENDER ================= */
 
   return (
-    <CyntraAnalysisLayout title={analysis.title} subtitle={analysis.subtitle}>
+    <CyntraAnalysisLayout title={analysis.title} subtitle={safeSubtitle}>
       {report && <Watermark risk="MODERATE" />}
 
       {(loading || isBuilding) && (
@@ -1056,10 +1075,24 @@ export default function UnifiedAnalysisPage() {
         </div>
       )}
 
-      {(error || localError) && (
+      {runtimeErrorMessage && isSignatureViolation && (
+        <div className="mb-8 rounded-xl border border-red-500/70 bg-red-950/60 p-4 text-sm text-red-100">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              <div className="font-semibold">
+                {CYNTRA_SIGNATURE_LAYER_VIOLATION}
+              </div>
+              <div className="mt-1 text-red-100/90">{runtimeErrorMessage}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {runtimeErrorMessage && !isSignatureViolation && (
         <div className="mb-8 flex items-center gap-2 text-red-500">
           <AlertCircle className="h-4 w-4" />
-          {error || localError}
+          {runtimeErrorMessage}
         </div>
       )}
 
