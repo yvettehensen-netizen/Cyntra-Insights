@@ -122,6 +122,8 @@ const CHUNK_TOKENS = 4200;
 const RESERVED_STRUCTURE_WORDS = 320;
 const SHARPNESS_ERROR_TEXT = "Onvoldoende bestuurlijke scherpte";
 const SIGNATURE_LAYER_ERROR_TEXT = CYNTRA_SIGNATURE_LAYER_VIOLATION;
+const OPPORTUNITY_GOVERNANCE_DEPTH_DIRECTIVE =
+  "Opportunity Cost MOET drie concrete tijdshorizons bevatten (30/90/365 dagen: 30 dagen, 90 dagen, 365 dagen) met euro-bedragen of % en irreversibiliteit. Governance Impact MOET benoemen: formele machtsverschuiving + informele tegenkracht + verwachte escalaties.";
 
 const ENGLISH_LEAK_GUARD =
   /\b(recommendation|in conclusion|quick\s+wins|accountability|roadmap|downside|upside|baseline|framework|stakeholder|governance\s+model)\b/i;
@@ -864,6 +866,7 @@ INHOUDSEISEN:
 - Sectie 4 beschrijft concreet de kosten van niets doen op dag 0, binnen 90 dagen en binnen 365 dagen.
 - Sectie 4 benoemt dat tijd actieve druk creëert en vensters sluit.
 - Sectie 5 benoemt expliciet effect op besluitkracht, escalatie, diffuse verantwoordelijkheid en centralisatie van macht.
+- ${OPPORTUNITY_GOVERNANCE_DEPTH_DIRECTIVE}
 - Sectie 6 benoemt wie macht verliest, waar informele invloed zit en welke sabotagepatronen te verwachten zijn.
 - Sectie 7 benoemt waar uitvoering misgaat, wie blokkeert en welke onderstroom onzichtbaar werkt.
 - Sectie 7 bevat expliciet cognitieve volwassenheidsreflectie (informatie vs moed, capaciteit vs macht, strategie vs executiediscipline, analyse vs vermijding).
@@ -988,7 +991,7 @@ ${legacyContext || "GEEN LEGACY CONTEXT BESCHIKBAAR."}
         messages.push({
           role: "user",
           content:
-            `Ga verder. Behoud exact de 9 secties. Veranker de Cyntra Signature Layer: besluitkracht als centrale variabele, onoplosbaar spanningsveld, expliciet verlies, machtsverschuiving, tijdsdruk en cognitieve volwassenheidsreflectie. Werk opportunity cost uit op 0/90/365, houd het 90-dagenplan op week 1-2 / 3-6 / 7-12 en sluit af met een hard decision contract. ${CONCRETE_REPROMPT_DIRECTIVE}`,
+            `Ga verder. Behoud exact de 9 secties. Veranker de Cyntra Signature Layer: besluitkracht als centrale variabele, onoplosbaar spanningsveld, expliciet verlies, machtsverschuiving, tijdsdruk en cognitieve volwassenheidsreflectie. Werk opportunity cost uit op 0/90/365, houd het 90-dagenplan op week 1-2 / 3-6 / 7-12 en sluit af met een hard decision contract. ${OPPORTUNITY_GOVERNANCE_DEPTH_DIRECTIVE} ${CONCRETE_REPROMPT_DIRECTIVE}`,
         });
       }
     } catch {

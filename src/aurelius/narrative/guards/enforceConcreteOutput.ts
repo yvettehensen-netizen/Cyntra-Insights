@@ -3,15 +3,28 @@ export const CONCRETE_REPROMPT_DIRECTIVE =
 
 export const CYNTRA_SIGNATURE_LAYER_VIOLATION =
   "CYNTRA SIGNATURE LAYER VIOLATIE";
+const MAX_CONCRETE_REPROMPT_ATTEMPTS = 2;
 
 const FORBIDDEN_PATTERNS = [
   /\bmoet\b/i,
+  /moet expliciet worden/i,
   /\bformuleer\b/i,
   /\banalyseer\b/i,
   /geen expliciete context/i,
   /ontbreekt/i,
   /placeholder/i,
   /trade-?offs\s+moeten/i,
+  /nog niet voldoende/i,
+  /zou kunnen/i,
+  /lijkt erop dat/i,
+];
+
+const WEAK_SIGNAL_PATTERNS = [
+  /moet expliciet worden/i,
+  /trade-?offs?\s+moeten/i,
+  /nog niet voldoende/i,
+  /zou kunnen/i,
+  /lijkt erop dat/i,
 ];
 
 const DEFAULT_ASSUMPTIONS: Record<string, string> = {
@@ -43,6 +56,17 @@ function sanitizeWhitespace(value: string): string {
 
 export function hasForbiddenConcretePattern(text: string): boolean {
   return FORBIDDEN_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+function concreteWeaknessScore(text: string): number {
+  const source = sanitizeWhitespace(String(text || ""));
+  if (!source) return 4;
+
+  let score = hasForbiddenConcretePattern(source) ? 2 : 0;
+  for (const pattern of WEAK_SIGNAL_PATTERNS) {
+    if (pattern.test(source)) score += 1;
+  }
+  return score;
 }
 
 function sectionKeyFromHeading(heading: string): string {
@@ -92,18 +116,43 @@ function concreteFallback(sectionKey: string, contextHint?: string): string {
   return `${fallback} Aannamecontext: ${safeContext.slice(0, 240)}.`;
 }
 
+function concreteRepromptFallback(
+  sectionKey: string,
+  contextHint?: string,
+  attempt = 1
+): string {
+  const fallback = sanitizeWhitespace(concreteFallback(sectionKey, contextHint));
+  const assumption = /^aanname/i.test(fallback) ? fallback : `Aanname: ${fallback}`;
+  const boundedAttempt = Math.max(1, Math.min(attempt, MAX_CONCRETE_REPROMPT_ATTEMPTS));
+  return sanitizeWhitespace(
+    `Expliciete aanname (herprompt ${boundedAttempt}/${MAX_CONCRETE_REPROMPT_ATTEMPTS}): ${assumption} ${CONCRETE_REPROMPT_DIRECTIVE}`
+  );
+}
+
 export function enforceConcreteString(
   input: string,
   sectionKey: string,
   contextHint?: string
 ): string {
   const value = sanitizeWhitespace(String(input || ""));
+  let candidate = value;
 
-  const candidate = !value || hasForbiddenConcretePattern(value)
-    ? concreteFallback(sectionKey, contextHint)
-    : value;
+  for (let attempt = 1; attempt <= MAX_CONCRETE_REPROMPT_ATTEMPTS; attempt++) {
+    if (candidate && concreteWeaknessScore(candidate) === 0) {
+      break;
+    }
+    candidate = concreteRepromptFallback(sectionKey, contextHint, attempt);
+  }
 
-  if (hasForbiddenConcretePattern(candidate)) {
+  if (concreteWeaknessScore(candidate) > 0) {
+    candidate = concreteRepromptFallback(
+      sectionKey,
+      contextHint,
+      MAX_CONCRETE_REPROMPT_ATTEMPTS
+    );
+  }
+
+  if (hasForbiddenConcretePattern(candidate) || concreteWeaknessScore(candidate) > 0) {
     throw new Error(CYNTRA_SIGNATURE_LAYER_VIOLATION);
   }
 
@@ -114,21 +163,33 @@ export function enforceConcreteOutputMap<T extends Record<string, string>>(
   input: T,
   options?: { contextHint?: string }
 ): T {
-  const output: Record<string, string> = {};
+  let output: Record<string, string> = {};
 
-  for (const [key, value] of Object.entries(input)) {
-    output[key] = enforceConcreteString(value, key, options?.contextHint);
+  for (let attempt = 0; attempt <= MAX_CONCRETE_REPROMPT_ATTEMPTS; attempt++) {
+    output = {};
+
+    for (const [key, value] of Object.entries(input)) {
+      output[key] = enforceConcreteString(value, key, options?.contextHint);
+    }
+
+    const residual = Object.values(output).find(
+      (value) => concreteWeaknessScore(value) > 0
+    );
+    if (!residual) {
+      return output as T;
+    }
   }
 
-  const residual = Object.values(output).find((value) =>
-    hasForbiddenConcretePattern(value)
-  );
-
-  if (residual) {
-    throw new Error(CYNTRA_SIGNATURE_LAYER_VIOLATION);
+  const hardened: Record<string, string> = {};
+  for (const key of Object.keys(input)) {
+    hardened[key] = concreteRepromptFallback(
+      key,
+      options?.contextHint,
+      MAX_CONCRETE_REPROMPT_ATTEMPTS
+    );
   }
 
-  return output as T;
+  return hardened as T;
 }
 
 export function enforceConcreteNarrativeMarkdown(
@@ -159,7 +220,7 @@ export function enforceConcreteNarrativeMarkdown(
   });
 
   const merged = rewritten.join("\n\n").trim();
-  if (hasForbiddenConcretePattern(merged)) {
+  if (hasForbiddenConcretePattern(merged) || concreteWeaknessScore(merged) > 0) {
     throw new Error(CYNTRA_SIGNATURE_LAYER_VIOLATION);
   }
 

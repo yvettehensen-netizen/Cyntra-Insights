@@ -14,6 +14,8 @@ import {
 } from "@/aurelius/narrative/guards/enforceConcreteOutput";
 
 const SIGNATURE_LAYER_ERROR_TEXT = CYNTRA_SIGNATURE_LAYER_VIOLATION;
+const OPPORTUNITY_GOVERNANCE_DEPTH_DIRECTIVE =
+  "Opportunity Cost MOET drie concrete tijdshorizons bevatten (30/90/365 dagen: 30 dagen, 90 dagen, 365 dagen) met euro-bedragen of % en irreversibiliteit. Governance Impact MOET benoemen: formele machtsverschuiving + informele tegenkracht + verwachte escalaties.";
 
 function hasNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
@@ -205,6 +207,7 @@ Dominante Cyntra Signature Layer:
 - Besluit eindigt contractueel, niet adviserend.
 - Cognitieve volwassenheid is expliciet: informatie versus moed, capaciteit versus macht.
 - ${CONCRETE_REPROMPT_DIRECTIVE}
+- ${OPPORTUNITY_GOVERNANCE_DEPTH_DIRECTIVE}
 
 Niet meerdere scenario's.
 Niet meerdere waarheden.
@@ -227,6 +230,7 @@ INHOUDSEISEN:
 - Expliciete toets: versterkt of ondermijnt dit de besluitkracht van de top
 - Opportunity cost voor dag 0, 90 dagen en 365 dagen
 - Governance impact op besluitkracht, escalatie, diffuse verantwoordelijkheid en centralisatie van macht
+- ${OPPORTUNITY_GOVERNANCE_DEPTH_DIRECTIVE}
 - Machtsdynamiek en onderstroom: machtverlies, informele invloed en sabotagepatronen
 - Cognitieve volwassenheidsreflectie: informatieprobleem vs moedprobleem of capaciteitsprobleem vs machtsprobleem
 - Executierisico met blokkadepunt, blocker en onderstroom

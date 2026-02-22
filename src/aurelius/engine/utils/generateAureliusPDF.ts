@@ -109,7 +109,11 @@ const WHITE: RGB = [255, 255, 255];
 const EXECUTIVE_TITLE: RGB = [10, 37, 64];
 const EXECUTIVE_TEXT: RGB = [20, 28, 40];
 const EXECUTIVE_CARD: RGB = [248, 250, 252];
-const DECISION_FRAME: RGB = [61, 61, 61];
+const LOSS_TEXT_RED: RGB = [255, 77, 77]; // #FF4D4D
+const DECISION_CONTRACT_BG: RGB = [28, 37, 38]; // #1C2526
+const DECISION_CONTRACT_BORDER: RGB = [10, 37, 64]; // #0A2540
+const SECTION_TITLE_MARGIN_BOTTOM = 7; // ~1.2rem visual spacing
+const DECISION_CONTRACT_BORDER_WIDTH_MM = 0.7; // ~2px equivalent
 
 /* ================= CANONICAL ORDER ================= */
 
@@ -230,6 +234,12 @@ function splitOpportunityWindows(text: string): Array<{ label: string; content: 
       content: segments["365 dagen"].join(" ").trim() || fallback[2] || fallback[1] || fallback[0] || "Niet gespecificeerd.",
     },
   ];
+}
+
+function hasExplicitLossLanguage(text: string): boolean {
+  return /\b(verlies|verliest|verliespost|inleveren|machtverlies|afbouw|stopzetten|opheffen|afstoten|be[eë]indig)\b/i.test(
+    text
+  );
 }
 
 /* ============================================================
@@ -469,10 +479,17 @@ export function generateAureliusPDF(
         }));
 
         const windowsHeight = windows.reduce(
-          (total, item) => total + item.lines.length * lineHeight + 12,
+          (total, item, index) =>
+            total +
+            5 + // subtitle
+            item.lines.length * lineHeight +
+            (index < windows.length - 1 ? 7 : 3), // separator rhythm
           0
         );
-        const cardHeight = Math.max(42, windowsHeight + 14);
+        const cardHeight = Math.max(
+          42,
+          SECTION_TITLE_MARGIN_BOTTOM + windowsHeight + 10
+        );
         ensure(cardHeight + 18);
 
         doc.setFillColor(...EXECUTIVE_CARD);
@@ -493,12 +510,9 @@ export function generateAureliusPDF(
         doc.setTextColor(...EXECUTIVE_TITLE);
         doc.text(`${sectionIndex}. ${section.title}`, M.x, y);
 
-        let cursorY = y + 11;
-        for (const item of windows) {
-          doc.setDrawColor(...EXECUTIVE_TITLE);
-          doc.setLineWidth(1.2);
-          doc.line(M.x + 4, cursorY, PAGE.w - M.x - 4, cursorY);
-          cursorY += 5;
+        let cursorY = y + SECTION_TITLE_MARGIN_BOTTOM;
+        windows.forEach((item, index) => {
+          cursorY += 2;
 
           doc.setFont("helvetica", "bold");
           doc.setFontSize(10.5);
@@ -508,13 +522,22 @@ export function generateAureliusPDF(
 
           doc.setFont("helvetica", "normal");
           doc.setFontSize(10.1);
-          doc.setTextColor(...EXECUTIVE_TEXT);
           for (const line of item.lines) {
+            doc.setTextColor(
+              ...(hasExplicitLossLanguage(line) ? LOSS_TEXT_RED : EXECUTIVE_TEXT)
+            );
             doc.text(line, M.x + 4, cursorY);
             cursorY += lineHeight;
           }
-          cursorY += 3;
-        }
+
+          if (index < windows.length - 1) {
+            cursorY += 2;
+            doc.setDrawColor(...EXECUTIVE_TITLE);
+            doc.setLineWidth(0.35);
+            doc.line(M.x + 4, cursorY, PAGE.w - M.x - 4, cursorY);
+            cursorY += 3;
+          }
+        });
 
         y += cardHeight + 14;
         continue;
@@ -529,7 +552,10 @@ export function generateAureliusPDF(
         return index === 0 ? splitLines : ["", ...splitLines];
       });
 
-      const cardHeight = Math.max(30, 16 + lines.length * lineHeight);
+      const cardHeight = Math.max(
+        30,
+        SECTION_TITLE_MARGIN_BOTTOM + 6 + lines.length * lineHeight
+      );
       ensure(cardHeight + 18);
 
       doc.setFillColor(...EXECUTIVE_CARD);
@@ -550,15 +576,17 @@ export function generateAureliusPDF(
       doc.setTextColor(...EXECUTIVE_TITLE);
       doc.text(`${sectionIndex}. ${section.title}`, M.x, y);
 
-      let cursorY = y + 11;
+      let cursorY = y + SECTION_TITLE_MARGIN_BOTTOM;
       doc.setFont("helvetica", "normal");
       doc.setFontSize(10.1);
-      doc.setTextColor(...EXECUTIVE_TEXT);
       for (const line of lines) {
         if (!line) {
           cursorY += lineHeight * 0.45;
           continue;
         }
+        doc.setTextColor(
+          ...(hasExplicitLossLanguage(line) ? LOSS_TEXT_RED : EXECUTIVE_TEXT)
+        );
         doc.text(line, M.x + 4, cursorY);
         cursorY += lineHeight;
       }
@@ -570,34 +598,41 @@ export function generateAureliusPDF(
       newPage();
       sectionIndex++;
 
-      const frameX = M.x - 3;
-      const frameY = HEADER_H + M.y - 8;
-      const frameW = PAGE.w - frameX * 2;
-      const frameH = PAGE.h - frameY - FOOTER_H - 8;
+      const frameX = 0;
+      const frameY = HEADER_H + 4;
+      const frameW = PAGE.w;
+      const frameH = PAGE.h - frameY - FOOTER_H - 2;
+      const framePaddingX = M.x;
 
-      doc.setFillColor(...EXECUTIVE_CARD);
+      doc.setFillColor(...DECISION_CONTRACT_BG);
       doc.rect(frameX, frameY, frameW, frameH, "F");
-      doc.setDrawColor(...DECISION_FRAME);
-      doc.setLineWidth(1.4);
+      doc.setDrawColor(...DECISION_CONTRACT_BORDER);
+      doc.setLineWidth(DECISION_CONTRACT_BORDER_WIDTH_MM);
       doc.rect(frameX, frameY, frameW, frameH);
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(14.5);
-      doc.setTextColor(...EXECUTIVE_TITLE);
-      doc.text(`${sectionIndex}. ${decisionSection.title}`, frameX + 6, frameY + 12);
+      doc.setTextColor(...WHITE);
+      doc.text(
+        `${sectionIndex}. ${decisionSection.title}`,
+        framePaddingX,
+        frameY + 12
+      );
 
       doc.setFont("helvetica", "normal");
       doc.setFontSize(10.2);
-      doc.setTextColor(...EXECUTIVE_TEXT);
 
       const decisionLines = doc.splitTextToSize(
         decisionSection.text,
-        frameW - 12
+        frameW - framePaddingX * 2
       );
-      let decisionY = frameY + 22;
+      let decisionY = frameY + 12 + SECTION_TITLE_MARGIN_BOTTOM;
       for (const line of decisionLines) {
         if (decisionY > frameY + frameH - 8) break;
-        doc.text(line, frameX + 6, decisionY);
+        doc.setTextColor(
+          ...(hasExplicitLossLanguage(line) ? LOSS_TEXT_RED : WHITE)
+        );
+        doc.text(line, framePaddingX, decisionY);
         decisionY += 5.4;
       }
     }
