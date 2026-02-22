@@ -6,6 +6,7 @@
 import {
   Suspense,
   lazy,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -115,6 +116,8 @@ const FLOW_STEPS = [
   "Control Surface",
   "Rapport Download",
 ] as const;
+const FLOW_COMPLETION_STAGE = FLOW_STEPS.length;
+const FLOW_FALLBACK_ADVANCE_DELAY_MS = 500;
 
 const POWER_NODE_LABELS: Record<string, string> = {
   truth: "Strategische Realiteitscheck",
@@ -471,6 +474,37 @@ Context:
 ${reportText || safeContext}`;
 }
 
+function buildExecutiveFallbackMarkdown(executive: GuaranteedExecutiveReport): string {
+  return [
+    "### 1. DOMINANTE BESTUURLIJKE THESE",
+    executive.dominantThesis,
+    "",
+    "### 2. HET KERNCONFLICT",
+    executive.coreConflict,
+    "",
+    "### 3. EXPLICIETE TRADE-OFFS",
+    executive.tradeoffs,
+    "",
+    "### 4. OPPORTUNITY COST",
+    executive.opportunityCost,
+    "",
+    "### 5. GOVERNANCE IMPACT",
+    executive.governanceImpact,
+    "",
+    "### 6. MACHTSDYNAMIEK & ONDERSTROOM",
+    executive.powerDynamics,
+    "",
+    "### 7. EXECUTIERISICO",
+    executive.executionRisk,
+    "",
+    "### 8. 90-DAGEN INTERVENTIEPLAN",
+    executive.interventionPlan90D,
+    "",
+    "### 9. DECISION CONTRACT",
+    executive.decisionContract,
+  ].join("\n");
+}
+
 function safeParseReport(
   markdown: string,
   analysisType: AureliusAnalysisType
@@ -742,6 +776,9 @@ export default function UnifiedAnalysisPage() {
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const reportRef = useRef<AureliusAnalysisResult | null>(null);
+  const executiveReportRef = useRef<GuaranteedExecutiveReport | null>(null);
+  const fallbackFlowTimerRef = useRef<number | null>(null);
   const analysisRunning = loading || isBuilding || isPending;
   const runtimeErrorMessage = error || localError;
   const isSignatureViolation = Boolean(
@@ -820,6 +857,61 @@ export default function UnifiedAnalysisPage() {
         : [],
     [executiveReportView]
   );
+  const executiveHasFallbackWarning = useMemo(
+    () =>
+      executiveSections.some((section) =>
+        hasSignatureFallbackWarning(section.content)
+      ),
+    [executiveSections]
+  );
+  const hasReportOutput = Boolean(report || executiveReportView);
+  const canDownloadPdf = hasReportOutput;
+
+  const clearFallbackFlowTimer = useCallback(() => {
+    if (fallbackFlowTimerRef.current == null || typeof window === "undefined") {
+      return;
+    }
+    window.clearTimeout(fallbackFlowTimerRef.current);
+    fallbackFlowTimerRef.current = null;
+  }, []);
+
+  const forceAdvanceFlowAfterFallback = useCallback(() => {
+    clearFallbackFlowTimer();
+    if (typeof window === "undefined") {
+      setFlowStageIndex(FLOW_COMPLETION_STAGE);
+      console.log(`Flow advanced to stage ${FLOW_COMPLETION_STAGE} after fallback`);
+      return;
+    }
+    fallbackFlowTimerRef.current = window.setTimeout(() => {
+      setFlowStageIndex(FLOW_COMPLETION_STAGE);
+      console.log(`Flow advanced to stage ${FLOW_COMPLETION_STAGE} after fallback`);
+      fallbackFlowTimerRef.current = null;
+    }, FLOW_FALLBACK_ADVANCE_DELAY_MS);
+  }, [clearFallbackFlowTimer]);
+
+  useEffect(() => {
+    reportRef.current = report;
+  }, [report]);
+
+  useEffect(() => {
+    executiveReportRef.current = executiveReport;
+  }, [executiveReport]);
+
+  useEffect(() => {
+    if (!executiveReportView) return;
+    if (!(signatureFallbackWarning || executiveHasFallbackWarning)) return;
+    setIsBuilding(false);
+    forceAdvanceFlowAfterFallback();
+  }, [
+    executiveHasFallbackWarning,
+    executiveReportView,
+    forceAdvanceFlowAfterFallback,
+    signatureFallbackWarning,
+  ]);
+
+  useEffect(() => {
+    return () => clearFallbackFlowTimer();
+  }, [clearFallbackFlowTimer]);
 
   /* ================= HELPERS ================= */
 
@@ -836,6 +928,7 @@ export default function UnifiedAnalysisPage() {
   const startAnalysis = async () => {
     if (analysisRunning) return;
 
+    clearFallbackFlowTimer();
     setLocalError(null);
     setSignatureFallbackWarning(false);
     setPdfPreflightError(null);
@@ -986,20 +1079,33 @@ export default function UnifiedAnalysisPage() {
         power,
         safeContext,
       });
-      const executiveHasFallbackWarning = Object.values(nextExecutiveReport).some(
+      const nextExecutiveHasFallbackWarning = Object.values(nextExecutiveReport).some(
         (value) => hasSignatureFallbackWarning(value)
       );
+      const shouldForceFallbackFlowCompletion =
+        usedSignatureFallback || nextExecutiveHasFallbackWarning;
+      const nextReport = enrichDecisionSection(parsedWithPower, power);
       startTransition(() => {
-        setReport(enrichDecisionSection(parsedWithPower, power));
+        setReport(nextReport);
         setPowerOutput(power);
         setExecutiveReport(nextExecutiveReport);
         setSignatureFallbackWarning(
-          usedSignatureFallback || executiveHasFallbackWarning
+          usedSignatureFallback || nextExecutiveHasFallbackWarning
         );
       });
+      if (shouldForceFallbackFlowCompletion) {
+        setIsBuilding(false);
+        forceAdvanceFlowAfterFallback();
+      } else {
+        setFlowStageIndex(FLOW_COMPLETION_STAGE);
+      }
     } catch (err) {
       setLocalError(err instanceof Error ? err.message : "Analyse mislukt");
-      setFlowStageIndex(0);
+      if (reportRef.current || executiveReportRef.current) {
+        setFlowStageIndex(FLOW_COMPLETION_STAGE);
+      } else {
+        setFlowStageIndex(0);
+      }
     } finally {
       setIsBuilding(false);
     }
@@ -1008,11 +1114,19 @@ export default function UnifiedAnalysisPage() {
   /* ================= PDF ================= */
 
   const printReport = async () => {
-    if (!report) return;
+    const reportForPdf =
+      report ??
+      (executiveReportView
+        ? safeParseReport(
+            buildExecutiveFallbackMarkdown(executiveReportView),
+            analysisType
+          )
+        : null);
+    if (!reportForPdf) return;
 
     setPdfPreflightError(null);
     setFlowStageIndex(8);
-    const pdfReport = toPDFReport(report, executiveReportView);
+    const pdfReport = toPDFReport(reportForPdf, executiveReportView);
     const sectionMap = pdfReport.sections ?? {};
     const sectionEntries = Object.entries(sectionMap).map(([key, section]) => ({
       key,
@@ -1048,7 +1162,7 @@ export default function UnifiedAnalysisPage() {
       setPdfPreflightError(
         `PDF pre-flight mislukt. narrativeLength=${narrativeLength}, sectionsCount=${filledSections.length}, emptySectionKeys=${emptySectionKeys.join(", ") || "none"}.`
       );
-      setFlowStageIndex(0);
+      setFlowStageIndex(hasReportOutput ? FLOW_COMPLETION_STAGE : 0);
       return;
     }
 
@@ -1057,16 +1171,18 @@ export default function UnifiedAnalysisPage() {
     );
 
     generateAureliusPDF(
-      report.title || "Aurelius Analyse",
+      reportForPdf.title || "Aurelius Analyse",
       pdfReport,
       clientName || "Onbekende organisatie",
       { confidence: 0.82 }
     );
+    setFlowStageIndex(FLOW_COMPLETION_STAGE);
   };
 
   /* ================= RESET ================= */
 
   const reset = () => {
+    clearFallbackFlowTimer();
     setContext("");
     setFiles([]);
     setReport(null);
@@ -1163,7 +1279,7 @@ export default function UnifiedAnalysisPage() {
         />
       </div>
 
-      {!report ? (
+      {!hasReportOutput ? (
         <>
           <input
             value={clientName}
@@ -1215,12 +1331,21 @@ export default function UnifiedAnalysisPage() {
 
             <button
               onClick={printReport}
-              className="flex items-center gap-2 text-[#d4af37]"
+              disabled={!canDownloadPdf}
+              className={`flex items-center gap-2 ${
+                canDownloadPdf ? "text-[#d4af37]" : "text-white/35"
+              }`}
             >
               <Printer className="h-4 w-4" />
               PDF Download
             </button>
           </div>
+
+          {(signatureFallbackWarning || executiveHasFallbackWarning) && (
+            <div className="mb-6 rounded-xl border border-amber-500/70 bg-amber-950/35 p-4 text-sm text-amber-100">
+              Fallbackrapport actief in Control Surface. Download gereed.
+            </div>
+          )}
 
           {executiveSections.map((section) => (
             <section key={section.title} className="mb-12 border border-white/10 bg-black/20 p-6">
