@@ -128,7 +128,7 @@ export default function App() {
       }
     >
       <Routes>
-        <Route path="/__health" element={<div>Gezondheid OK</div>} />
+        <Route path="/__health" element={<div>Gezondheid OK — Cyntra v4.0 live</div>} />
         <Route path="/__engine-test" element={<EngineTest />} />
 
       {/* PUBLIC */}
