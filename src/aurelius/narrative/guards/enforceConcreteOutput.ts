@@ -279,7 +279,6 @@ const SECTOR_KEYWORDS: Record<Exclude<SectorKey, "default">, RegExp[]> = {
 };
 
 const FORBIDDEN_PATTERNS = [
-  /\bmoet\b/i,
   /moet expliciet worden/i,
   /\bformuleer\b/i,
   /\banalyseer\b/i,
@@ -426,6 +425,9 @@ function sanitizeContextHint(value?: string): string {
 function detectSectorKey(contextHint?: string): SectorKey {
   const probe = normalizeSectorProbe(contextHint || "");
   if (!probe) return "default";
+  if (/\b(ggz|jeugdzorg|geestelijke gezondheid|igj|wachtlijst|mac)\b/i.test(probe)) {
+    return "ggz";
+  }
 
   let best: SectorKey = "default";
   let bestScore = 0;

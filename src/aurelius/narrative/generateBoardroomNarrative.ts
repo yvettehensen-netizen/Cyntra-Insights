@@ -1269,13 +1269,11 @@ function enforceReadableParagraphRhythm(text: string): string {
 
     const bulletLines = lines.filter((line) => /^[-*•]\s+/.test(line));
     if (bulletLines.length >= 2) {
-      const intro = lines.find((line) => !/^[-*•]\s+/.test(line));
+      const nonBulletLines = lines.filter((line) => !/^[-*•]\s+/.test(line));
       const normalizedBullets = bulletLines.map((line) =>
         `- ${line.replace(/^[-*•]\s+/, "").trim()}`
       );
-      const rebuilt = intro
-        ? [intro, ...normalizedBullets].join("\n")
-        : normalizedBullets.join("\n");
+      const rebuilt = [...nonBulletLines, ...normalizedBullets].join("\n");
       output = replaceSection(output, heading, rebuilt);
       continue;
     }
