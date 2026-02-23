@@ -17,7 +17,6 @@
 // ============================================================
 
 import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 
 /* ================= TYPES ================= */
 
@@ -93,31 +92,30 @@ export interface CyntraCoverMeta {
 /* ================= CONSTANTS ================= */
 
 const PAGE = { w: 210, h: 297 };
-const M = { x: 22, y: 24 };
+const M = { x: 24, y: 26 };
 
 const HEADER_H = 14;
 const FOOTER_H = 14;
 
-const FONT_BODY = 10.2;
-const LINE = 5.4;
+const FONT_BODY = 10.4;
+const LINE = 5.8;
 
 /* ================= THEME ================= */
 
-const COVER_BG: RGB = [0, 31, 63]; // #001F3F
-const COVER_GRID: RGB = [6, 43, 78];
-const INNER_BG: RGB = [10, 15, 28]; // #0A0F1C
-const GOLD: RGB = [212, 175, 55]; // #D4AF37
+const COVER_BG: RGB = [247, 250, 255];
+const COVER_GRID: RGB = [214, 226, 241];
+const INNER_BG: RGB = [255, 255, 255];
+const GOLD: RGB = [168, 132, 46];
 const WHITE: RGB = [255, 255, 255];
-const EXECUTIVE_TITLE: RGB = [212, 175, 55];
-const EXECUTIVE_TEXT: RGB = [232, 238, 247];
-const EXECUTIVE_MUTED: RGB = [160, 172, 191];
-const EXECUTIVE_CARD: RGB = [16, 24, 38];
-const EXECUTIVE_CARD_BORDER: RGB = [26, 47, 77];
-const SECTION_DIVIDER: RGB = [10, 37, 64]; // #0A2540
-const LOSS_TEXT_RED: RGB = [255, 77, 77]; // #FF4D4D
-const DECISION_CONTRACT_BG: RGB = [28, 37, 38]; // #1C2526
-const DECISION_CONTRACT_BORDER: RGB = [212, 175, 55];
-const SECTION_TITLE_MARGIN_BOTTOM = 8;
+const EXECUTIVE_TITLE: RGB = [19, 52, 88];
+const EXECUTIVE_TEXT: RGB = [28, 40, 58];
+const EXECUTIVE_MUTED: RGB = [102, 118, 138];
+const EXECUTIVE_CARD: RGB = [255, 255, 255];
+const EXECUTIVE_CARD_BORDER: RGB = [221, 229, 239];
+const SECTION_DIVIDER: RGB = [205, 217, 233];
+const LOSS_TEXT_RED: RGB = [175, 39, 39];
+const DECISION_CONTRACT_BG: RGB = [252, 248, 236];
+const DECISION_CONTRACT_BORDER: RGB = [168, 132, 46];
 const DECISION_CONTRACT_BORDER_WIDTH_MM = 0.8;
 const COVER_GLOBE_RADIUS = 84;
 const FALLBACK_WARNING_MARKERS = [
@@ -151,7 +149,7 @@ const EXECUTIVE_SECTION_CATALOG = [
   },
   {
     key: "opportunity_cost",
-    title: "Opportunity Cost",
+    title: "Opportunity Cost (30 / 90 / 365 dagen)",
     aliases: ["wat_er_gebeurt_als_er_niets_verandert"],
   },
   {
@@ -180,6 +178,30 @@ const EXECUTIVE_SECTION_CATALOG = [
     aliases: ["het_besluit_dat_nu_nodig_is"],
   },
 ] as const;
+
+const EXECUTIVE_SECTION_DEFAULTS: Record<
+  (typeof EXECUTIVE_SECTION_CATALOG)[number]["key"],
+  string
+> = {
+  dominante_bestuurlijke_these:
+    "De organisatie bevindt zich op een beslismoment waarbij uitstel direct leidt tot lagere voorspelbaarheid en oplopende uitvoeringsdruk. De Raad moet nu expliciet kiezen en die keuze in ritme doorvoeren.",
+  kernconflict:
+    "Het kernconflict is bestuurlijk pijnlijk: stabiliseren met expliciet verlies of doorgaan met schijnharmonie en oplopende uitvoeringsschade.",
+  expliciete_tradeoffs:
+    "Expliciete trade-offs ontbreken in de bronoutput. Leg per keuze vast wat wordt gewonnen, wat wordt verloren en wie mandaat inlevert.",
+  opportunity_cost:
+    "30 dagen: direct tempoverlies en eerste financiële erosie. 90 dagen: zichtbare machtsverschuiving en structurele frictie. 365 dagen: systeemverschuiving en verlies van strategische keuzevrijheid. Absolute €-bedragen alleen met berekening en bron; anders expliciet niet onderbouwd.",
+  governance_impact:
+    "Governance-impact vraagt één centrale beslislijn met eigenaarschap, KPI's en hard escalatieritme over instroom, capaciteit, kwaliteit en marge.",
+  machtsdynamiek_onderstroom:
+    "Machtsdynamiek en onderstroom moeten expliciet worden gemaakt: welke informele blokkades vertragen uitvoering en welke actoren verliezen invloed.",
+  executierisico:
+    "Executierisico concentreert zich rond parallelle prioriteiten, dubbelmandaat en vertraagde escalatie.",
+  interventieplan_90dagen:
+    "Week 1-2: bindend consolidatiebesluit, stop-doinglijst en eigenaarschap per prioriteit. Week 3-6: herverdeling van capaciteit en besluitrechten naar een vaste regiecadans met beslislog. Week 7-12: verankering van gedrag met aantoonbare adoptie en KPI-impact. Dag 30: eerste executiebewijs. Dag 60: stabiel ritme. Dag 90: meetbare verbetering op kern-KPI's.",
+  decision_contract:
+    "Decision Contract ontbreekt in de bronoutput. Leg keuze, eigenaarschap, tijdshorizon, expliciet verlies en niet-onderhandelbare stopregels vast.",
+};
 
 /* ================= HELPERS ================= */
 
@@ -218,8 +240,6 @@ const normalize = (v: unknown): string => {
   }
   return sanitizeReportText(String(v));
 };
-
-const mutableRGB = (c: RGB): [number, number, number] => [...c];
 
 function formatReportDate(date: Date): string {
   return date.toLocaleDateString("nl-NL", {
@@ -303,6 +323,91 @@ function splitIntoReadableParagraphs(
   return paragraphs.filter(Boolean);
 }
 
+type NarrativeBlockKind = "chapter" | "ratio" | "stream" | "paragraph";
+
+interface PdfNarrativeBlock {
+  kind: NarrativeBlockKind;
+  text: string;
+  lines: string[];
+  fontSize: number;
+  lineHeight: number;
+  gapAfter: number;
+}
+
+function classifyNarrativeBlock(text: string): NarrativeBlockKind {
+  const line = String(text ?? "").trim().replace(/^#{1,6}\s*/, "");
+  if (/^\d+\.\s+/.test(line)) return "chapter";
+  if (/^[A-E]\.\s+/.test(line)) return "ratio";
+  if (/^(Bovenstroom|Onderstroom)\b/i.test(line)) return "stream";
+  return "paragraph";
+}
+
+function splitNarrativeBlocksWithHeadingHints(text: string): Array<{
+  kind: NarrativeBlockKind;
+  text: string;
+}> {
+  const source = sanitizeReportText(text);
+  if (!source) return [];
+
+  const paragraphs = source
+    .split(/\n\s*\n+/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean);
+
+  const blocks: Array<{ kind: NarrativeBlockKind; text: string }> = [];
+  for (const paragraph of paragraphs) {
+    const kind = classifyNarrativeBlock(paragraph);
+    if (kind === "paragraph") {
+      const split = splitIntoReadableParagraphs(paragraph, 2, 220);
+      split.forEach((piece) => blocks.push({ kind: "paragraph", text: piece }));
+    } else {
+      blocks.push({ kind, text: paragraph.replace(/^#{1,6}\s*/, "").trim() });
+    }
+  }
+  return blocks;
+}
+
+function buildPdfNarrativeBlocks(
+  doc: jsPDF,
+  text: string,
+  maxWidth: number
+): PdfNarrativeBlock[] {
+  const blocks = splitNarrativeBlocksWithHeadingHints(text);
+  return blocks.map((block) => {
+    const styleByKind: Record<
+      NarrativeBlockKind,
+      { fontSize: number; lineHeight: number; gapAfter: number }
+    > = {
+      chapter: { fontSize: 12.2, lineHeight: 6.2, gapAfter: 2.6 },
+      ratio: { fontSize: 11.2, lineHeight: 5.6, gapAfter: 2.2 },
+      stream: { fontSize: 10.8, lineHeight: 5.4, gapAfter: 2.0 },
+      paragraph: { fontSize: 10.2, lineHeight: LINE, gapAfter: 2.0 },
+    };
+
+    const style = styleByKind[block.kind];
+    doc.setFont("helvetica", block.kind === "paragraph" ? "normal" : "bold");
+    doc.setFontSize(style.fontSize);
+    const lines = doc.splitTextToSize(block.text, maxWidth);
+    return {
+      kind: block.kind,
+      text: block.text,
+      lines,
+      fontSize: style.fontSize,
+      lineHeight: style.lineHeight,
+      gapAfter: style.gapAfter,
+    };
+  });
+}
+
+function measurePdfNarrativeBlocks(blocks: PdfNarrativeBlock[]): number {
+  if (!blocks.length) return 0;
+  return blocks.reduce((height, block, index) => {
+    const blockHeight = block.lines.length * block.lineHeight;
+    const gap = index < blocks.length - 1 ? block.gapAfter : 0;
+    return height + blockHeight + gap;
+  }, 0);
+}
+
 function splitOpportunityWindows(text: string): Array<{ label: string; content: string }> {
   const lines = text
     .split("\n")
@@ -357,6 +462,42 @@ function hasExplicitLossLanguage(text: string): boolean {
   return /\b(verlies|verliest|verliespost|inleveren|machtverlies|afbouw|stopzetten|opheffen|afstoten|be[eë]indig)\b/i.test(
     text
   );
+}
+
+function normalizeHeading(value: string): string {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s_-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractMarkdownSection(markdown: string, headingHints: string[]): string {
+  const source = String(markdown ?? "").trim();
+  if (!source) return "";
+
+  const normalizedHints = headingHints.map((hint) => normalizeHeading(hint));
+  const headingRegex = /^#{1,6}\s*(.+?)\s*$/gm;
+  const matches = [...source.matchAll(headingRegex)];
+
+  for (let index = 0; index < matches.length; index += 1) {
+    const match = matches[index];
+    if (match.index == null) continue;
+
+    const heading = normalizeHeading(match[1] ?? "");
+    const isTarget = normalizedHints.some(
+      (hint) => heading.includes(hint) || hint.includes(heading)
+    );
+    if (!isTarget) continue;
+
+    const start = match.index + match[0].length;
+    const end = matches[index + 1]?.index ?? source.length;
+    const content = source.slice(start, end).replace(/^\n+/, "").trim();
+
+    if (content) return sanitizeReportText(content);
+  }
+
+  return "";
 }
 
 /* ============================================================
@@ -468,6 +609,8 @@ export function generateAureliusPDF(
 
   doc.setFillColor(...COVER_BG);
   doc.rect(0, 0, PAGE.w, PAGE.h, "F");
+  doc.setFillColor(...EXECUTIVE_TITLE);
+  doc.rect(0, 0, PAGE.w, 26, "F");
   drawCoverGrid();
 
   const coverCenterX = PAGE.w / 2;
@@ -482,22 +625,22 @@ export function generateAureliusPDF(
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(43);
-  doc.setTextColor(...GOLD);
+  doc.setTextColor(...EXECUTIVE_TITLE);
   doc.text("CYNTRA", coverCenterX, 124, { align: "center" });
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(16);
-  doc.setTextColor(...WHITE);
+  doc.setTextColor(...GOLD);
   doc.text("INSIGHTS", coverCenterX, 133, { align: "center" });
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(16.8);
-  doc.setTextColor(...WHITE);
+  doc.setTextColor(...EXECUTIVE_TITLE);
   doc.text("STRATEGISCH BESLUITRAPPORT", coverCenterX, 165, { align: "center" });
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(11.2);
-  doc.setTextColor(...WHITE);
+  doc.setTextColor(...EXECUTIVE_TEXT);
   doc.text(`${organizationName} – ${dateLabel}`, coverCenterX, 176, {
     align: "center",
     maxWidth: PAGE.w - M.x * 2,
@@ -517,7 +660,7 @@ export function generateAureliusPDF(
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.8);
-  doc.setTextColor(...WHITE);
+  doc.setTextColor(...EXECUTIVE_MUTED);
   doc.text("Vertrouwelijk – Raad van Bestuur", coverCenterX, PAGE.h - 22, {
     align: "center",
   });
@@ -527,351 +670,227 @@ export function generateAureliusPDF(
 
   newPage();
 
-  /* ================= HGBCO ================= */
-
-  if (report.hgbco) {
-    sectionIndex++;
-    ensure(24);
-    drawSectionHeading(sectionIndex, "HGBCO Besluitkaart");
-    y += 8;
-
-    const hgbcoBody = [
-      ["H — Huidige realiteit", report.hgbco.H],
-      ["G — Gekozen richting", report.hgbco.G],
-      ["B — Belemmeringen", report.hgbco.B.join("\n• ")],
-      ["C — Closure-interventies", report.hgbco.C.join("\n• ")],
-      ["O — Outcome na closure", report.hgbco.O],
-    ];
-
-    // ADD ONLY: Framework-verdieping impliciet in extra rijen.
-    if (report.hgbco.portfolio_analysis) {
-      hgbcoBody.push(["Portfolio-optimalisatie", report.hgbco.portfolio_analysis]);
-    }
-    if (report.hgbco.growth_strategies) {
-      hgbcoBody.push(["Groeipad-evaluatie", report.hgbco.growth_strategies]);
-    }
-    if (report.hgbco.resource_evaluation) {
-      hgbcoBody.push(["Resource-beoordeling", report.hgbco.resource_evaluation]);
-    }
-    if (report.hgbco.internal_external_balance) {
-      hgbcoBody.push(["Interne/externe balans", report.hgbco.internal_external_balance]);
-    }
-    if (report.hgbco.objectives_key_results) {
-      hgbcoBody.push([
-        "Doelstellingen met meetbare resultaten",
-        report.hgbco.objectives_key_results,
-      ]);
-    }
-
-    if (report.hgbco.governance_readiness) {
-      hgbcoBody.push(["Governance-volwassenheid", report.hgbco.governance_readiness]);
-    }
-
-    autoTable(doc, {
-      startY: y,
-      margin: { left: M.x, right: M.x },
-      theme: "grid",
-      styles: {
-        font: "helvetica",
-        fontSize: 8.7,
-        cellPadding: 2.2,
-        textColor: mutableRGB(EXECUTIVE_TEXT),
-        fillColor: mutableRGB(EXECUTIVE_CARD),
-        lineColor: mutableRGB(EXECUTIVE_CARD_BORDER),
-      },
-      headStyles: {
-        fillColor: mutableRGB(SECTION_DIVIDER),
-        textColor: mutableRGB(GOLD),
-        fontStyle: "bold",
-      },
-      alternateRowStyles: {
-        fillColor: mutableRGB([13, 20, 33]),
-      },
-      head: [["Dimensie", "Inhoud"]],
-      body: hgbcoBody,
-      columnStyles: {
-        0: { cellWidth: 48 },
-      },
-    });
-
-    y = ((doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? y) + 10;
-    if (y > PAGE.h - FOOTER_H - 24) newPage();
-  }
-
-  /* ================= INTERVENTIES ================= */
-
-  if (report.interventions) {
-    const rows: string[][] = [];
-
-    if (Array.isArray(report.interventions)) {
-      report.interventions.forEach((x) =>
-        rows.push([
-          String(x.priority),
-          x.title,
-          x.owner,
-          x.deliverable,
-          `${x.deadline_days} dagen`,
-          x.trade_off || "",
-          x.measurable_result || "",
-        ])
-      );
-    }
-
-    if (rows.length > 0) {
-      sectionIndex++;
-      ensure(24);
-      drawSectionHeading(sectionIndex, "Interventieplan");
-      y += 8;
-
-      autoTable(doc, {
-        startY: y,
-        margin: { left: M.x, right: M.x },
-        theme: "grid",
-        styles: {
-          font: "helvetica",
-          fontSize: 8.1,
-          cellPadding: 2,
-          textColor: mutableRGB(EXECUTIVE_TEXT),
-          fillColor: mutableRGB(EXECUTIVE_CARD),
-          lineColor: mutableRGB(EXECUTIVE_CARD_BORDER),
-        },
-        headStyles: {
-          fillColor: mutableRGB(SECTION_DIVIDER),
-          textColor: mutableRGB(GOLD),
-          fontStyle: "bold",
-        },
-        alternateRowStyles: {
-          fillColor: mutableRGB([13, 20, 33]),
-        },
-        head: [
-          [
-            "#",
-            "Interventie",
-            "Owner",
-            "Deliverable",
-            "Deadline",
-            "Trade-off",
-            "Meetbaar resultaat",
-          ],
-        ],
-        body: rows,
-      });
-
-      y = ((doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? y) + 10;
-      if (y > PAGE.h - FOOTER_H - 24) newPage();
-    }
-  }
-
   /* ================= CORE SECTIONS ================= */
 
-  if (report.sections) {
-    const sections = report.sections ?? {};
+  const sections = report.sections ?? {};
+  const markdownSource = sanitizeReportText(
+    report.raw_markdown ||
+      normalize((report as Record<string, unknown>).narrative) ||
+      ""
+  );
 
-    const resolvedSections = EXECUTIVE_SECTION_CATALOG.map((entry) => {
-      const direct = sections[entry.key];
-      if (direct) {
-        return {
-          key: entry.key,
-          title: entry.title,
-          text: normalize(direct.content).trim(),
-        };
-      }
+  const resolvedSections = EXECUTIVE_SECTION_CATALOG.map((entry) => {
+    const direct = sections[entry.key];
+    let text = direct ? normalize(direct.content).trim() : "";
 
+    if (!text) {
       for (const alias of entry.aliases) {
         const aliased = sections[alias];
         if (!aliased) continue;
-        const text = normalize(aliased.content).trim();
-        if (text) {
-          return {
-            key: entry.key,
-            title: entry.title,
-            text,
-          };
-        }
+        text = normalize(aliased.content).trim();
+        if (text) break;
       }
+    }
 
-      return {
-        key: entry.key,
-        title: entry.title,
-        text: "",
-      };
-    }).filter((entry) => entry.text.length > 0);
+    if (!text && markdownSource) {
+      text = extractMarkdownSection(markdownSource, [
+        entry.title,
+        ...entry.aliases,
+      ]);
+    }
 
-    const decisionSection = resolvedSections.find(
-      (entry) => entry.key === "decision_contract"
-    );
-    const regularSections = resolvedSections.filter(
-      (entry) => entry.key !== "decision_contract"
-    );
+    if (!text) {
+      text = EXECUTIVE_SECTION_DEFAULTS[entry.key];
+    }
 
-    for (const section of regularSections) {
-      sectionIndex++;
+    return {
+      key: entry.key,
+      title: entry.title,
+      text: sanitizeReportText(text),
+    };
+  });
 
-      if (section.key === "opportunity_cost") {
-        const windows = splitOpportunityWindows(section.text).map((item) => {
-          const paragraphs = splitIntoReadableParagraphs(item.content, 2, 180);
-          const lineSets = paragraphs.map((paragraph) =>
-            doc.splitTextToSize(paragraph, PAGE.w - M.x * 2 - 16)
-          );
-          const lineCount = lineSets.reduce((count, lines) => count + lines.length, 0);
-          const blockHeight = Math.max(
-            28,
-            10 + lineCount * LINE + Math.max(0, paragraphs.length - 1) * 2.1
-          );
-          return { label: item.label, paragraphs, lineSets, blockHeight };
-        });
+  const decisionSection = resolvedSections.find(
+    (entry) => entry.key === "decision_contract"
+  );
+  const regularSections = resolvedSections.filter(
+    (entry) => entry.key !== "decision_contract"
+  );
 
-        const totalBlocksHeight =
-          windows.reduce((sum, item) => sum + item.blockHeight, 0) +
-          Math.max(0, windows.length - 1) * 5.5;
-        const totalHeight = 10 + totalBlocksHeight + 8;
-        ensure(totalHeight + 16);
+  for (const section of regularSections) {
+    sectionIndex++;
 
-        drawSectionHeading(sectionIndex, section.title);
-        y += 6;
-
-        let blockY = y + 2;
-        windows.forEach((window, index) => {
-          doc.setFillColor(...EXECUTIVE_CARD);
-          doc.setDrawColor(...EXECUTIVE_CARD_BORDER);
-          doc.setLineWidth(0.35);
-          doc.roundedRect(
-            M.x,
-            blockY,
-            PAGE.w - M.x * 2,
-            window.blockHeight,
-            2.6,
-            2.6,
-            "FD"
-          );
-
-          doc.setFont("helvetica", "bold");
-          doc.setFontSize(10.8);
-          doc.setTextColor(...EXECUTIVE_TITLE);
-          doc.text(window.label, M.x + 5, blockY + 7);
-
-          let lineY = blockY + 12;
-          doc.setFont("helvetica", "normal");
-          doc.setFontSize(10.05);
-          window.lineSets.forEach((lines, paragraphIndex) => {
-            lines.forEach((line) => {
-              doc.setTextColor(
-                ...(hasExplicitLossLanguage(line) ? LOSS_TEXT_RED : EXECUTIVE_TEXT)
-              );
-              doc.text(line, M.x + 5, lineY);
-              lineY += LINE;
-            });
-            if (paragraphIndex < window.lineSets.length - 1) {
-              lineY += 1.8;
-            }
-          });
-
-          blockY += window.blockHeight + (index < windows.length - 1 ? 5.5 : 0);
-        });
-
-        y = blockY + 8;
-        continue;
-      }
-
-      const paragraphs = splitIntoReadableParagraphs(section.text, 2, 220);
-      const lineSets = paragraphs.map((paragraph) =>
-        doc.splitTextToSize(paragraph, PAGE.w - M.x * 2 - 16)
-      );
-      const lineCount = lineSets.reduce((count, lines) => count + lines.length, 0);
-      const cardHeight = Math.max(
-        34,
-        10 + lineCount * LINE + Math.max(0, paragraphs.length - 1) * 2.1
-      );
-      ensure(cardHeight + 18);
-
-      drawSectionHeading(sectionIndex, section.title);
-      y += 6;
-
-      doc.setFillColor(...EXECUTIVE_CARD);
-      doc.setDrawColor(...EXECUTIVE_CARD_BORDER);
-      doc.setLineWidth(0.35);
-      doc.roundedRect(
-        M.x,
-        y + 2,
-        PAGE.w - M.x * 2,
-        cardHeight,
-        2.6,
-        2.6,
-        "FD"
-      );
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(10.1);
-
-      let cursorY = y + 9;
-      lineSets.forEach((lines, paragraphIndex) => {
-        lines.forEach((line) => {
-          doc.setTextColor(
-            ...(hasExplicitLossLanguage(line) ? LOSS_TEXT_RED : EXECUTIVE_TEXT)
-          );
-          doc.text(line, M.x + 5, cursorY);
-          cursorY += LINE;
-        });
-        if (paragraphIndex < lineSets.length - 1) {
-          cursorY += 1.9;
-        }
+    if (section.key === "opportunity_cost") {
+      const windows = splitOpportunityWindows(section.text).map((item) => {
+        const paragraphs = splitIntoReadableParagraphs(item.content, 2, 180);
+        const lineSets = paragraphs.map((paragraph) =>
+          doc.splitTextToSize(paragraph, PAGE.w - M.x * 2 - 16)
+        );
+        const lineCount = lineSets.reduce((count, lines) => count + lines.length, 0);
+        const blockHeight = Math.max(
+          30,
+          12 + lineCount * LINE + Math.max(0, paragraphs.length - 1) * 2.4
+        );
+        return { label: item.label, lineSets, blockHeight };
       });
 
-      y += cardHeight + 12;
+      const totalBlocksHeight =
+        windows.reduce((sum, item) => sum + item.blockHeight, 0) +
+        Math.max(0, windows.length - 1) * 7;
+      const totalHeight = 12 + totalBlocksHeight + 10;
+      ensure(totalHeight + 18);
+
+      drawSectionHeading(sectionIndex, section.title);
+      y += 8;
+
+      let blockY = y + 2;
+      windows.forEach((window, index) => {
+        doc.setFillColor(...EXECUTIVE_CARD);
+        doc.setDrawColor(...EXECUTIVE_CARD_BORDER);
+        doc.setLineWidth(0.3);
+        doc.roundedRect(
+          M.x,
+          blockY,
+          PAGE.w - M.x * 2,
+          window.blockHeight,
+          2.8,
+          2.8,
+          "FD"
+        );
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(11.1);
+        doc.setTextColor(...EXECUTIVE_TITLE);
+        doc.text(window.label, M.x + 6, blockY + 8);
+
+        let lineY = blockY + 14;
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10.2);
+        window.lineSets.forEach((lines, paragraphIndex) => {
+          lines.forEach((line) => {
+            doc.setTextColor(
+              ...(hasExplicitLossLanguage(line) ? LOSS_TEXT_RED : EXECUTIVE_TEXT)
+            );
+            doc.text(line, M.x + 6, lineY);
+            lineY += LINE;
+          });
+          if (paragraphIndex < window.lineSets.length - 1) {
+            lineY += 2.1;
+          }
+        });
+
+        blockY += window.blockHeight + (index < windows.length - 1 ? 7 : 0);
+      });
+
+      y = blockY + 10;
+      continue;
     }
 
-    if (decisionSection) {
-      newPage();
-      sectionIndex++;
+    const renderBlocks = buildPdfNarrativeBlocks(
+      doc,
+      section.text,
+      PAGE.w - M.x * 2 - 16
+    );
+    const textHeight = measurePdfNarrativeBlocks(renderBlocks);
+    const cardHeight = Math.max(38, 12 + textHeight);
+    ensure(cardHeight + 20);
 
-      const frameX = M.x - 2;
-      const frameY = HEADER_H + 8;
-      const frameW = PAGE.w - frameX * 2;
-      const frameH = PAGE.h - frameY - FOOTER_H - 6;
-      const framePaddingX = M.x + 4;
-      const frameInnerWidth = frameW - 12;
+    drawSectionHeading(sectionIndex, section.title);
+    y += 8;
 
-      doc.setFillColor(...DECISION_CONTRACT_BG);
-      doc.roundedRect(frameX, frameY, frameW, frameH, 3.2, 3.2, "F");
-      doc.setDrawColor(...DECISION_CONTRACT_BORDER);
-      doc.setLineWidth(DECISION_CONTRACT_BORDER_WIDTH_MM);
-      doc.roundedRect(frameX, frameY, frameW, frameH, 3.2, 3.2, "S");
+    doc.setFillColor(...EXECUTIVE_CARD);
+    doc.setDrawColor(...EXECUTIVE_CARD_BORDER);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(
+      M.x,
+      y + 2,
+      PAGE.w - M.x * 2,
+      cardHeight,
+      2.8,
+      2.8,
+      "FD"
+    );
 
-      doc.setDrawColor(...SECTION_DIVIDER);
-      doc.setLineWidth(0.35);
-      doc.line(framePaddingX, frameY + 8.5, PAGE.w - framePaddingX, frameY + 8.5);
+    let cursorY = y + 10;
+    renderBlocks.forEach((block, blockIndex) => {
+      doc.setFont("helvetica", block.kind === "paragraph" ? "normal" : "bold");
+      doc.setFontSize(block.fontSize);
+      block.lines.forEach((line) => {
+        const isHeading = block.kind !== "paragraph";
+        const color = isHeading
+          ? EXECUTIVE_TITLE
+          : hasExplicitLossLanguage(line)
+          ? LOSS_TEXT_RED
+          : EXECUTIVE_TEXT;
+        doc.setTextColor(...color);
+        doc.text(line, M.x + 6, cursorY);
+        cursorY += block.lineHeight;
+      });
+      if (blockIndex < renderBlocks.length - 1) {
+        cursorY += block.gapAfter;
+      }
+    });
+    resetBodyFont(doc);
 
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(14.2);
-      doc.setTextColor(...WHITE);
-      doc.text(`${sectionIndex}. ${decisionSection.title}`, framePaddingX, frameY + 6.2);
+    y += cardHeight + 13;
+  }
 
-      const decisionParagraphs = splitIntoReadableParagraphs(decisionSection.text, 2, 220);
-      const decisionLineSets = decisionParagraphs.map((paragraph) =>
-        doc.splitTextToSize(paragraph, frameInnerWidth - 2)
-      );
+  if (decisionSection) {
+    newPage();
+    sectionIndex++;
 
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(10.1);
+    const frameX = M.x - 2;
+    const frameY = HEADER_H + 8;
+    const frameW = PAGE.w - frameX * 2;
+    const frameH = PAGE.h - frameY - FOOTER_H - 6;
+    const framePaddingX = M.x + 4;
+    const frameInnerWidth = frameW - 12;
 
-      let decisionY = frameY + 15;
-      for (let i = 0; i < decisionLineSets.length; i += 1) {
-        const lines = decisionLineSets[i];
-        for (const line of lines) {
-          if (decisionY > frameY + frameH - 8) break;
-          doc.setTextColor(
-            ...(hasExplicitLossLanguage(line) ? LOSS_TEXT_RED : WHITE)
-          );
-          doc.text(line, framePaddingX, decisionY);
-          decisionY += LINE;
-        }
+    doc.setFillColor(...DECISION_CONTRACT_BG);
+    doc.roundedRect(frameX, frameY, frameW, frameH, 3.2, 3.2, "F");
+    doc.setDrawColor(...DECISION_CONTRACT_BORDER);
+    doc.setLineWidth(DECISION_CONTRACT_BORDER_WIDTH_MM);
+    doc.roundedRect(frameX, frameY, frameW, frameH, 3.2, 3.2, "S");
 
+    doc.setDrawColor(...SECTION_DIVIDER);
+    doc.setLineWidth(0.35);
+    doc.line(framePaddingX, frameY + 8.5, PAGE.w - framePaddingX, frameY + 8.5);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14.2);
+    doc.setTextColor(...EXECUTIVE_TITLE);
+    doc.text(`${sectionIndex}. ${decisionSection.title}`, framePaddingX, frameY + 6.2);
+
+    const decisionBlocks = buildPdfNarrativeBlocks(
+      doc,
+      decisionSection.text,
+      frameInnerWidth - 2
+    );
+
+    let decisionY = frameY + 15;
+    for (let i = 0; i < decisionBlocks.length; i += 1) {
+      const block = decisionBlocks[i];
+      doc.setFont("helvetica", block.kind === "paragraph" ? "normal" : "bold");
+      doc.setFontSize(block.fontSize);
+      for (const line of block.lines) {
         if (decisionY > frameY + frameH - 8) break;
-        if (i < decisionLineSets.length - 1) {
-          decisionY += 2;
-        }
+        const isHeading = block.kind !== "paragraph";
+        const color = isHeading
+          ? EXECUTIVE_TITLE
+          : hasExplicitLossLanguage(line)
+          ? LOSS_TEXT_RED
+          : EXECUTIVE_TEXT;
+        doc.setTextColor(...color);
+        doc.text(line, framePaddingX, decisionY);
+        decisionY += block.lineHeight;
+      }
+
+      if (decisionY > frameY + frameH - 8) break;
+      if (i < decisionBlocks.length - 1) {
+        decisionY += block.gapAfter;
       }
     }
+    resetBodyFont(doc);
   }
 
   doc.save(`${company.replace(/[^\w]+/g, "_")}_Aurelius_Report.pdf`);

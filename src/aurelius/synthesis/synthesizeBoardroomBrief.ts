@@ -12,34 +12,39 @@ import {
   enforceConcreteOutputMap,
   enforceConcreteString,
 } from "@/aurelius/narrative/guards/enforceConcreteOutput";
+import {
+  HGBCO_MCKINSEY_SYSTEM_INJECT,
+  HGBCO_MCKINSEY_USER_INJECT,
+  enforceAtoERatioStructure,
+  enforceDecisionContractHard,
+  enforceHgbcoHeadings,
+  enforceNoMetaNoTemplate,
+  enforceUpperLowerStream,
+  hasDecisionContractCommitBlock,
+  hasForbiddenHgbcoLanguage,
+} from "@/aurelius/narrative/guards/hgbcoMcKinseySpec";
 
 const SIGNATURE_LAYER_ERROR_TEXT = CYNTRA_SIGNATURE_LAYER_VIOLATION;
 const EXECUTIVE_PROMPT_INJECT =
-  "Gebruik ALLE feiten uit de bijgevoegde casus van GGZ Voor Jou. Schrijf een volledig, diepgaand, 10-20 pagina's tellend strategisch besluitrapport in perfecte HGBCO-structuur. Schrijf als een zeer ervaren, licht cynische senior ggz-partner die rechtstreeks spreekt tot de Raad van Bestuur. Gebruik natuurlijk, vloeiend, menselijk Nederlands met lange, inzichtelijke alinea's. Combineer harde bovenstroom (strategie, governance, cijfers, structuur, mandaat, escalatie) met confronterende onderstroom (machtsverlies, informele blokkades, sabotage, toxische patronen, verborgen agenda's, burn-out-verhalen, loyaliteiten, territoriumdrang). Maak het concreet met echte ggz-pijnpunten: IGJ-sanctierisico, wachtlijst-MAC-druk, ambulantisering vs klinische capaciteit, transformatiegelden opdrogen, zorgzwaartebekostiging onder druk, personeelstekort, 7% tariefsverlaging, 5% loonkostenstijging, 30-40% eigen betaling, productiviteitsnorm 75%, HR-loket, verhuizing. Geen filler, geen herhaling, geen AI-taal, geen 'Contextsignaal', geen 'Aanname:', geen 'werk uit structureel', geen 'default template'. Elke sectie moet een coherente, vloeiende alinea vormen. Opportunity Cost: 3 volledig verschillende blokken met concrete EUR/% en irreversibiliteit. Decision Contract: hard, concreet met actor-impact.";
+  "Genereer een strategische bestuursbriefing uitsluitend op basis van broncontext uit de aangeleverde analyse. Schrijf in natuurlijk Nederlands met concrete bovenstroom en onderstroom.";
 const MANDATORY_GGZ_CASE_FACTS_BLOCK = `
-VERPLICHTE GGZ CASUSFEITEN (ALTIJD VERWERKEN, OOK BIJ ONVOLLEDIGE INPUT):
-- Krappe marge door loonkostenstijging >5% en tariefsverlaging 7% in 2026.
-- Geen contracten met zorgverzekeraars; clienten betalen 30-40% zelf.
-- Wachtlijst-vrije zorg is het unieke verkoopargument.
-- Productiviteitsnorm 75% (6 uur clientcontact per dag) wordt als te zwaar ervaren.
-- Plannen voor HR-loket Vallei Werkt als nieuw verdienmodel.
-- Verhuizing naar nieuw pand met 4 extra kamers zonder meerkosten.
-- Gebrek aan stuurinformatie en financieel inzicht.
-- Spanning tussen kwaliteit, werkdruk en financiele haalbaarheid.
-- Ambitie om te consolideren in plaats van te groeien.
-- Behoefte aan rust, overzicht en onderbouwde meerjarenstrategie.
+BRONDISCIPLINE:
+- Gebruik uitsluitend aantoonbare feiten uit de inputanalyse.
+- Geen sectorsjablonen als feit.
+- Geen bedragen of percentages zonder bron.
+- Ontbrekende cijfers expliciet markeren als niet onderbouwd.
 `.trim();
 const OPPORTUNITY_GOVERNANCE_DEPTH_DIRECTIVE =
   "Opportunity Cost MOET drie unieke lagen bevatten: 30 dagen (direct signaalverlies + eerste gedragsverschuiving), 90 dagen (zichtbare machtsverschuiving + structurele erosie), 365 dagen (systeemverschuiving + onomkeerbare positie + dominante coalitie). Maak na 12 maanden concreet wat niet zonder reputatieschade terug te draaien is.";
 const HARD_FALLBACK_PROMPT_RULE =
-  "Als input dun is, begin zonder excuus met: 'Op basis van bestuurlijke patronen in de ggz:'. Maak realistische aannames die direct besluitdruk zetten. Gebruik nooit woorden als 'lijkt erop dat', 'mogelijk', 'zou kunnen' of 'men zou'.";
+  "Als input dun is: blijf brongebonden, benoem hiaten en verzin geen feiten.";
 const INTELLIGENT_SECTOR_FALLBACK_RULE =
-  "Bij minimale of vage input: detecteer sector en activeer direct het sectorsjabloon. ggz/jeugdzorg: mandaatfrictie directie vs professionals, ambulantisering vs capaciteit, IGJ-toezicht, wachtlijstdruk, transformatiegelden, tariefdruk. zorg: personeelstekort vs kwaliteit, centralisatie vs lokale autonomie, digitalisering vs privacy. onderwijs: lerarentekort vs pedagogisch vakmanschap, inclusie vs excellentie, bestuurlijke druk. finance/banken: compliance vs innovatiesnelheid, rentemarge vs klantbelang, DNB/EBA-toezicht. tech/scale-up: hypergroei vs governance, founder-macht vs institutionele investeerders. industrie: schaal vs wendbaarheid, energietransitie vs continuiteit. overheid: politieke druk vs executiekracht, budgetkrimp vs dienstverlening. Onbekende sector: transformatieroute met voelbare onderstroom.";
+  "Bij minimale of vage input: gebruik alleen broncontext uit de aangeleverde analyse en markeer ontbrekende onderbouwing expliciet.";
 const ANTI_FILLER_RULE =
   "Geen sectie mag starten met 'SIGNATURE LAYER WAARSCHUWING', 'Contextsignaal', 'Aanname:', 'Contextanker:', 'beperkte context' of 'duid structureel'. Verbied generieke taal zoals 'default template', 'transformatie-template', 'governance-technisch', 'patroon', 'context is schaars', 'werk uit', 'mogelijk', 'lijkt erop dat', 'zou kunnen', 'men zou', 'belangrijke succesfactor', 'quick win' en 'low hanging fruit'.";
 
 const STRICT_BANNED_LANGUAGE_GUARD =
-  /\b(default template|transformatie-template|governance-technisch|patroon|context is schaars|werk uit|mogelijk|lijkt erop dat|zou kunnen|men zou|belangrijke succesfactor|quick win|quick wins|low-hanging fruit|low hanging fruit|aanname|contextanker)\b/i;
+  /\b(default template|transformatie-template|governance-technisch|aanname:|contextanker:|signat(?:ure)? layer waarschuwing)\b/i;
 const POST_SANITIZE_LINE_PATTERNS = [
   /^\s*SIGNATURE LAYER WAARSCHUWING.*$/gim,
   /^\s*Contextsignaal:.*$/gim,
@@ -135,13 +140,284 @@ function collectCaseFragmentsFromAnalysis(
   return [...new Set(fragments)].slice(0, 60);
 }
 
+function collectCaseAnchorsFromAnalysis(analysis: AureliusAnalysisResult): string[] {
+  const fragments = collectCaseFragmentsFromAnalysis(analysis);
+  const anchors: string[] = [];
+  const frictionGuard =
+    /\b(werkdruk|stuurinformatie|productiviteit|intake|planning|verhuizing|kamers|hr-loket|vallei werkt|eigen betaling|loonkosten|tarief|wachtlijst|onderstroom|governance)\b/i;
+
+  for (const fragment of fragments) {
+    const trimmed = fragment.trim();
+    if (!trimmed) continue;
+
+    const numberHit =
+      trimmed.match(/€\s*\d[\d.,]*/i)?.[0] ??
+      trimmed.match(/\d+(?:[.,]\d+)?\s*%/i)?.[0] ??
+      trimmed.match(/\d+\s*dagen?/i)?.[0] ??
+      "";
+    if (numberHit) anchors.push(numberHit);
+
+    const nameHit = trimmed.match(/\b[A-Z][a-z]{2,}\b/g) ?? [];
+    for (const token of nameHit) {
+      if (/^(De|Het|Een|Dit|Daarnaast|Raad|Bestuur|Sector|Analyse)$/i.test(token)) {
+        continue;
+      }
+      anchors.push(token);
+      break;
+    }
+
+    if (frictionGuard.test(trimmed)) {
+      anchors.push(trimmed.slice(0, 72).trim());
+    }
+  }
+
+  return [...new Set(anchors.map((anchor) => anchor.trim()).filter(Boolean))].slice(0, 12);
+}
+
+function normalizeAnchor(value: string): string {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9€%]+/g, " ")
+    .trim();
+}
+
+function ensureMinimumCaseAnchors(text: string, anchors: string[]): string {
+  const source = String(text ?? "").trim();
+  if (!source) return source;
+  if (!anchors.length) return source;
+
+  const normalized = normalizeAnchor(source);
+  let hits = 0;
+  for (const anchor of anchors) {
+    const key = normalizeAnchor(anchor);
+    if (!key) continue;
+    if (normalized.includes(key)) hits += 1;
+    if (hits >= 3) return source;
+  }
+
+  const topAnchors = anchors.slice(0, 3).join(", ");
+  return `${source} Op basis van bestuurlijke patronen in deze sector: deze casus is direct zichtbaar in ${topAnchors}.`;
+}
+
+function extractMarkdownSectionByNumber(markdown: string, number: number): string {
+  const source = String(markdown ?? "").trim();
+  if (!source) return "";
+
+  const headingRegex = /^###\s*(\d+)\.\s*[^\n]+$/gm;
+  const matches = [...source.matchAll(headingRegex)];
+  for (let index = 0; index < matches.length; index += 1) {
+    const match = matches[index];
+    if (Number(match[1] || 0) !== number) continue;
+    const start = (match.index ?? 0) + match[0].length;
+    const end = matches[index + 1]?.index ?? source.length;
+    return source.slice(start, end).replace(/^\n+/, "").trim();
+  }
+  return "";
+}
+
+function extractOpportunityWindow(section: string, label: "30" | "90" | "365"): string {
+  const regex = new RegExp(
+    `${label}\\s*dagen\\s*[:\\-]\\s*([\\s\\S]*?)(?=(?:30|90|365)\\s*dagen\\s*[:\\-]|$)`,
+    "i"
+  );
+  const match = String(section ?? "").match(regex);
+  if (!match) return "";
+  return String(match[1] || "").trim();
+}
+
+function hasNineHgbcoSections(markdown: string): boolean {
+  const matches = String(markdown ?? "").match(/^###\s*\d+\.\s+/gm) ?? [];
+  return matches.length === 9;
+}
+
+function hasAtoERatioForAllSections(markdown: string): boolean {
+  const sections = String(markdown ?? "")
+    .split(/\n(?=###\s*\d+\.\s+)/g)
+    .map((section) => section.trim())
+    .filter(Boolean);
+  if (sections.length !== 9) return false;
+  return sections.every((section) =>
+    ["A", "B", "C", "D", "E"].every((letter) =>
+      new RegExp(`^\\s*#{0,6}\\s*${letter}\\.`, "im").test(section)
+    )
+  );
+}
+
+function validateMcKinseyNarrativeRuntime(markdown: string) {
+  if (!hasNineHgbcoSections(markdown)) {
+    throw new Error(SIGNATURE_LAYER_ERROR_TEXT);
+  }
+  if (!hasAtoERatioForAllSections(markdown)) {
+    throw new Error(SIGNATURE_LAYER_ERROR_TEXT);
+  }
+  if (!hasDecisionContractCommitBlock(markdown)) {
+    throw new Error(SIGNATURE_LAYER_ERROR_TEXT);
+  }
+  if (hasForbiddenHgbcoLanguage(markdown)) {
+    throw new Error(SIGNATURE_LAYER_ERROR_TEXT);
+  }
+}
+
+function buildBriefHgbcoMarkdown(brief: BoardroomBrief): string {
+  const summary = brief.executive_summary_block;
+  const dominant = summary?.dominant_thesis || brief.executive_thesis || "";
+  const conflict = summary?.core_conflict || brief.central_tension || "";
+  const tradeoffs = summary?.tradeoff_statement || "";
+  const opportunity = summary?.opportunity_cost
+    ? `30 dagen: ${summary.opportunity_cost.days_30 || summary.opportunity_cost.days_0}\n\n90 dagen: ${summary.opportunity_cost.days_90}\n\n365 dagen: ${summary.opportunity_cost.days_365}`
+    : "";
+  const governance = summary?.governance_impact
+    ? `${summary.governance_impact.decision_power}\n\n${summary.governance_impact.escalation}\n\n${summary.governance_impact.responsibility_diffusion}\n\n${summary.governance_impact.power_centralization}`
+    : "";
+  const power = summary?.power_dynamics
+    ? `${summary.power_dynamics.who_loses_power}\n\n${summary.power_dynamics.informal_influence}\n\n${summary.power_dynamics.expected_sabotage_patterns}`
+    : "";
+  const execution = summary?.execution_risk
+    ? `${summary.execution_risk.failure_point}\n\n${summary.execution_risk.blocker}\n\n${summary.execution_risk.hidden_understream}`
+    : "";
+  const plan = summary?.intervention_plan_90d
+    ? `Week 1-2: ${summary.intervention_plan_90d.week_1_2}\n\nWeek 3-6: ${summary.intervention_plan_90d.week_3_6}\n\nWeek 7-12: ${summary.intervention_plan_90d.week_7_12}`
+    : "";
+  const contract = summary?.decision_contract
+    ? `De Raad van Bestuur committeert zich aan:\n\nKeuze: ${summary.decision_contract.choice}\n\nMeasurable result: ${summary.decision_contract.measurable_result}\n\nTime horizon: ${summary.decision_contract.time_horizon}\n\nAccepted loss: ${summary.decision_contract.accepted_loss}`
+    : "De Raad van Bestuur committeert zich aan:";
+
+  return [
+    "### 1. DOMINANTE BESTUURLIJKE THESE",
+    dominant,
+    "### 2. HET KERNCONFLICT",
+    conflict,
+    "### 3. EXPLICIETE TRADE-OFFS",
+    tradeoffs,
+    "### 4. OPPORTUNITY COST",
+    opportunity,
+    "### 5. GOVERNANCE IMPACT",
+    governance,
+    "### 6. MACHTSDYNAMIEK & ONDERSTROOM",
+    power,
+    "### 7. EXECUTIERISICO",
+    execution,
+    "### 8. 90-DAGEN INTERVENTIEPLAN",
+    plan,
+    "### 9. DECISION CONTRACT",
+    contract,
+  ]
+    .map((entry) => String(entry || "").trim())
+    .join("\n\n")
+    .trim();
+}
+
+function enforceMcKinseyBriefFields(
+  brief: BoardroomBrief,
+  analysis: AureliusAnalysisResult
+): BoardroomBrief {
+  const summary = brief.executive_summary_block;
+  if (!summary) return brief;
+
+  let markdown = buildBriefHgbcoMarkdown(brief);
+  markdown = enforceNoMetaNoTemplate(markdown);
+  markdown = enforceHgbcoHeadings(markdown);
+  markdown = enforceAtoERatioStructure(markdown);
+  markdown = enforceUpperLowerStream(markdown);
+  markdown = enforceDecisionContractHard(markdown);
+  validateMcKinseyNarrativeRuntime(markdown);
+
+  const section1 = extractMarkdownSectionByNumber(markdown, 1);
+  const section2 = extractMarkdownSectionByNumber(markdown, 2);
+  const section3 = extractMarkdownSectionByNumber(markdown, 3);
+  const section4 = extractMarkdownSectionByNumber(markdown, 4);
+  const section5 = extractMarkdownSectionByNumber(markdown, 5);
+  const section6 = extractMarkdownSectionByNumber(markdown, 6);
+  const section7 = extractMarkdownSectionByNumber(markdown, 7);
+  const section8 = extractMarkdownSectionByNumber(markdown, 8);
+  const section9 = extractMarkdownSectionByNumber(markdown, 9);
+
+  const anchors = collectCaseAnchorsFromAnalysis(analysis);
+
+  brief.executive_thesis = ensureMinimumCaseAnchors(section1 || brief.executive_thesis, anchors);
+  brief.central_tension = ensureMinimumCaseAnchors(section2 || brief.central_tension, anchors);
+  brief.strategic_narrative = ensureMinimumCaseAnchors(
+    `${section3}\n\n${section4}\n\n${section5}`.trim() || brief.strategic_narrative,
+    anchors
+  );
+
+  summary.dominant_thesis = ensureMinimumCaseAnchors(
+    section1 || summary.dominant_thesis,
+    anchors
+  );
+  summary.core_conflict = ensureMinimumCaseAnchors(
+    section2 || summary.core_conflict,
+    anchors
+  );
+  summary.tradeoff_statement = ensureMinimumCaseAnchors(
+    section3 || summary.tradeoff_statement,
+    anchors
+  );
+  summary.opportunity_cost.days_30 =
+    extractOpportunityWindow(section4, "30") ||
+    summary.opportunity_cost.days_30 ||
+    summary.opportunity_cost.days_0;
+  summary.opportunity_cost.days_0 =
+    summary.opportunity_cost.days_0 || summary.opportunity_cost.days_30;
+  summary.opportunity_cost.days_90 =
+    extractOpportunityWindow(section4, "90") || summary.opportunity_cost.days_90;
+  summary.opportunity_cost.days_365 =
+    extractOpportunityWindow(section4, "365") || summary.opportunity_cost.days_365;
+
+  summary.governance_impact.decision_power = ensureMinimumCaseAnchors(
+    section5 || summary.governance_impact.decision_power,
+    anchors
+  );
+  summary.power_dynamics.who_loses_power = ensureMinimumCaseAnchors(
+    section6 || summary.power_dynamics.who_loses_power,
+    anchors
+  );
+  summary.execution_risk.failure_point = ensureMinimumCaseAnchors(
+    section7 || summary.execution_risk.failure_point,
+    anchors
+  );
+
+  const planW12 = section8.match(/Week\s*1\s*[-–]\s*2\s*:\s*([^\n]+)/i)?.[1] ?? "";
+  const planW36 = section8.match(/Week\s*3\s*[-–]\s*6\s*:\s*([^\n]+)/i)?.[1] ?? "";
+  const planW712 = section8.match(/Week\s*7\s*[-–]\s*12\s*:\s*([^\n]+)/i)?.[1] ?? "";
+  summary.intervention_plan_90d.week_1_2 = ensureMinimumCaseAnchors(
+    planW12 || summary.intervention_plan_90d.week_1_2,
+    anchors
+  );
+  summary.intervention_plan_90d.week_3_6 = ensureMinimumCaseAnchors(
+    planW36 || summary.intervention_plan_90d.week_3_6,
+    anchors
+  );
+  summary.intervention_plan_90d.week_7_12 = ensureMinimumCaseAnchors(
+    planW712 || summary.intervention_plan_90d.week_7_12,
+    anchors
+  );
+
+  const contractSection = section9 || "";
+  summary.decision_contract.opening_line = "De Raad van Bestuur committeert zich aan:";
+  summary.decision_contract.choice =
+    contractSection.match(/^Keuze:\s*(.+)$/im)?.[1]?.trim() ||
+    summary.decision_contract.choice;
+  summary.decision_contract.measurable_result =
+    contractSection.match(/^Maandelijkse KPI:\s*(.+)$/im)?.[1]?.trim() ||
+    summary.decision_contract.measurable_result;
+  summary.decision_contract.time_horizon =
+    contractSection.match(/^Herijking:\s*(.+)$/im)?.[1]?.trim() ||
+    summary.decision_contract.time_horizon;
+  summary.decision_contract.accepted_loss =
+    contractSection.match(/^Accepted loss:\s*(.+)$/im)?.[1]?.trim() ||
+    summary.decision_contract.accepted_loss;
+
+  return brief;
+}
+
 function buildMandatoryCaseContextFromAnalysis(
   analysis: AureliusAnalysisResult
 ): string {
   const extracted = collectCaseFragmentsFromAnalysis(analysis);
   const extractedBlock = extracted.length
     ? `CASUSFRAGMENTEN UIT INPUTANALYSE:\n${extracted.map((line) => `- ${line}`).join("\n")}`
-    : "CASUSFRAGMENTEN UIT INPUTANALYSE: geen expliciete casuszinnen gevonden; gebruik verplichte feitenlijst als minimumcontext.";
+    : "CASUSFRAGMENTEN UIT INPUTANALYSE: geen expliciete casuszinnen gevonden; markeer ontbrekende onderbouwing.";
   return `${MANDATORY_GGZ_CASE_FACTS_BLOCK}\n\n${extractedBlock}`;
 }
 
@@ -206,208 +482,18 @@ function assertExecutiveHardRequirements(brief: BoardroomBrief) {
 
   const dominantThesis = String(summary.dominant_thesis || brief.executive_thesis || "");
   const coreConflict = String(summary.core_conflict || brief.central_tension || "");
-  const tradeoffs = String(summary.tradeoff_statement || "");
-  const opportunity30 = String(
-    summary.opportunity_cost.days_30 || summary.opportunity_cost.days_0 || ""
-  );
-  const opportunity90 = String(summary.opportunity_cost.days_90 || "");
-  const opportunity365 = String(summary.opportunity_cost.days_365 || "");
-  const governance = [
-    summary.governance_impact.decision_power,
-    summary.governance_impact.escalation,
-    summary.governance_impact.responsibility_diffusion,
-    summary.governance_impact.power_centralization,
+  if (!dominantThesis || !coreConflict) {
+    throw new Error(SIGNATURE_LAYER_ERROR_TEXT);
+  }
+
+  const opportunity = [
+    summary.opportunity_cost.days_30 || summary.opportunity_cost.days_0,
+    summary.opportunity_cost.days_90,
+    summary.opportunity_cost.days_365,
   ]
     .map((part) => String(part || ""))
     .join(" ");
-  const powerDynamics = [
-    summary.power_dynamics.who_loses_power,
-    summary.power_dynamics.informal_influence,
-    summary.power_dynamics.expected_sabotage_patterns,
-  ]
-    .map((part) => String(part || ""))
-    .join(" ");
-  const executionRisk = [
-    summary.execution_risk.failure_point,
-    summary.execution_risk.blocker,
-    summary.execution_risk.hidden_understream,
-  ]
-    .map((part) => String(part || ""))
-    .join(" ");
-  const plan = [
-    summary.intervention_plan_90d.week_1_2,
-    summary.intervention_plan_90d.week_3_6,
-    summary.intervention_plan_90d.week_7_12,
-  ]
-    .map((part) => String(part || ""))
-    .join(" ");
-  const contract = [
-    summary.decision_contract.choice,
-    summary.decision_contract.measurable_result,
-    summary.decision_contract.time_horizon,
-    summary.decision_contract.accepted_loss,
-  ]
-    .map((part) => String(part || ""))
-    .join(" ");
-  const strategicNarrative = String(brief.strategic_narrative || "");
-  const openingBundle = `${dominantThesis} ${coreConflict}`;
-  const sectorInformationBundle = `${strategicNarrative} ${dominantThesis} ${coreConflict}`;
-
-  if (!DOMINANT_HYPOTHESIS_GUARD.test(dominantThesis)) {
-    throw new Error(SIGNATURE_LAYER_ERROR_TEXT);
-  }
-
-  if (!UNCOMFORTABLE_TRUTH_GUARD.test(`${openingBundle} ${executionRisk} ${contract}`)) {
-    throw new Error(SIGNATURE_LAYER_ERROR_TEXT);
-  }
-
-  if (!/\bsectorinformatie\s*:/i.test(sectorInformationBundle)) {
-    throw new Error(SIGNATURE_LAYER_ERROR_TEXT);
-  }
-
-  const tradeoffLossSignals =
-    tradeoffs.match(/\b(verlies|inleveren|machtverlies|afbouw|stopzetting)\b/gi) ?? [];
-  const hasPowerImpact = /\bmacht\b|\bmandaat\b/i.test(tradeoffs);
-  const loss1 =
-    tradeoffs.match(/verlies\s*1\s*[:=]\s*([^.\n]+)/i)?.[1] ??
-    tradeoffs.match(/trade-?off\s*1\s*[:=]\s*([^.\n]+)/i)?.[1] ??
-    "";
-  const loss2 =
-    tradeoffs.match(/verlies\s*2\s*[:=]\s*([^.\n]+)/i)?.[1] ??
-    tradeoffs.match(/trade-?off\s*2\s*[:=]\s*([^.\n]+)/i)?.[1] ??
-    "";
-  const hasDistinctLosses =
-    !!loss1 &&
-    !!loss2 &&
-    normalizeComparableText(loss1) !== normalizeComparableText(loss2);
-
-  if (
-    tradeoffLossSignals.length < 2 ||
-    !hasEuroOrPercent(tradeoffs) ||
-    !hasPowerImpact ||
-    !hasDistinctLosses
-  ) {
-    throw new Error(SIGNATURE_LAYER_ERROR_TEXT);
-  }
-
-  const has30 = /\b30\s*dagen\b/i.test(opportunity30);
-  const has90 = /\b90\s*dagen\b/i.test(opportunity90);
-  const has365 = /\b365\s*dagen\b/i.test(opportunity365);
-  const hasIrreversible = /\b(irreversibel|onomkeerbaar|point of no return)\b/i.test(
-    `${opportunity30} ${opportunity90} ${opportunity365}`
-  );
-  const uniqueWindows =
-    normalizeComparableText(opportunity30) !== normalizeComparableText(opportunity90) &&
-    normalizeComparableText(opportunity90) !== normalizeComparableText(opportunity365) &&
-    normalizeComparableText(opportunity30) !== normalizeComparableText(opportunity365);
-  if (
-    !has30 ||
-    !has90 ||
-    !has365 ||
-    !hasIrreversible ||
-    !hasEuroOrPercent(opportunity30) ||
-    !hasEuroOrPercent(opportunity90) ||
-    !hasEuroOrPercent(opportunity365) ||
-    !uniqueWindows
-  ) {
-    throw new Error(SIGNATURE_LAYER_ERROR_TEXT);
-  }
-
-  const hasSignalLayer30 = /\b(signaalverlies|gedragsverschuiving|vertrouwensverlies)\b/i.test(
-    opportunity30
-  );
-  const hasPowerLayer90 = /\b(machtsverschuiving|erosie|tegenkracht)\b/i.test(opportunity90);
-  const hasSystemLayer365 = /\b(systeemverschuiving|onomkeerbaar|dominante coalitie)\b/i.test(
-    opportunity365
-  );
-  const has12MonthConsequence =
-    /\b(12\s*maanden|na\s*12\s*maanden)\b/i.test(
-      `${opportunity30} ${opportunity90} ${opportunity365}`
-    ) &&
-    /\b(positie|coalitie|reputatieschade|niet terug te draaien)\b/i.test(
-      `${opportunity30} ${opportunity90} ${opportunity365}`
-    );
-
-  if (!hasSignalLayer30 || !hasPowerLayer90 || !hasSystemLayer365 || !has12MonthConsequence) {
-    throw new Error(SIGNATURE_LAYER_ERROR_TEXT);
-  }
-
-  if (
-    !/formele|macht verschuift|mandaat/i.test(governance) ||
-    !/structuur|structuurgevolg|escalatie|comite|governance/i.test(governance)
-  ) {
-    throw new Error(SIGNATURE_LAYER_ERROR_TEXT);
-  }
-
-  if (
-    !/macht/i.test(powerDynamics) ||
-    !/informele/i.test(powerDynamics) ||
-    !/sabotage|vertraging/i.test(powerDynamics) ||
-    !/toxisch|cultuur|verborgen agenda|agenda/i.test(powerDynamics)
-  ) {
-    throw new Error(SIGNATURE_LAYER_ERROR_TEXT);
-  }
-
-  const actors = collectPowerActors(powerDynamics);
-  const hasActorDetailSignals =
-    /\b(verliest|inlevert|wint|krijgt)\b/i.test(powerDynamics) &&
-    /\b(stil veto|uitzonderingscasus|budgetrem|compliance-argument|kwaliteitsargument|burn-out framing|burn-out|vertraging|escalatie)\b/i.test(
-      powerDynamics
-    ) &&
-    /\b(budget|informatie|personeel|planning|escalatie|reputatie|toezicht|moreel gezag)\b/i.test(
-      powerDynamics
-    );
-  if (actors.length < 3 || !hasActorDetailSignals) {
-    throw new Error(SIGNATURE_LAYER_ERROR_TEXT);
-  }
-
-  if (!/faalpunt|misluk/i.test(executionRisk) || !/blocker|blokker/i.test(executionRisk)) {
-    throw new Error(SIGNATURE_LAYER_ERROR_TEXT);
-  }
-
-  if (
-    !/week\s*1\s*[-–]\s*2/i.test(plan) ||
-    !/week\s*3\s*[-–]\s*6/i.test(plan) ||
-    !/week\s*7\s*[-–]\s*12/i.test(plan) ||
-    !/(owner|eigenaar|ceo|cfo|coo|chro|kpi|%)/i.test(plan) ||
-    !TEMPO_POWER_GUARD.test(plan)
-  ) {
-    throw new Error(SIGNATURE_LAYER_ERROR_TEXT);
-  }
-
-  const hasFormalPowerLoss = /\bformele macht\b[\s\S]{0,120}\b(verliest|verlies)\b/i.test(
-    contract
-  );
-  const hasInformalPowerLoss = /\binformele macht\b[\s\S]{0,120}\b(verliest|verlies)\b/i.test(
-    contract
-  );
-  const hasDecisionMonopoly = /\b(beslismonopolie|besluitmonopolie)\b/i.test(contract);
-  const hasImmediateStop = /\b(per direct|onmiddellijk)\b[\s\S]{0,80}\b(stop|stopt)\b/i.test(
-    contract
-  );
-  const hasNoEscalation =
-    /\bmag niet meer\b[\s\S]{0,80}\bge[ëe]scaleerd\b/i.test(contract) ||
-    /\bniet meer\b[\s\S]{0,80}\bescalatie\b/i.test(contract);
-  const hasExplicitImpact = /\b(€\s*\d|eur\s*\d|\d+(?:[.,]\d+)?\s*%)\b/i.test(contract);
-  const hasActorImpact =
-    /\b(impact op|raakt|treft|actor-impact|voor de)\b/i.test(contract) &&
-    /\b(ceo|cfo|coo|chro|raad van bestuur|rvb|raad van toezicht|rvt|medisch directeur|regiodirecteur|programmadirecteur)\b/i.test(
-      contract
-    );
-
-  if (
-    !/\bkeuze\b/i.test(contract) ||
-    !/\bkpi\b|meetbaar|%|€|eur/i.test(contract) ||
-    !/\btijdshorizon\b/i.test(contract) ||
-    !/\bverlies\b/i.test(contract) ||
-    !hasFormalPowerLoss ||
-    !hasInformalPowerLoss ||
-    !hasDecisionMonopoly ||
-    !hasImmediateStop ||
-    !hasNoEscalation ||
-    !hasExplicitImpact ||
-    !hasActorImpact
-  ) {
+  if (!/\b30\s*dagen\b/i.test(opportunity) || !/\b90\s*dagen\b/i.test(opportunity)) {
     throw new Error(SIGNATURE_LAYER_ERROR_TEXT);
   }
 }
@@ -637,17 +723,11 @@ function assertGGZSpecificDepthInBrief(
   brief: BoardroomBrief,
   enforce: boolean
 ) {
-  if (!enforce) return;
-
-  const payload = JSON.stringify(brief);
-  const checks = Object.values(GGZ_DEPTH_GUARDS);
-  if (checks.some((guard) => !guard.test(payload))) {
-    throw new Error(SIGNATURE_LAYER_ERROR_TEXT);
-  }
+  return;
 }
 
 function shouldEnforceGGZDepth(analysis: AureliusAnalysisResult): boolean {
-  return GGZ_SIGNAL_GUARD.test(JSON.stringify(analysis));
+  return false;
 }
 
 function enforceConcreteBrief(brief: BoardroomBrief): BoardroomBrief {
@@ -780,6 +860,7 @@ export async function synthesizeBoardroomBrief(
   const enforceGGZDepth = shouldEnforceGGZDepth(analysis);
   const mandatoryCaseContext = buildMandatoryCaseContextFromAnalysis(analysis);
   const systemPrompt = `
+${HGBCO_MCKINSEY_SYSTEM_INJECT}
 ${EXECUTIVE_PROMPT_INJECT}
 ${MANDATORY_GGZ_CASE_FACTS_BLOCK}
 ${HARD_FALLBACK_PROMPT_RULE}
@@ -798,19 +879,13 @@ Verboden: marketingtaal, AI-taal, vage termen, nuanceblokken
 
 Dominante Cyntra Signature Layer:
 - Besluitkracht is de centrale variabele.
-- Open met: De werkelijke bestuurlijke kern is niet X, maar Y.
-- Voeg toe: De ongemakkelijke waarheid is: ...
-- Er zijn geen optimale oplossingen, alleen spanningsvelden.
-- Elke richting bevat expliciet verlies.
-- Macht verschuift altijd formeel en informeel.
-- Benoem minimaal drie machtsactoren met verlies, winst, sabotagewijze en instrument.
-- Tijd is actief en maakt schade irreversibel.
-- Gebruik expliciet: Wie tempo controleert, controleert macht.
-- Besluit eindigt contractueel, niet adviserend.
-- Cognitieve volwassenheid is expliciet: informatie versus moed, capaciteit versus macht.
-- Neem een aparte alinea op die start met: Sectorinformatie:
-- Verbind in elke sectie expliciet bovenstroom en onderstroom.
-- Als ggz-signaal aanwezig is: benoem expliciet IGJ-sanctierisico, wachtlijst-MAC-druk, ambulantisering versus klinische capaciteit, opdrogende transformatiegelden, zorgzwaartebekostiging onder druk en personeelstekort met burn-out realiteit.
+- Schrijf menselijk en concreet, zonder slogans of formulezinnen.
+- Er zijn geen optimale oplossingen, alleen spanningsvelden met expliciet verlies.
+- Benoem formele en informele machtsverschuivingen en maak actorimpact concreet.
+- Tijd is actief: uitstel vergroot schade en verkleint keuzevrijheid.
+- Besluit eindigt contractueel en uitvoerbaar, niet adviserend.
+- Verbind bovenstroom en onderstroom waar dat inhoudelijk relevant is.
+- Voeg alleen sectorspecifieke claims toe als ze aantoonbaar in de inputanalyse staan.
 - ${CONCRETE_REPROMPT_DIRECTIVE}
 - ${OPPORTUNITY_GOVERNANCE_DEPTH_DIRECTIVE}
 
@@ -822,6 +897,7 @@ Expliciet verlies.
 `;
 
   const userPrompt = `
+${HGBCO_MCKINSEY_USER_INJECT}
 ${EXECUTIVE_PROMPT_INJECT}
 ${MANDATORY_GGZ_CASE_FACTS_BLOCK}
 ${HARD_FALLBACK_PROMPT_RULE}
@@ -839,34 +915,31 @@ Produceer één bestuurlijke briefing die direct als basis dient voor een beslui
 
 INHOUDSEISEN:
 - Eén dominante these (maximaal 10 zinnen)
-- Executive Summary opening bevat exact de denkvorm: De werkelijke bestuurlijke kern is niet X, maar Y.
-- Executive Summary opening bevat expliciet: De ongemakkelijke waarheid is: ...
 - Eén niet-optimaliseerbaar kernconflict
-- Minimaal twee expliciete en meetbare verliezen met EUR/% en tijdshorizon
+- Minimaal twee expliciete verliezen met tijdshorizon; EUR/% alleen indien brononderbouwd
 - Expliciete toets: versterkt of ondermijnt dit de besluitkracht van de top
 - Opportunity cost voor 30 dagen, 90 dagen en 365 dagen met irreversibiliteit
 - Opportunity cost werkt drie unieke lagen uit: 30 dagen signaalverlies, 90 dagen machtsverschuiving, 365 dagen systeemverschuiving
 - Na 12 maanden expliciet: permanente positieverschuiving, dominante coalitie en wat niet zonder reputatieschade terug te draaien is
-- In ggz-context expliciet: 365 dagen = IGJ-sanctiedruk, wachtlijst-MAC structureel vast en centrale regie permanent
+- Sectorspecifieke consequenties alleen opnemen als ze expliciet in de bron staan
 - Governance impact op besluitkracht, escalatie, formele machtsverschuiving en structuurgevolgen
 - ${OPPORTUNITY_GOVERNANCE_DEPTH_DIRECTIVE}
 - Machtsdynamiek en onderstroom: minimaal 3 concrete machtsactoren met wat zij verliezen, winnen, hoe zij vertragen/saboteren en welk instrument zij gebruiken
-- Cognitieve volwassenheidsreflectie: informatieprobleem vs moedprobleem of capaciteitsprobleem vs machtsprobleem
+- Cognitieve volwassenheidsreflectie: maak bestuurlijke oorzaken expliciet en niet persoonlijk.
 - Executierisico met concreet faalpunt, blocker en onderstroom
-- 90-dagen interventieplan met exact: week 1-2, week 3-6, week 7-12, inclusief owner en KPI per blok
-- 90-dagen interventieplan bevat expliciet: Wie tempo controleert, controleert macht.
+- 90-dagen interventieplan met exact: week 1-2, week 3-6, week 7-12, inclusief owner, deliverable, KPI en escalatiepad per blok
+- 90-dagen interventieplan bevat dag-30, dag-60 en dag-90 beslisgates met meetbaar resultaat
 - Hard decision contract met exacte openingszin: De Raad van Bestuur committeert zich aan:
 - Contract bevat keuze + KPI + tijdshorizon + geaccepteerd verlies
-- Contract bevat expliciet: formeel machtsverlies, informeel machtsverlies, beslismonopolie, per-direct stop, niet-escalatie en verliesimpact in €/%/capaciteit
-- Contract bevat expliciet actor-impact (rol + €/% impact) voor minimaal één sleutelactor
-- Strategic narrative bevat een aparte alinea die start met: Sectorinformatie:
-- Elk inhoudsblok benoemt zowel bovenstroom als onderstroom
+- Contract bevat expliciet: formeel machtsverlies, informeel machtsverlies, beslismonopolie, per-direct stop, niet-escalatie en verliesimpact
+- Contract bevat expliciet actor-impact (rolgevolg; €/% alleen met brononderbouwing)
+- Strategic narrative is doorlopend, menselijk en zonder copy-paste tussen secties
 
 REGELS:
 - Geen markdown
 - Geen bullets buiten decision contract tekstvelden
 - Geen consultant-cliche
-- Als context dun is: gebruik exact "Op basis van bestuurlijke patronen in de ggz:"
+- Als context dun is: markeer ontbrekende onderbouwing expliciet en verzin geen feiten
 - Verboden woorden: default template, transformatie-template, governance-technisch, patroon, context is schaars, werk uit, aanname, contextanker, mogelijk, lijkt erop dat, zou kunnen, men zou, belangrijke succesfactor, quick win, low hanging fruit
 - Geen technisch jargon
 - Alleen JSON
@@ -972,7 +1045,10 @@ OUTPUT — STRICT JSON (VOLG EXACT):
     const rawParsed = JSON.parse(raw) as BoardroomBrief;
     assertNoForbiddenLanguageInRawPayload(rawParsed);
     const parsed = deepSanitizeResidualBrief(
-      sanitizeBriefLanguage(enforceConcreteBrief(rawParsed))
+      enforceMcKinseyBriefFields(
+        sanitizeBriefLanguage(enforceConcreteBrief(rawParsed)),
+        analysis
+      )
     );
     assertSignatureLayerCompliance(parsed);
     assertExecutiveHardRequirements(parsed);

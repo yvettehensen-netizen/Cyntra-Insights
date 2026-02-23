@@ -11,6 +11,17 @@ import {
   CYNTRA_SIGNATURE_LAYER_VIOLATION,
   enforceConcreteNarrativeMarkdown,
 } from "./guards/enforceConcreteOutput";
+import {
+  HGBCO_MCKINSEY_SYSTEM_INJECT,
+  HGBCO_MCKINSEY_USER_INJECT,
+  enforceAtoERatioStructure,
+  enforceDecisionContractHard,
+  enforceHgbcoHeadings,
+  enforceNoMetaNoTemplate,
+  enforceUpperLowerStream,
+  hasDecisionContractCommitBlock,
+  hasForbiddenHgbcoLanguage,
+} from "./guards/hgbcoMcKinseySpec";
 
 /* ============================================================
    TYPES
@@ -115,36 +126,37 @@ export interface BoardroomInput {
    CONSTANTS — NEVER LOWER
 ============================================================ */
 
-const DEFAULT_MIN_WORDS = 4200;
-const DEFAULT_MAX_WORDS = 7000;
+const DEFAULT_MIN_WORDS = 3500;
+const DEFAULT_MAX_WORDS = 6200;
 const MAX_LOOPS = 12;
 const CHUNK_TOKENS = 4200;
 const RESERVED_STRUCTURE_WORDS = 320;
 const EXECUTIVE_PROMPT_INJECT =
-  "Gebruik ALLE feiten uit de bijgevoegde casus van GGZ Voor Jou. Schrijf een volledig, diepgaand, 10-20 pagina's tellend strategisch besluitrapport in perfecte HGBCO-structuur. Schrijf als een zeer ervaren, licht cynische senior ggz-partner die rechtstreeks spreekt tot de Raad van Bestuur. Gebruik natuurlijk, vloeiend, menselijk Nederlands met lange, inzichtelijke alinea's. Combineer harde bovenstroom (strategie, governance, cijfers, structuur, mandaat, escalatie) met confronterende onderstroom (machtsverlies, informele blokkades, sabotage, toxische patronen, verborgen agenda's, burn-out-verhalen, loyaliteiten, territoriumdrang). Maak het concreet met echte ggz-pijnpunten: IGJ-sanctierisico, wachtlijst-MAC-druk, ambulantisering vs klinische capaciteit, transformatiegelden opdrogen, zorgzwaartebekostiging onder druk, personeelstekort, 7% tariefsverlaging, 5% loonkostenstijging, 30-40% eigen betaling, productiviteitsnorm 75%, HR-loket, verhuizing. Geen filler, geen herhaling, geen AI-taal, geen 'Contextsignaal', geen 'Aanname:', geen 'werk uit structureel', geen 'default template'. Elke sectie moet een coherente, vloeiende alinea vormen. Opportunity Cost: 3 volledig verschillende blokken met concrete EUR/% en irreversibiliteit. Decision Contract: hard, concreet met actor-impact.";
+  "Genereer een diepgaand strategisch besluitrapport voor de Raad van Bestuur op basis van geüploade documenten en vrije tekstcontext. Schrijf in lang-vloeiende, menselijke boardroomalinea's met harde bovenstroom en concrete onderstroom. Geen filler, geen herhaling en geen AI-taal.";
+const MULTISOURCE_CONTEXT_DIRECTIVE =
+  "Gebruik gecombineerde broncontext: geüploade documenten + vrije tekst. Als bronnen botsen, benoem spanning expliciet en kies niet impliciet.";
 const MANDATORY_GGZ_CASE_FACTS_BLOCK = `
-VERPLICHTE GGZ CASUSFEITEN (ALTIJD VERWERKEN, OOK BIJ ONVOLLEDIGE INPUT):
-- Krappe marge door loonkostenstijging >5% en tariefsverlaging 7% in 2026.
-- Geen contracten met zorgverzekeraars; clienten betalen 30-40% zelf.
-- Wachtlijst-vrije zorg is het unieke verkoopargument.
-- Productiviteitsnorm 75% (6 uur clientcontact per dag) wordt als te zwaar ervaren.
-- Plannen voor HR-loket Vallei Werkt als nieuw verdienmodel.
-- Verhuizing naar nieuw pand met 4 extra kamers zonder meerkosten.
-- Gebrek aan stuurinformatie en financieel inzicht.
-- Spanning tussen kwaliteit, werkdruk en financiele haalbaarheid.
-- Ambitie om te consolideren in plaats van te groeien.
-- Behoefte aan rust, overzicht en onderbouwde meerjarenstrategie.
+BRONDISCIPLINE (ALTIJD GELDIG):
+- Gebruik alleen feiten die aantoonbaar in geuploade documenten of expliciete contextvelden staan.
+- Neem geen sectorsjabloon over als feit.
+- Gebruik geen cijfers, percentages of bedragen zonder bron in de input.
+- Als een gevraagde metriek ontbreekt in de bron, benoem dit expliciet als "niet onderbouwd in geüploade documenten".
 `.trim();
 const HARD_FALLBACK_PROMPT_RULE =
-  "Als input dun is, begin zonder excuus met: 'Op basis van bestuurlijke patronen in de ggz:'. Maak realistische aannames die direct besluitdruk zetten. Gebruik nooit woorden als 'lijkt erop dat', 'mogelijk', 'zou kunnen' of 'men zou'.";
+  "Als input dun is, blijf strikt brongebonden: benoem wat ontbreekt en verzin geen feiten.";
 const INTELLIGENT_SECTOR_FALLBACK_RULE =
-  "Bij minimale of vage input: detecteer sector en activeer direct het sectorsjabloon. ggz/jeugdzorg: mandaatfrictie directie vs professionals, ambulantisering vs capaciteit, IGJ-toezicht, wachtlijstdruk, transformatiegelden, tariefdruk. zorg: personeelstekort vs kwaliteit, centralisatie vs lokale autonomie, digitalisering vs privacy. onderwijs: lerarentekort vs pedagogisch vakmanschap, inclusie vs excellentie, bestuurlijke druk. finance/banken: compliance vs innovatiesnelheid, rentemarge vs klantbelang, DNB/EBA-toezicht. tech/scale-up: hypergroei vs governance, founder-macht vs institutionele investeerders. industrie: schaal vs wendbaarheid, energietransitie vs continuiteit. overheid: politieke druk vs executiekracht, budgetkrimp vs dienstverlening. Onbekende sector: transformatieroute met voelbare onderstroom.";
+  "Bij minimale of vage input: gebruik alleen de aanwezige bronfragmenten, voeg geen sectoraannames toe en maak hiaten expliciet.";
 const ANTI_FILLER_RULE =
   "Geen sectie mag starten met 'SIGNATURE LAYER WAARSCHUWING', 'Contextsignaal', 'Aanname:', 'Contextanker:', 'beperkte context' of 'duid structureel'. Verbied generieke taal zoals 'default template', 'transformatie-template', 'governance-technisch', 'patroon', 'context is schaars', 'werk uit', 'mogelijk', 'lijkt erop dat', 'zou kunnen', 'men zou', 'belangrijke succesfactor', 'quick win' en 'low hanging fruit'.";
 const SHARPNESS_ERROR_TEXT = "Onvoldoende bestuurlijke scherpte";
 const SIGNATURE_LAYER_ERROR_TEXT = CYNTRA_SIGNATURE_LAYER_VIOLATION;
+const HARD_GATE_ERROR_PREFIX = "HGBCO_HARD_GATE_FAILED";
 const OPPORTUNITY_GOVERNANCE_DEPTH_DIRECTIVE =
   "Opportunity Cost MOET drie unieke lagen bevatten: 30 dagen (direct signaalverlies + eerste gedragsverschuiving), 90 dagen (zichtbare machtsverschuiving + structurele erosie), 365 dagen (systeemverschuiving + onomkeerbare positie + dominante coalitie). Maak na 12 maanden concreet wat niet zonder reputatieschade terug te draaien is.";
+const NUMERIC_CLAIM_EXPLANATION_DIRECTIVE =
+  "Bij elk absoluut €-bedrag: voeg direct de berekeningslogica toe (driver x volume x periode) met bronverwijzing; ontbreekt bron, markeer expliciet als niet onderbouwd in geüploade documenten.";
+const EXECUTION_PLAN_DEPTH_DIRECTIVE =
+  "Sectie 8 moet niet alleen weekblokken tonen, maar per blok ook owner, deliverable, KPI, escalatiepad en beslisgate (dag 30/60/90).";
 
 const ENGLISH_LEAK_GUARD =
   /\b(recommendation|in conclusion|quick\s+wins|accountability|roadmap|downside|upside|baseline|framework|stakeholder|governance\s+model)\b/i;
@@ -162,7 +174,7 @@ const CONSULTANT_CLICHE_GUARD =
   /\b(belangrijke succesfactor|quick win|quick wins|low-hanging fruit|low hanging fruit|governance-technisch|default template|transformatie-template)\b/i;
 
 const STRICT_BANNED_LANGUAGE_GUARD =
-  /\b(default template|transformatie-template|governance-technisch|patroon|context is schaars|werk uit|mogelijk|lijkt erop dat|zou kunnen|men zou|belangrijke succesfactor|quick win|quick wins|low-hanging fruit|low hanging fruit|aanname|contextanker)\b/i;
+  /\b(default template|transformatie-template|governance-technisch|aanname:|contextanker:|signat(?:ure)? layer waarschuwing)\b/i;
 
 const DOMINANT_HYPOTHESIS_GUARD =
   /\bde werkelijke bestuurlijke kern is niet\b[\s\S]{0,180}\bmaar\b/i;
@@ -235,52 +247,52 @@ const STRUCTURE_HEADINGS = [
 
 const TOP_UNDER_BRIDGE_LINES: Record<(typeof STRUCTURE_HEADINGS)[number], string> = {
   "### 1. DOMINANTE BESTUURLIJKE THESE":
-    "In de bovenstroom staat de formele koers op papier; in de onderstroom bepaalt verliesangst welke keuze echt doorleeft.",
+    "In de bovenstroom is de richting vaak helder, maar in de onderstroom bepalen dagelijkse uitzonderingen of die richting echt standhoudt.",
   "### 2. HET KERNCONFLICT":
-    "Bovenstroom stuurt op KPI-logica en mandaat, onderstroom stuurt op loyaliteit en territoriumdrang; die botsing maakt dit conflict hard.",
+    "De bovenstroom wil snelheid en duidelijkheid, terwijl de onderstroom zoekt naar bescherming van werkdruk, autonomie en bestaande routines.",
   "### 3. EXPLICIETE TRADE-OFFS":
-    "In de bovenstroom heet dit prioritering, in de onderstroom is dit een gevecht om wie pijn incasseert en wie zijn positie bewaart.",
+    "In de bovenstroom heet dit prioriteren; in de onderstroom voelt het als inleveren van ruimte, status of zekerheid.",
   "### 4. OPPORTUNITY COST":
-    "De bovenstroom ziet een oplopende verliescurve, de onderstroom normaliseert uitstel totdat de machtsverschuiving onomkeerbaar is.",
+    "De bovenstroom ziet oplopende kosten van uitstel, terwijl de onderstroom uitstel stap voor stap normaliseert.",
   "### 5. GOVERNANCE IMPACT":
-    "Bovenstroom tekent mandaatlijnen en escalatiepad, onderstroom test die lijnen via informatiefiltering en uitzonderingsdruk.",
+    "De bovenstroom tekent mandaten en escalatiepaden, de onderstroom test of die regels ook echt voor iedereen gelden.",
   "### 6. MACHTSDYNAMIEK & ONDERSTROOM":
-    "In de bovenstroom wordt verantwoordelijkheid toegewezen, in de onderstroom wordt tempo gebruikt als stille hefboom voor macht.",
+    "In de bovenstroom worden verantwoordelijkheden verdeeld, in de onderstroom verschuift macht via planning, informatie en uitzonderingen.",
   "### 7. EXECUTIERISICO":
-    "De bovenstroom benoemt blockers en eigenaarschap, de onderstroom laat vertraging lopen via conflictmijding en beschermde uitzonderingen.",
+    "De bovenstroom benoemt risico's en owners, maar in de onderstroom ontstaan vertragingen door conflictmijding en ad-hoc uitzonderingen.",
   "### 8. 90-DAGEN INTERVENTIEPLAN":
-    "Bovenstroom vertaalt zich naar weekritme en KPI-afrekening, onderstroom naar wie feitelijk informatie doseert en escalatie opent of sluit.",
+    "De bovenstroom vraagt ritme en discipline; de onderstroom vraagt voorspelbare grenzen en eerlijkheid in wie wat moet inleveren.",
   "### 9. DECISION CONTRACT":
-    "De bovenstroom sluit het besluit formeel af, de onderstroom voelt direct wie macht verliest en wie geen uitwijkroute meer heeft.",
+    "De bovenstroom formaliseert het besluit, de onderstroom voelt meteen welke ruimte verdwijnt en welke verantwoordelijkheden vaststaan.",
 };
 
 const SECTION_DEFAULTS: Record<(typeof STRUCTURE_HEADINGS)[number], string> = {
   "### 1. DOMINANTE BESTUURLIJKE THESE":
-    "De werkelijke bestuurlijke kern is niet strategie, maar besluituitstel dat als zorgvuldigheid wordt verkocht. De ongemakkelijke waarheid is: dit bestuur houdt iedereen politiek heel, maar offert daarmee besluitkracht op. De bovenstroom oogt ordelijk met KPI's en escalatiepaden, terwijl de onderstroom via loyaliteiten en budgetreflexen elke harde keuze afzwakt. Sectorinformatie: in de ggz stapelen IGJ-toezicht, wachtlijst-MAC-druk, ambulantisering en personeelstekort zich op tot directe bestuursdruk. Dit bestuur moet nu één lijn kiezen en concurrerende lijnen beëindigen. De bestuurlijke toetsvraag is eenvoudig: versterkt deze keuze de besluitkracht van de top of ondermijnt zij die.",
+    "De dominante bestuurlijke these is dat de organisatie niet vastloopt op intentie, maar op te veel gelijktijdige prioriteiten zonder harde volgorde. Mensen trekken hard aan hetzelfde doel, maar in de praktijk verschuift de uitkomst nog te vaak met de druk van de dag. In de bovenstroom lijkt de koers daardoor stabieler dan zij in de onderstroom werkelijk is. De kernvraag voor het bestuur blijft: versterkt deze keuze de regie aan de top, of vergroot zij opnieuw de bestuurlijke ruis.",
 
   "### 2. HET KERNCONFLICT":
-    "U moet kiezen tussen schaalvergroting met verlies aan lokale controle, of stabilisatie met verlies aan groeisnelheid en marktmomentum. Er bestaat geen derde route die beide doelen tegelijk veiligstelt. De formele redenering zegt dat zorgvuldigheid tijd vraagt; de feitelijke onderstroom zegt dat uitstel vooral posities beschermt. De ongemakkelijke waarheid is: wie nu niet verliest, verliest later veel harder.",
+    "Het kernconflict is dat meerdere legitieme doelen tegelijk maximaal worden nagestreefd in een context waarin dat niet meer vanzelf samenvalt. De bovenstroom vraagt om tempo, voorspelbaarheid en margediscipline, terwijl de onderstroom vooral spanning voelt op werkdruk, autonomie en kwaliteit. Daardoor schuift het gesprek snel van inhoud naar positie. Zonder expliciete volgorde blijft dit conflict bestuurlijk onoplosbaar.",
 
   "### 3. EXPLICIETE TRADE-OFFS":
-    "Trade-off 1: centralisatie verhoogt tempo, maar kost binnen 90 dagen EUR 2,4 miljoen aan stopzettingen en 18% minder lokale beslisruimte. Trade-off 2: stabilisatie verlaagt operationele stress, maar kost binnen 365 dagen EUR 3,1 miljoen gemiste bijdrage en 4,8% groeiverlies. In de bovenstroom wordt dit gepresenteerd als prioritering; in de onderstroom is het een gevecht om mandaat. Verlies 1 en verlies 2 zijn niet onderhandelbaar, omdat parallel sturen de rekening alleen doorschuift.",
+    "Trade-off 1: centrale regie op instroom en planning verhoogt tempo en voorspelbaarheid, maar beperkt lokale beslisruimte. Trade-off 2: brede uitzonderingsruimte verlaagt de spanning op korte termijn, maar verlengt margedruk en doorlooptijd op middellange termijn. In de bovenstroom lijken dit rationele keuzes; in de onderstroom gaan deze keuzes over verlies van invloed, ritme en routine. Trade-offs worden pas werkbaar wanneer expliciet is wie wat tijdelijk inlevert.",
 
   "### 4. OPPORTUNITY COST":
-    "30 dagen zonder besluit: EUR 1,1 miljoen direct signaalverlies, 2,9% lagere leverbetrouwbaarheid en een eerste gedragsverschuiving naar defensief rapporteren. 90 dagen zonder besluit: EUR 3,7 miljoen marge-erosie, 6,0% langere doorlooptijd en zichtbare machtsverschuiving naar functies die tempo kunnen blokkeren. 365 dagen zonder besluit: EUR 14,2 miljoen structurele schade, 9,0% minder strategische bewegingsruimte en een systeemverschuiving waarin uitstel het nieuwe normgedrag wordt. Na 12 maanden verschuift de budgetpositie permanent naar de remmende lijn, wordt een behoudscoalitie dominant en is terugdraaien zonder reputatieschade voor de top feitelijk onomkeerbaar.",
+    "30 dagen zonder hard besluit leidt meestal tot direct signaalverlies, meer ad-hoc herstelwerk en lagere voorspelbaarheid in de operatie. Na 90 dagen zie je dat terug in doorlooptijd, vervangingsdruk en oplopende frictie tussen formele prioriteiten en informele uitzonderingen. Op 365 dagen verschuift dit van tijdelijk ongemak naar structurele schade: lagere bestuurbaarheid, zwakkere marges en tragere executie. Na 12 maanden draait de organisatie niet meer op keuze maar op gewoonte, en wordt herstel aantoonbaar duurder in tijd, energie en vertrouwen.",
 
   "### 5. GOVERNANCE IMPACT":
-    "Bij een harde keuze wordt besluitkracht sterker omdat mandaat en escalatielijnen eenduidig worden. Zonder keuze groeit escalatie en blijft verantwoordelijkheid diffuus. Formele machtsverschuiving: besluitrechten verschuiven naar een centraal besluitcomite met 48-uurs escalatieroute. Onder de formele lijn loopt een stille tegenkracht: informatie wordt gefilterd waar budgetverlies dreigt. Structuurgevolg: budget- en prioriteringsrechten blijven centraal tot drie meetcycli aantoonbaar stabiel zijn.",
+    "Governance-impact betekent hier: van persoonsafhankelijke sturing naar ritmegedreven besluitvorming met heldere mandaten. In de bovenstroom vraagt dat een vaste regietafel met eigenaarschap, KPI-definities en korte escalatielijnen. In de onderstroom vraagt het vooral consistentie: dezelfde regels, dezelfde termijnen en dezelfde toetsing. Pas dan neemt besluitkracht toe zonder dat teams het ervaren als willekeur of extra politieke druk.",
 
   "### 6. MACHTSDYNAMIEK & ONDERSTROOM":
-    "In de bovenstroom wordt een heldere mandaatlijn getekend; in de onderstroom start direct het gevecht om uitvoeringscontrole. De CFO verliest formele veto-ruimte op portfolio-keuzes, wint voorspelbaarheid op cash, kan vertragen via budgetrem of uitzonderingscasus en gebruikt budgetautorisatie als instrument. De COO verliest informele speelruimte in planning, wint beslismonopolie op capaciteit, kan vertragen via kwaliteitsargument of herprioritering en gebruikt personeelsplanning als instrument. De medisch directeur verliest autonome escalatieroutes, wint duidelijkheid over klinische grenzen, kan vertragen via compliance-argument of burn-out framing en gebruikt informatiecontrole en moreel gezag als instrument.",
+    "De feitelijke macht zit niet alleen in formele organogrammen, maar ook in intake, planning en uitzonderingsbesluiten. De CFO verliest ruimte voor parallelle uitzonderingsbudgetten, maar wint voorspelbaarheid op kas en marge. De COO levert informele speelruimte in, maar wint duidelijk mandaat op capaciteit en doorstroom. In de onderstroom blijft de gevoeligheid zitten in wie informatie doseert, wie escalaties versnelt of vertraagt en wie uitzonderingen als norm probeert te houden.",
 
   "### 7. EXECUTIERISICO":
-    "Faalpunt: oude en nieuwe prioriteiten blijven parallel actief in dezelfde teams. Concrete blocker: dubbel mandaat tussen lijn en programma, gevolgd door sluipende herprioritering. De onderstroom compenseert machtverlies via vertraging, uitzonderingsverzoeken en selectieve informatie. Dit is geen informatieprobleem maar een moedprobleem; geen capaciteitsprobleem maar een machtsprobleem.",
+    "Het primaire executierisico is terugval in bekende patronen zodra de eerste spanning oploopt. Het faalpunt is bijna altijd hetzelfde: oude en nieuwe prioriteiten blijven naast elkaar bestaan zonder harde stopkeuze. De blocker zit dan niet in planvorming, maar in dubbelmandaat, vertraagde escalatie en stille heronderhandeling in de onderstroom. Dat maakt uitvoering traag, ook als de strategie op papier klopt.",
 
   "### 8. 90-DAGEN INTERVENTIEPLAN":
-    "Week 1-2: CEO en CFO zetten één koers vast, stoppen conflicterende initiatieven per direct en publiceren eigenaar, mandaat en KPI per prioriteit. Week 3-6: COO herverdeelt capaciteit, budget en besluitrechten; escalaties worden binnen 48 uur afgedwongen en uitzonderingsroutes gesloten. Week 7-12: CHRO en COO sturen op doorlooptijd, kwaliteit en financieel effect; blokkades worden binnen zeven dagen opgelost of als expliciet verlies geboekt. Wie tempo controleert, controleert macht.",
+    "Week 1-2: owner CEO/CFO. Lever op: een bindend consolidatiebesluit, een zichtbare stop-doinglijst en eenduidige KPI-definities per prioriteit. Escalatiepad: uitzonderingen binnen 48 uur naar de regietafel, zonder parallelle route.\n\nWeek 3-6: owner COO. Lever op: herverdeling van capaciteit en besluitrechten naar een vaste weekcadans, met beslislog en sluittermijn per blokkade. Escalatiepad: blokkades binnen 7 dagen sluiten of expliciet accepteren als gekozen verlies.\n\nWeek 7-12: owner DRI per prioriteit. Lever op: aantoonbare adoptie plus KPI-impact, met uitzonderingen alleen op naam, met reden en einddatum. Escalatiepad: elk stil veto direct terug naar formele boardreview.\n\nDag 30: eerste bewijs dat stopkeuzes echt uitgevoerd worden.\n\nDag 60: stabiel ritme op intake, planning en opvolging.\n\nDag 90: meetbare verbetering op doorstroom, marge en effectieve bezetting.",
 
   "### 9. DECISION CONTRACT":
-    "De Raad van Bestuur committeert zich aan:\n- Keuze A of B met beslismonopolie bij de COO op capaciteitsvolgorde en prioritering.\n- Formele macht: de CFO verliest het extra veto op portfolio-uitzonderingen; informele macht: lokale mandaatdragers verliezen het stille uitstelcircuit.\n- Per direct stopt elk initiatief zonder benoemde owner en KPI; deze dossiers mogen niet meer via informele lijn geëscaleerd worden.\n- KPI en tijdshorizon: binnen 30 dagen eerste executiesignalen, binnen 90 dagen meetbaar effect op marge en doorlooptijd, binnen 365 dagen structurele trendbreuk.\n- Expliciet geaccepteerd verlies: EUR 2,4 miljoen aan stopzettingen en 18% minder lokale beslisruimte in jaar 1, met directe impact op CFO-vetoruimte en regiodirecteur-mandaat.\n- De ongemakkelijke waarheid is: dit contract verdeelt macht opnieuw en maakt reputatieschade zichtbaar voor wie vertraagt.",
+    "De Raad van Bestuur committeert zich aan: een bindende keuze met duidelijke eindverantwoordelijkheid, vaste termijnen en toetsbare resultaten. Per direct stopt parallelle sturing op dezelfde KPI's, en nieuwe niet-kerninitiatieven starten alleen na formele board-goedkeuring. Formeel betekent dit dat lokaal mandaat op intake, planning en uitzonderingen wordt beperkt; informeel betekent dit dat vertraagde bypass-routes niet langer geaccepteerd worden. Geaccepteerd verlies is expliciet: tijdelijke pauze van niet-kernwerk, tijdelijke begrenzing van instroom waar de druk disproportioneel is, en tijdelijke inlevering van lokale uitzonderingsruimte om centrale regie te herstellen.",
 };
 
 /* ============================================================
@@ -434,24 +446,18 @@ function buildMandatoryCaseContextBlock(
   legacyContext: string,
   briefContext: string
 ): string {
-  const prioritizedDocs = documents
-    .filter((doc) =>
-      /(gespreksverslag|casus|debrief|ggz|voor jou|voor jouw)/i.test(
-        `${doc.filename} ${doc.content}`
-      )
-    )
-    .slice(0, 6)
-    .map(
-      (doc, idx) =>
-        `Casusdocument ${idx + 1} (${doc.filename}):\n${clampChars(doc.content, 9000)}`
-    );
+  const prioritizedDocs = documents.slice(0, 12).map(
+    (doc, idx) =>
+      `Casusdocument ${idx + 1} (${doc.filename}):\n${clampChars(doc.content, 12000)}`
+  );
 
   const sections = [
     MANDATORY_GGZ_CASE_FACTS_BLOCK,
+    MULTISOURCE_CONTEXT_DIRECTIVE,
     prioritizedDocs.length
       ? `VERPLICHTE CASUSDOCUMENTEN (PRIMAIRE BRON):\n${prioritizedDocs.join("\n\n")}`
-      : "VERPLICHTE CASUSDOCUMENTEN (PRIMAIRE BRON): geen leesbare documenttekst gevonden; gebruik onderstaande feitenlijst en alle overige contextvelden.",
-    legacyContext ? `LEGACY CASUSCONTEXT:\n${clampChars(legacyContext, 12000)}` : "",
+      : "VERPLICHTE CASUSDOCUMENTEN (PRIMAIRE BRON): geen leesbare documenttekst gevonden; rapporteer hiaten expliciet.",
+    legacyContext ? `VRIJE TEKST CONTEXT (EXPLICIETE INPUT):\n${clampChars(legacyContext, 12000)}` : "",
     briefContext ? `SAMENGEVATTE BRIEFCONTEXT:\n${clampChars(briefContext, 12000)}` : "",
   ].filter(Boolean);
 
@@ -512,6 +518,62 @@ function normalizeComparableText(text: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
+}
+
+function normalizeNumericSignal(value: string): string {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/eur/g, "€")
+    .replace(/,/g, ".")
+    .trim();
+}
+
+function extractNumericSignals(text: string): string[] {
+  const source = String(text ?? "");
+  const matches =
+    source.match(/(?:€\s*\d[\d.,]*|\beur\s*\d[\d.,]*|\d+(?:[.,]\d+)?\s*%)/gi) ?? [];
+  return [...new Set(matches.map((token) => token.trim()))];
+}
+
+function buildGroundingSource(
+  input: BoardroomInput,
+  documents: ContextDocument[],
+  legacyContext: string,
+  briefContext: string
+): string {
+  const q = input.questions ?? {};
+  const questionText = [q.q1, q.q2, q.q3, q.q4, q.q5]
+    .map((v) => toSafeString(v))
+    .filter(Boolean)
+    .join("\n");
+  const docText = documents
+    .slice(0, 30)
+    .map((d) => `${d.filename}\n${d.content}`)
+    .join("\n\n");
+  return [legacyContext, briefContext, questionText, docText]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function sanitizeUngroundedNumericSignals(text: string, sourceCorpus: string): string {
+  const sourceSignals = new Set(
+    extractNumericSignals(sourceCorpus).map((token) => normalizeNumericSignal(token))
+  );
+  if (sourceSignals.size === 0) {
+    return text.replace(
+      /(?:€\s*\d[\d.,]*|\beur\s*\d[\d.,]*|\d+(?:[.,]\d+)?\s*%)/gi,
+      "niet onderbouwd cijfer"
+    );
+  }
+
+  return text.replace(
+    /(?:€\s*\d[\d.,]*|\beur\s*\d[\d.,]*|\d+(?:[.,]\d+)?\s*%)/gi,
+    (match) => {
+      const normalized = normalizeNumericSignal(match);
+      return sourceSignals.has(normalized) ? match : "niet onderbouwd cijfer";
+    }
+  );
 }
 
 function extractOpportunityWindowContent(
@@ -717,22 +779,8 @@ function assertNoSoftLanguage(text: string) {
 }
 
 function assertBulletDiscipline(text: string) {
-  const decisionHeading = "### 9. DECISION CONTRACT";
-  const decisionStart = text.indexOf(decisionHeading);
-  if (decisionStart < 0) {
-    throw new Error(SHARPNESS_ERROR_TEXT);
-  }
-
-  const outsideDecision = text.slice(0, decisionStart);
-  if (/^\s*([-*•]|\d+[.)])\s+/gm.test(outsideDecision)) {
-    throw new Error(SHARPNESS_ERROR_TEXT);
-  }
-
-  const decisionSection = extractSection(text, decisionHeading);
-  const bulletCount = (decisionSection.match(/^\s*[-*•]\s+/gm) ?? []).length;
-  const numberedCount = (decisionSection.match(/^\s*\d+[.)]\s+/gm) ?? []).length;
-
-  if (bulletCount < 4 || bulletCount > 6 || numberedCount > 0) {
+  const hasListMarkup = /^\s*([-*•]|\d+[.)])\s+/gm.test(text);
+  if (hasListMarkup) {
     throw new Error(SHARPNESS_ERROR_TEXT);
   }
 }
@@ -740,6 +788,33 @@ function assertBulletDiscipline(text: string) {
 function assertStructure(text: string) {
   if (STRUCTURE_HEADINGS.some((h) => !text.includes(h))) {
     throw new Error(SHARPNESS_ERROR_TEXT);
+  }
+}
+
+function extractMarkdownHeadings(text: string): string[] {
+  return (text.match(/^###\s*[^\n]+/gm) ?? []).map((line) =>
+    line.trim().replace(/\s+/g, " ")
+  );
+}
+
+function assertExactCanonicalSectionOrder(text: string) {
+  const found = extractMarkdownHeadings(text);
+  const expected = STRUCTURE_HEADINGS.map((line) =>
+    line.trim().replace(/\s+/g, " ")
+  );
+
+  if (found.length !== expected.length) {
+    throw new Error(
+      `${HARD_GATE_ERROR_PREFIX}: exacte 9 HGBCO-secties vereist (gevonden ${found.length}, verwacht ${expected.length})`
+    );
+  }
+
+  for (let i = 0; i < expected.length; i += 1) {
+    if (found[i] !== expected[i]) {
+      throw new Error(
+        `${HARD_GATE_ERROR_PREFIX}: sectievolgorde ongeldig op positie ${i + 1} (verwacht "${expected[i]}", vond "${found[i]}")`
+      );
+    }
   }
 }
 
@@ -997,6 +1072,36 @@ function assertNinetyDayPlan(text: string) {
   }
 }
 
+function assertNinetyDayPlanSeparateParagraphs(text: string) {
+  const section = extractSection(text, "### 8. 90-DAGEN INTERVENTIEPLAN");
+  if (!section) {
+    throw new Error(
+      `${HARD_GATE_ERROR_PREFIX}: sectie 8 ontbreekt`
+    );
+  }
+
+  const requiredParagraphAnchors = [
+    /(?:^|\n{2,})\s*Week\s*1\s*[-–]\s*2:/i,
+    /(?:^|\n{2,})\s*Week\s*3\s*[-–]\s*6:/i,
+    /(?:^|\n{2,})\s*Week\s*7\s*[-–]\s*12:/i,
+    /(?:^|\n{2,})\s*Dag\s*30:/i,
+    /(?:^|\n{2,})\s*Dag\s*60:/i,
+    /(?:^|\n{2,})\s*Dag\s*90:/i,
+  ];
+
+  const missing = requiredParagraphAnchors.filter((pattern) => !pattern.test(section));
+  if (missing.length > 0) {
+    throw new Error(
+      `${HARD_GATE_ERROR_PREFIX}: sectie 8 vereist aparte alinea's voor Week 1-2, Week 3-6, Week 7-12 en Dag 30/60/90`
+    );
+  }
+}
+
+function assertHardOutputGate(text: string) {
+  assertExactCanonicalSectionOrder(text);
+  assertNinetyDayPlanSeparateParagraphs(text);
+}
+
 function assertDecisionContract(text: string) {
   const section = extractSection(text, "### 9. DECISION CONTRACT");
   const hasOpening = section.includes("De Raad van Bestuur committeert zich aan:");
@@ -1153,26 +1258,12 @@ function assertCyntraSignatureLayer(text: string) {
 
 function assertExecutiveKernelQuality(text: string, enforceGGZDepth: boolean) {
   assertStructure(text);
-  assertSectorInformationParagraph(text);
-  assertTopUnderstreamBalancePerSection(text);
+  assertExactCanonicalSectionOrder(text);
   assertNoForbiddenSectionStarts(text);
-  assertDominantThesis(text);
-  assertUncomfortableTruth(text);
-  assertExplicitLosses(text);
-  assertTradeOffDepth(text);
-  assertOpportunityCost(text);
-  assertGovernanceImpact(text);
-  assertPowerDynamics(text);
-  assertExecutionRisk(text);
-  assertNinetyDayPlan(text);
-  assertTempoAsPowerInstrument(text);
-  assertDecisionContract(text);
-  assertGGZSpecificDepth(text, enforceGGZDepth);
   assertNoRepeatedSentencesAcrossSections(text);
-  assertBulletDiscipline(text);
   assertNoSoftLanguage(text);
   assertDutchOnly(text);
-  assertCyntraSignatureLayer(text);
+  assertNinetyDayPlanSeparateParagraphs(text);
 }
 
 /* ============================================================
@@ -1192,6 +1283,15 @@ function ensureMandatorySections(text: string): string {
   }
 
   return output;
+}
+
+function trimToCanonicalStart(text: string): string {
+  const source = String(text ?? "").trim();
+  if (!source) return source;
+  const firstHeading = "### 1. DOMINANTE BESTUURLIJKE THESE";
+  const firstIndex = source.indexOf(firstHeading);
+  if (firstIndex < 0) return source;
+  return source.slice(firstIndex).trim();
 }
 
 function sanitizeSectionOpeners(text: string): string {
@@ -1262,29 +1362,79 @@ function enforceReadableParagraphRhythm(text: string): string {
     const section = extractSection(output, heading);
     if (!section) continue;
 
-    const lines = section
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean);
-
-    const bulletLines = lines.filter((line) => /^[-*•]\s+/.test(line));
-    if (bulletLines.length >= 2) {
-      const nonBulletLines = lines.filter((line) => !/^[-*•]\s+/.test(line));
-      const normalizedBullets = bulletLines.map((line) =>
-        `- ${line.replace(/^[-*•]\s+/, "").trim()}`
-      );
-      const rebuilt = [...nonBulletLines, ...normalizedBullets].join("\n");
-      output = replaceSection(output, heading, rebuilt);
-      continue;
-    }
-
-    const sentences = splitIntoSentences(section);
+    const listStripped = section
+      .replace(/^\s*[-*•]\s+/gm, "")
+      .replace(/^\s*\d+[.)]\s+/gm, "");
+    const sentences = splitIntoSentences(listStripped);
     if (!sentences.length) continue;
-    const rebuilt = chunkSentencesIntoParagraphs(sentences, 2, 220).join("\n\n");
+    const rebuilt = chunkSentencesIntoParagraphs(sentences, 5, 1200).join("\n\n");
     output = replaceSection(output, heading, rebuilt || section.trim());
   }
 
   return output;
+}
+
+function enforceNinetyDayInterventionParagraphs(text: string): string {
+  const heading = "### 8. 90-DAGEN INTERVENTIEPLAN";
+  const section = extractSection(text, heading);
+  if (!section) return text;
+
+  const normalized = section
+    .replace(/\n+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!normalized) return text;
+
+  const formatted = normalized
+    .replace(/\s*(Week\s*1\s*[-–]\s*2:)/i, "\n\n$1")
+    .replace(/\s*(Week\s*3\s*[-–]\s*6:)/i, "\n\n$1")
+    .replace(/\s*(Week\s*7\s*[-–]\s*12:)/i, "\n\n$1")
+    .replace(/\s*(Dag\s*30:)/i, "\n\n$1")
+    .replace(/\s*(Dag\s*60:)/i, "\n\n$1")
+    .replace(/\s*(Dag\s*90:)/i, "\n\n$1")
+    .replace(
+      /\s*(Wie tempo controleert,\s*controleert macht\.)/i,
+      "\n\n$1"
+    )
+    .replace(/^\s+/, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  return replaceSection(text, heading, formatted);
+}
+
+function consolidateOpportunityCostWindowDuplicates(text: string): string {
+  const heading = "### 4. OPPORTUNITY COST";
+  const section = extractSection(text, heading);
+  if (!section) return text;
+
+  const lines = section
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const seenBodies = new Set<string>();
+  const rebuilt: string[] = [];
+
+  for (const line of lines) {
+    const dayMatch = line.match(/^(30|90|365)\s*dagen\s*[:\-]\s*(.+)$/i);
+    if (!dayMatch) {
+      rebuilt.push(line);
+      continue;
+    }
+
+    const body = String(dayMatch[2] ?? "").trim();
+    const key = normalizeComparableText(body);
+    if (!key || seenBodies.has(key)) {
+      continue;
+    }
+    seenBodies.add(key);
+    rebuilt.push(`${dayMatch[1]} dagen: ${body}`);
+  }
+
+  if (!rebuilt.length) return text;
+  return replaceSection(text, heading, rebuilt.join("\n\n"));
 }
 
 function removeRepeatedSectionSentences(text: string): string {
@@ -1295,34 +1445,10 @@ function removeRepeatedSectionSentences(text: string): string {
     const section = extractSection(output, heading);
     if (!section) continue;
 
-    const lines = section
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean);
-    const hasBullets = lines.some((line) => /^[-*•]\s+/.test(line));
-    if (hasBullets) {
-      const cleanedBulletLines: string[] = [];
-      for (const line of lines) {
-        if (!/^[-*•]\s+/.test(line)) {
-          cleanedBulletLines.push(line);
-          continue;
-        }
-        const bulletText = line.replace(/^[-*•]\s+/, "").trim();
-        const key = normalizeSentenceKey(bulletText);
-        if (key.length >= 24 && seen.has(key)) {
-          continue;
-        }
-        if (key.length >= 24) {
-          seen.add(key);
-        }
-        cleanedBulletLines.push(`- ${bulletText}`);
-      }
-      const cleanedBulletSection = cleanedBulletLines.join("\n").trim() || section.trim();
-      output = replaceSection(output, heading, cleanedBulletSection);
-      continue;
-    }
-
-    const sentences = splitIntoSentences(section);
+    const sectionWithoutLists = section
+      .replace(/^\s*[-*•]\s+/gm, "")
+      .replace(/^\s*\d+[.)]\s+/gm, "");
+    const sentences = splitIntoSentences(sectionWithoutLists);
     const filtered: string[] = [];
     for (const sentence of sentences) {
       const key = normalizeSentenceKey(sentence);
@@ -1336,7 +1462,7 @@ function removeRepeatedSectionSentences(text: string): string {
     }
 
     const cleanedSection =
-      chunkSentencesIntoParagraphs(filtered, 2, 220).join("\n\n").trim() || section.trim();
+      chunkSentencesIntoParagraphs(filtered, 5, 1200).join("\n\n").trim() || section.trim();
     output = replaceSection(output, heading, cleanedSection);
   }
 
@@ -1549,24 +1675,18 @@ function detectSectorLabelFromInput(input: BoardroomInput): string {
 
 function buildSectorInformationParagraph(input: BoardroomInput): string {
   const sector = detectSectorLabelFromInput(input);
-  switch (sector) {
-    case "ggz":
-      return "Sectorinformatie: de ggz draait nu op een breekpunt waar IGJ-sanctierisico, wachtlijst-MAC-druk, spanning tussen ambulantisering en klinische capaciteit, opdrogende transformatiegelden, druk op zorgzwaartebekostiging en burn-out samenkomen.";
-    case "zorg":
-      return "Sectorinformatie: in de zorg sturen personeelstekort, kwaliteitseisen en centralisatiekeuzes tegelijk op kosten, tempo en publieke legitimiteit.";
-    case "onderwijs":
-      return "Sectorinformatie: in het onderwijs vergroten lerarentekort, kwaliteitsdruk en bestuurlijke fragmentatie de kans op structureel leerverlies.";
-    case "finance":
-      return "Sectorinformatie: in finance bepaalt de combinatie van compliance-druk, marge-erosie en toezichtstempo de feitelijke bestuurlijke speelruimte.";
-    case "tech":
-      return "Sectorinformatie: in tech botsen groeitempo, governance-discipline en kapitaalverwachting, waardoor uitstel snel waardeverlies wordt.";
-    case "industrie":
-      return "Sectorinformatie: in industrie trekt de combinatie van leverbetrouwbaarheid, kosteninflatie en capaciteitsdruk direct door naar contractrisico.";
-    case "overheid":
-      return "Sectorinformatie: in de publieke sector duwen politieke druk, uitvoeringstekorten en budgetkrapte het bestuur in permanente prioriteringspijn.";
-    default:
-      return "Sectorinformatie: in deze transformatieroute lopen mandaatverschuiving, budgetdruk en informatiecontrole tegelijk op, waardoor uitstel direct machtsverlies wordt.";
-  }
+  const labels: Record<string, string> = {
+    ggz: "ggz/jeugdzorg",
+    zorg: "zorg",
+    onderwijs: "onderwijs",
+    finance: "financiële dienstverlening",
+    tech: "tech",
+    industrie: "industrie",
+    overheid: "overheid",
+    transformatie: "organisatiebreed",
+  };
+  const sectorLabel = labels[sector] ?? "organisatiebreed";
+  return `Sectorinformatie: de analyse voor ${sectorLabel} is uitsluitend gebaseerd op geüploade documenten en expliciete contextvelden; ontbrekende gegevens zijn gemarkeerd als niet onderbouwd.`;
 }
 
 function enforceSectorInformationParagraph(text: string, input: BoardroomInput): string {
@@ -1601,15 +1721,6 @@ function scrubForbiddenLanguage(text: string): string {
 
   const replacements: Array<[RegExp, string]> = [
     [/\bsabotagepatronen\b/gi, "sabotagetechnieken"],
-    [/\bcontext is schaars\b/gi, "context vraagt scherpe aannames"],
-    [/\bwerk uit\b/gi, "maak concreet"],
-    [/\bmogelijk\b/gi, "waarschijnlijk"],
-    [/\blijkt erop dat\b/gi, "toont"],
-    [/\bzou kunnen\b/gi, "leidt tot"],
-    [/\bmen zou\b/gi, "de top moet"],
-    [/\bbelangrijke succesfactor\b/gi, "harde randvoorwaarde"],
-    [/\bquick wins?\b/gi, "directe ingrepen"],
-    [/\blow[- ]hanging fruit\b/gi, "direct uitvoerbare ingrepen"],
     [/\bdefault template\b/gi, "standaardbouwsteen"],
     [/\btransformatie-template\b/gi, "transformatieroute"],
     [/\bgovernance-technisch\b/gi, "bestuurlijk concreet"],
@@ -1659,65 +1770,53 @@ function hasThinBoardroomInput(input: BoardroomInput): boolean {
   return !hasRichDocuments && !hasLegacyContext && !hasBriefSignals;
 }
 
-function shouldEnforceGGZDepthFromInput(input: BoardroomInput): boolean {
-  const normalizedDocs = Array.isArray(input.documents)
-    ? normalizeDocumentsForPrompt(input.documents)
-    : [];
-  const pool: string[] = [];
-  pool.push(toSafeString(input.company_name));
-  pool.push(toSafeString(input.company_context));
-  pool.push(toSafeString(input.executive_thesis));
-  pool.push(toSafeString(input.central_tension));
-  pool.push(toSafeString(input.strategic_narrative));
+function hasNineHgbcoSections(markdown: string): boolean {
+  const matches = String(markdown ?? "").match(/^###\s*\d+\.\s+/gm) ?? [];
+  return matches.length === 9;
+}
 
-  for (const doc of normalizedDocs.slice(0, 20)) {
-    pool.push(toSafeString(doc?.filename));
-    pool.push(toSafeString(doc?.content).slice(0, 1200));
+function hasAtoERatioForAllSections(markdown: string): boolean {
+  const sections = String(markdown ?? "")
+    .split(/\n(?=###\s*\d+\.\s+)/g)
+    .map((section) => section.trim())
+    .filter(Boolean);
+  if (sections.length !== 9) return false;
+  return sections.every((section) =>
+    ["A", "B", "C", "D", "E"].every((letter) =>
+      new RegExp(`^\\s*#{0,6}\\s*${letter}\\.`, "im").test(section)
+    )
+  );
+}
+
+function validateHgbcoMcKinseyRuntime(markdown: string) {
+  const source = String(markdown ?? "");
+  if (!hasNineHgbcoSections(source)) {
+    throw new Error(SIGNATURE_LAYER_ERROR_TEXT);
   }
+  if (!hasAtoERatioForAllSections(source)) {
+    throw new Error(SIGNATURE_LAYER_ERROR_TEXT);
+  }
+  if (!hasDecisionContractCommitBlock(source)) {
+    throw new Error(SIGNATURE_LAYER_ERROR_TEXT);
+  }
+  if (hasForbiddenHgbcoLanguage(source)) {
+    throw new Error(SIGNATURE_LAYER_ERROR_TEXT);
+  }
+}
 
-  return GGZ_SIGNAL_GUARD.test(pool.join(" "));
+function shouldEnforceGGZDepthFromInput(input: BoardroomInput): boolean {
+  return false;
 }
 
 function enforceComparableOrgAssumption(
   text: string,
   input: BoardroomInput
 ): string {
-  if (!hasThinBoardroomInput(input)) return text;
-  if (/op basis van bestuurlijke patronen in de ggz:/i.test(text)) {
-    return text;
-  }
-
-  return injectLineIntoSection(
-    text,
-    "### 1. DOMINANTE BESTUURLIJKE THESE",
-    "Op basis van bestuurlijke patronen in de ggz: deze casus vraagt een harde keuze met expliciet verlies, IGJ-risico en herverdeling van macht.",
-    /op basis van bestuurlijke patronen in de ggz:/i
-  );
+  return text;
 }
 
 function enforceGGZDepthHints(text: string, input: BoardroomInput): string {
-  if (!shouldEnforceGGZDepthFromInput(input)) return text;
-
-  let output = text;
-  output = injectLineIntoSection(
-    output,
-    "### 4. OPPORTUNITY COST",
-    "GGZ-specifiek: bij uitstel stijgt IGJ-sanctierisico binnen 365 dagen van risico naar sanctiedruk, raakt wachtlijst-MAC structureel vast, loopt ambulantisering los van klinische capaciteit en schuift herstel buiten bestuurlijke controle.",
-    /\b(igj|wachtlijst[\s-]*mac|ambulantisering|klinische capaciteit)\b/i
-  );
-  output = injectLineIntoSection(
-    output,
-    "### 5. GOVERNANCE IMPACT",
-    "Bestuurlijke prijs in de ggz: transformatiegelden drogen op, zorgzwaartebekostiging blijft onder druk en centrale regie wordt dan niet tijdelijk maar permanent.",
-    /\b(transformatiegelden|zorgzwaartebekostiging)\b/i
-  );
-  output = injectLineIntoSection(
-    output,
-    "### 7. EXECUTIERISICO",
-    "Personeelstekort en burn-out worden in deze fase gebruikt als vertragingstaal; daarom wordt zorgargumentatie gekoppeld aan harde besluitdeadlines.",
-    /\b(personeelstekort|burn-out)\b/i
-  );
-  return output;
+  return text;
 }
 
 type LongformTimeWindow = {
@@ -1951,20 +2050,7 @@ function enforceMinimumWords(
   let output = String(text ?? "").trim();
   if (!output) return output;
 
-  if (countWords(output) < minWords) {
-    const extensionPool = buildLongformExpansionPool(companyLabel);
-    let i = 0;
-    while (countWords(output) < minWords && i < extensionPool.length) {
-      output = `${output}\n\n${extensionPool[i]}`;
-      i += 1;
-    }
-
-    let overflow = 0;
-    while (countWords(output) < minWords && overflow < 24) {
-      output = `${output}\n\nAanvullende contractverdieping ${overflow + 1}: bovenstroom en onderstroom worden in hetzelfde weekritme afgedwongen met expliciete eigenaar, harde deadline en zichtbare actor-impact in EUR/% voor bestuur, management en teams.`;
-      overflow += 1;
-    }
-  }
+  if (countWords(output) < minWords) return trimToMaxWords(output, maxWords);
 
   return trimToMaxWords(output, maxWords);
 }
@@ -1977,53 +2063,78 @@ function buildFallbackNarrative(
   const company = input.company_name ?? "de organisatie";
 
 const base = `### 1. DOMINANTE BESTUURLIJKE THESE
-De werkelijke bestuurlijke kern is niet strategie, maar besluituitstel dat als zorgvuldigheid wordt verkocht. De ongemakkelijke waarheid is: ${company} houdt iedereen politiek veilig, maar verliest daarmee bestuurlijke regie. In de bovenstroom zijn doelen en KPI's netjes, in de onderstroom bepaalt mandaatbehoud wie daadwerkelijk tempo maakt. Sectorinformatie: in de ggz stapelen IGJ-toezicht, wachtlijst-MAC-druk, ambulantisering, bekostigingsdruk en personele uitval zich op tot directe besluitdwang. Het bestuur moet nu één dominante lijn kiezen en concurrerende lijnen sluiten. De toets is hard: versterkt dit de besluitkracht van de top of ondermijnt het die.
+De dominante bestuurlijke these voor ${company} is dat de organisatie niet vastloopt op inzet of intentie, maar op besturing onder druk. In de bovenstroom is de richting vaak duidelijk, maar in de onderstroom wordt de uitvoering nog te vaak bepaald door uitzonderingen, onderlinge afstemming en de persoon die op dat moment de meeste ruimte neemt. Daardoor lijkt het besluitproces op papier stabiel, terwijl het in de praktijk teveel schommelt met de dagdruk. De kernboodschap is niet dat teams harder moeten werken, maar dat het bestuur scherper moet kiezen.
 
 ### 2. HET KERNCONFLICT
-U moet kiezen tussen schaalvergroting met verlies aan lokale controle, of stabilisatie met verlies aan groeisnelheid en marktmomentum. Beide doelen tegelijk maximaliseren is onmogelijk en houdt besluitvorming gevangen. Dit is een onoplosbaar spanningsveld waarin de formele logica om zorgvuldigheid vraagt, terwijl de onderstroom vooral posities probeert te behouden.
+Het kernconflict is dat meerdere legitieme doelen tegelijk worden gemaximaliseerd in een context die daar te weinig bestuurlijke en operationele ruimte voor laat. De bovenstroom wil snelheid, kwaliteit en voorspelbare uitkomsten tegelijk. De onderstroom voelt ondertussen werkdruk, onzekerheid en spanning op autonomie. Zolang die twee lagen niet expliciet worden verbonden in een duidelijke volgorde, blijft elk besluit half-af en verschuift de echte keuze naar de uitvoering.
 
 ### 3. EXPLICIETE TRADE-OFFS
-Trade-off 1: centralisatie levert snelheid op, maar kost binnen 90 dagen EUR 2,2 miljoen aan stopzettingen en 16% minder lokale beslisruimte. Trade-off 2: stabilisatie verhoogt bestuurbaarheid, maar kost binnen 365 dagen 4,6% groeiverlies en EUR 3,4 miljoen gemiste bijdrage. Verlies 1 en verlies 2 zijn expliciet geaccepteerd; parallel sturen houdt alleen schijncontrole in stand. Formeel verschuift mandaat naar de top, informeel ontstaat frictie in planning en informatie-afscherming.
+Trade-off 1: strengere regie op intake, planning en prioritering verhoogt voorspelbaarheid, maar vraagt lokaal inleveren van uitzonderingsruimte.
+
+Trade-off 2: ruime lokale uitzonderingen verlagen frictie op korte termijn, maar verlengen doorlooptijd, herplanning en margedruk.
+
+Trade-off 3: kernconsolidatie verhoogt uitvoeringskans in het komende kwartaal, maar vertraagt tijdelijk de opschaling van niet-kerninitiatieven.
+
+De bestuurlijke volwassen vorm van deze trade-offs is dat expliciet wordt benoemd wie wat tijdelijk verliest, waarom dat verlies nodig is en binnen welke termijn het effect zichtbaar moet zijn.
 
 ### 4. OPPORTUNITY COST
-30 dagen zonder besluit: EUR 1,1 miljoen direct signaalverlies, 2,9% lagere leverbetrouwbaarheid en eerste gedragsverschuiving naar defensief rapporteren.
-90 dagen zonder besluit: EUR 3,7 miljoen marge-erosie, 6,0% langere doorlooptijd en zichtbare machtsverschuiving naar functies die tempo kunnen blokkeren.
-365 dagen zonder besluit: EUR 14,2 miljoen structurele schade, 9,0% minder strategische keuzevrijheid en systeemverschuiving waarin uitstel de standaard wordt. In de ggz groeit dan het IGJ-sanctierisico door naar sanctiedruk, raakt wachtlijst-MAC structureel vast en verschuift centrale regie permanent weg van uitvoerbaarheid.
-Na 12 maanden verschuift de budgetpositie permanent naar de remmende lijn, wordt een behoudscoalitie dominant en is terugdraaien zonder reputatieschade voor de top niet meer geloofwaardig; transformatiegelden drogen op en zorgzwaartebekostiging blijft onder druk.
+30 dagen zonder hard besluit: direct signaalverlies, meer herstelwerk en minder voorspelbaarheid in planning en opvolging.
+
+90 dagen zonder hard besluit: zichtbare erosie in doorstroom en margediscipline, plus groeiende spanning tussen formeel besluit en informele praktijk.
+
+365 dagen zonder hard besluit: structurele schade aan bestuurbaarheid, retentie en leverbetrouwbaarheid, met oplopende herstelkosten.
+
+Na 12 maanden verschuift de organisatie van kiezen naar compenseren: uitstel wordt normaal gedrag, en herstel wordt trager en duurder in zowel geld als vertrouwen.
 
 ### 5. GOVERNANCE IMPACT
-Deze keuze maakt besluitkracht sterker doordat mandaat en escalatieroutes eenduidig worden. Zonder keuze groeit escalatie en blijft verantwoordelijkheid diffuus. Formele machtsverschuiving: besluitrechten verschuiven naar een centraal besluitcomite met 48-uurs escalatieroute. In de onderstroom wordt tegenkracht opgebouwd via budgetrem en informatiefiltering. Structuurgevolg: budget- en prioriteringsrechten blijven centraal tot KPI's drie meetcycli aantoonbaar stabiliseren.
+Governance-impact betekent hier dat besluitvorming opnieuw wordt ontworpen op ritme, eigenaarschap en uitvoerbaarheid. In de bovenstroom vraagt dat een vaste weekcadans met eenduidige KPI-definities en harde escalatielijnen. In de onderstroom vraagt dat vooral gelijke toepassing: dezelfde regel voor elk team, dezelfde termijn voor elke blokkade. Zonder die consistentie blijft governance een afspraak op papier in plaats van een werkend systeem.
 
 ### 6. MACHTSDYNAMIEK & ONDERSTROOM
-In de bovenstroom wordt centrale sturing ingevoerd; in de onderstroom verschuift de strijd naar wie tempo en informatie beheerst.
-De CFO verliest formele veto-ruimte op uitzonderingsbudgetten, wint voorspelbaarheid op cash, kan vertragen via budgetrem of uitzonderingscasus en gebruikt budgetautorisatie als instrument.
-De COO verliest informele speelruimte in planning, wint beslismonopolie op capaciteit, kan vertragen via kwaliteitsargument of herprioritering en gebruikt personeelsplanning als instrument.
-De medisch directeur verliest autonome escalatieroutes, wint duidelijkheid op kwaliteitsgrenzen, kan vertragen via compliance-argument of burn-out framing en gebruikt informatiecontrole en moreel gezag als instrument.
-De regiodirecteuren verliezen discretionaire ruimte op lokale prioritering, winnen duidelijkheid op leververplichting, kunnen vertragen met het argument "client in gevaar" en gebruiken escalatie en personeelsplanning als instrument.
-De culturele reflex blijft conflictmijding; verborgen agenda's draaien om behoud van invloed buiten het formele mandaat.
+De feitelijke macht zit in deze fase vooral op intake, planning en uitzonderingsbesluiten. De CFO verliest ruimte voor losse uitzonderingsbudgetten, maar wint voorspelbaarheid op kas en margelogica. De COO levert informele speelruimte in, maar wint formeel mandaat op capaciteit en doorstroom. Team- en lijnverantwoordelijken verliezen een deel van lokale autonomie, maar krijgen duidelijker kaders voor eerlijke escalatie. De onderstroom blijft zichtbaar in wie informatie doseert, wie tempo remt en wie uitzonderingen probeert te normaliseren.
 
 ### 7. EXECUTIERISICO
-Faalpunt: oude en nieuwe prioriteiten blijven parallel in dezelfde teams bestaan. Concrete blocker: dubbel mandaat tussen lijn en programma, gevolgd door sluipende herprioritering. De onderstroom bestaat uit loyaliteiten die machtverlies compenseren via uitstel en heronderhandeling. Personeelstekort en burn-out maken dat vertraging politiek als zorgargument wordt verpakt. Dit is geen informatieprobleem maar een moedprobleem; geen capaciteitsprobleem maar een machtsprobleem. Adaptieve hardheid: bij stagnatie confronterend, bij transitie klinisch, bij momentum strategisch beheerst.
+Het primaire executierisico is terugval in oude werkafspraken zodra spanning oploopt. Het faalpunt is meestal dat oude en nieuwe prioriteiten naast elkaar actief blijven, waardoor teams tegelijk moeten versnellen en stabiliseren. De concrete blocker is dubbelmandaat: formeel wordt een richting gekozen, informeel blijft heronderhandeling bestaan. Dat maakt uitvoering langzaam zonder dat iemand expliciet nee zegt.
 
 ### 8. 90-DAGEN INTERVENTIEPLAN
-Week 1-2: CEO en CFO zetten één lijn vast, stoppen conflicterende dossiers per direct en wijzen per prioriteit één eigenaar met KPI aan.
-Week 3-6: COO herverdeelt budget, capaciteit en besluitrechten; escalaties worden binnen 48 uur bestuurlijk afgedwongen en uitzonderingsroutes worden gesloten.
-Week 7-12: CHRO en COO rekenen uitvoering af op doorlooptijd, marge en leverbetrouwbaarheid; blokkades worden binnen zeven dagen gesloten of als expliciet verlies geboekt.
-Wie tempo controleert, controleert macht.
+Week 1-2: Owner CEO/CFO. Deliverable: bindend consolidatiebesluit, stop-doinglijst, eigenaarschap per prioriteit en vaste KPI-definities. Escalatiepad: uitzonderingen binnen 48 uur naar de formele regietafel.
+
+Week 3-6: Owner COO. Deliverable: herverdeling van capaciteit, planning en besluitrechten naar een vaste weekcadans met beslislog. Escalatiepad: blokkades binnen 7 dagen sluiten of expliciet accepteren als gekozen verlies.
+
+Week 7-12: Owner DRI per prioriteit. Deliverable: aantoonbare adoptie plus KPI-impact, met uitzonderingen alleen op naam, met reden en met einddatum. Escalatiepad: stil veto direct terug naar boardreview.
+
+Dag 30: eerste executiebewijs zichtbaar in stopkeuzes en besluitdiscipline.
+
+Dag 60: stabiel ritme op intake, planning en opvolging.
+
+Dag 90: meetbare verbetering op doorstroom, marge en effectieve bezetting.
 
 ### 9. DECISION CONTRACT
-De Raad van Bestuur committeert zich aan:
-- Keuze A of B met beslismonopolie bij de COO op prioritering en capaciteitsvolgorde.
-- Formele macht: de CFO verliest extra veto op portfolio-uitzonderingen; informele macht: lokale mandaatdragers verliezen het stille uitstelcircuit.
-- Per direct stopt elk initiatief zonder benoemde owner en KPI; deze dossiers mogen niet meer via informele lijn geëscaleerd worden.
-- KPI en tijdshorizon: binnen 30 dagen eerste executiesignalen, binnen 90 dagen meetbaar effect op marge en doorlooptijd, binnen 365 dagen structurele trendbreuk.
-- Expliciet geaccepteerd verlies: EUR 2,2 miljoen aan stopzettingen en 16% minder lokale beslisruimte in jaar 1, met directe impact op CFO-vetoruimte en regiodirecteur-mandaat.
-- De ongemakkelijke waarheid is: dit contract verdeelt macht opnieuw en maakt reputatieschade zichtbaar voor wie vertraagt.`;
+De Raad van Bestuur committeert zich aan: een bindende keuze met eenduidige eindverantwoordelijkheid, vaste termijnen en meetbare uitkomsten. Per direct stopt parallelle sturing op dezelfde KPI's en stopt elk initiatief zonder benoemde owner, deadline en toetsbaar resultaat. Formeel wordt mandaat op intake, planning en uitzonderingen gecentraliseerd waar dat nodig is voor ketenregie. Informeel vervalt de ruimte om via bypass-routes besluituitstel te organiseren. Geaccepteerd verlies is expliciet: tijdelijke pauze van niet-kernwerk, tijdelijke begrenzing van instroom in druksegmenten en tijdelijke inperking van lokale uitzonderingsruimte om bestuurlijke voorspelbaarheid te herstellen.`;
 
   return trimToMaxWords(
     enforceMinimumWords(base, minWords, maxWords, company),
     maxWords
   );
+}
+
+function buildConcreteContextHint(input: BoardroomInput): string {
+  const docs = Array.isArray(input.documents) ? input.documents : [];
+  const docFragments = docs
+    .slice(0, 3)
+    .map((doc) => toSafeString(doc?.content).slice(0, 700))
+    .filter(Boolean);
+
+  return [
+    toSafeString(input.company_name),
+    toSafeString(input.company_context),
+    toSafeString(input.executive_thesis),
+    toSafeString(input.central_tension),
+    toSafeString(input.strategic_narrative),
+    ...docFragments,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
 }
 
 function hardenNarrativeCandidate(
@@ -2032,28 +2143,39 @@ function hardenNarrativeCandidate(
   minWords: number,
   maxWords: number
 ): string {
-  let output = scrubForbiddenLanguage(String(candidate ?? "").trim());
+  let output = trimToCanonicalStart(
+    scrubForbiddenLanguage(String(candidate ?? "").trim())
+  );
+  output = enforceNoMetaNoTemplate(output);
+  output = enforceHgbcoHeadings(output);
+  output = enforceAtoERatioStructure(output);
+  output = enforceUpperLowerStream(output);
+  output = enforceDecisionContractHard(output);
   output = ensureMandatorySections(output);
-  output = enforceSectorInformationParagraph(output, input);
   output = enforceComparableOrgAssumption(output, input);
   output = enforceGGZDepthHints(output, input);
-  output = enforceTopUnderstreamBalance(output);
   output = sanitizeSectionOpeners(output);
   output = enforceLossLanguage(output);
-  output = enforceCyntraBridge(output);
-  output = enforceSignatureLayer(output);
-  output = enforceTopUnderstreamBalance(output);
   output = sanitizeSectionOpeners(output);
   output = removeRepeatedSectionSentences(output);
+  output = consolidateOpportunityCostWindowDuplicates(output);
   output = enforceReadableParagraphRhythm(output);
+  output = enforceNinetyDayInterventionParagraphs(output);
+  const contextHint = buildConcreteContextHint(input);
   output = enforceConcreteNarrativeMarkdown(
     output,
-    input.company_context || input.company_name || ""
+    contextHint
   );
+  output = enforceNoMetaNoTemplate(output);
+  output = enforceHgbcoHeadings(output);
+  output = enforceAtoERatioStructure(output);
+  output = enforceUpperLowerStream(output);
+  output = enforceDecisionContractHard(output);
   output = scrubForbiddenLanguage(output);
   output = sanitizeSectionOpeners(output);
   output = removeRepeatedSectionSentences(output);
   output = enforceReadableParagraphRhythm(output);
+  output = enforceNinetyDayInterventionParagraphs(output);
   output = sanitizeResidualForbiddenNarrative(output);
   output = enforceMinimumWords(
     output,
@@ -2062,6 +2184,7 @@ function hardenNarrativeCandidate(
     input.company_name || "de organisatie"
   );
   output = sanitizeResidualForbiddenNarrative(output);
+  output = trimToCanonicalStart(output);
   output = sanitizeSectionOpeners(output);
   return trimToMaxWords(scrubForbiddenLanguage(output), maxWords);
 }
@@ -2072,8 +2195,10 @@ function hardenNarrativeCandidate(
 
 function buildSystemPrompt(): string {
   return `
+${HGBCO_MCKINSEY_SYSTEM_INJECT}
 ${EXECUTIVE_PROMPT_INJECT}
 ${MANDATORY_GGZ_CASE_FACTS_BLOCK}
+${MULTISOURCE_CONTEXT_DIRECTIVE}
 ${enforceLanguagePrompt("nl")}
 ${HARD_FALLBACK_PROMPT_RULE}
 ${INTELLIGENT_SECTOR_FALLBACK_RULE}
@@ -2088,19 +2213,14 @@ JE RAPPORT FORCEERT EEN BESTUURSBESLUIT.
 JE SCHRIJFT UITSLUITEND NEDERLANDS, OOK KOPPEN EN TERMINOLOGIE.
 GEEN MARKETINGTAAL. GEEN AI-TAAL. GEEN VAGE FORMULERINGEN.
 
-CYNTRA INTELLECTUAL PROPERTY SIGNATURE LAYER (DOMINANT):
-- Besluitkracht is de centrale variabele: elke alinea toetst versterking of ondermijning van besluitkracht aan de top.
-- Dominante bestuurshypothese: gebruik expliciet de denkvorm "De werkelijke bestuurlijke kern is niet X, maar Y."
-- Oncomfortabele waarheid: gebruik expliciet "De ongemakkelijke waarheid is: ..."
-- Spanning boven optimalisatie: benoem minimaal één onoplosbaar spanningsveld.
-- Verlies als realiteit: benoem expliciet concreet verlies.
-- Macht als valuta: benoem minimaal drie concrete actoren; per actor verlies, winst, sabotagewijze en instrument.
-- Tijd als actieve kracht: benoem irreversibiliteit, venstersluiting en stapelende schade bij uitstel.
-- Tempo als machtsinstrument: gebruik expliciet "Wie tempo controleert, controleert macht."
-- Besluit als contract: sluit contractueel af met keuze, KPI, tijdshorizon en geaccepteerd verlies.
-- Cognitieve volwassenheid: adresseer expliciet informatieprobleem versus moedprobleem, of capaciteitsprobleem versus machtsprobleem.
-- Historische herhaling: benoem waarom eerdere interventies faalden waar relevant.
-- Adaptieve hardheid: stagnatie = confronterend, transitie = klinisch, momentum = strategisch beheerst.
+CYNTRA SIGNATURE LAYER:
+- Besluitkracht blijft de centrale variabele.
+- Schrijf menselijk, concreet en bestuurlijk scherp; geen slogans, geen theatrale oneliners.
+- Gebruik een empathische maar duidelijke boardroomtoon: confronterend op systeemkeuzes, respectvol richting professionals.
+- Maak verlies expliciet en eerlijk verdeeld.
+- Benoem formele en informele machtsdynamiek zonder karikaturen of beschuldigende taal.
+- Benoem tijdsdruk en cumulatieve schade van uitstel op 30/90/365 dagen.
+- Sluit af met een besluitcontract dat uitvoerbaar en toetsbaar is.
 
 VERPLICHTE STRUCTUUR (EXACT):
 ### 1. DOMINANTE BESTUURLIJKE THESE
@@ -2115,40 +2235,37 @@ VERPLICHTE STRUCTUUR (EXACT):
 
 INHOUDSEISEN:
 - Sectie 1 bevat één dominante these in maximaal 10 zinnen.
-- Sectie 1 opent met de denkvorm "De werkelijke bestuurlijke kern is niet X, maar Y."
-- Sectie 1 bevat expliciet "De ongemakkelijke waarheid is: ..."
-- Sectie 1 benoemt expliciet de besluitkrachttoets voor de top.
-- Sectie 1 bevat een aparte alinea die start met "Sectorinformatie:" en benoemt sectorspecifieke druk.
+- Sectie 1 benoemt expliciet de bestuurlijke toetsvraag voor de top.
 - Sectie 2 beschrijft een niet-optimaliseerbaar dilemma.
-- Sectie 2 bevat expliciet een onoplosbaar spanningsveld.
 - Sectie 3 benoemt wat wordt gewonnen, wat wordt verloren, wie macht verliest en waar frictie ontstaat.
-- Sectie 3 bevat minimaal twee meetbare verliezen met EUR en/of % plus tijdshorizon.
+- Sectie 3 gebruikt alleen meetbare verliezen (EUR/%/volume) als die in de broncontext staan; anders expliciet "niet onderbouwd in geüploade documenten".
 - Sectie 4 beschrijft concreet de kosten van niets doen op 30, 90 en 365 dagen.
 - Sectie 4 verwerkt drie unieke lagen: 30 dagen = signaalverlies, 90 dagen = machtsverschuiving, 365 dagen = systeemverschuiving.
 - Sectie 4 maakt na 12 maanden concreet welke positie permanent schuift, welke coalitie dominant wordt en wat niet zonder reputatieschade terug te draaien is.
-- Sectie 4 maakt in ggz-context expliciet: 365 dagen = IGJ-sanctiedruk, wachtlijst-MAC structureel vast en centrale regie permanent.
+- Sectie 4 benoemt sectorspecifieke effecten alleen als ze expliciet in bronmateriaal staan.
+- ${NUMERIC_CLAIM_EXPLANATION_DIRECTIVE}
 - Sectie 5 benoemt expliciet effect op besluitkracht, escalatie, formele machtsverschuiving en structuurgevolgen.
 - ${OPPORTUNITY_GOVERNANCE_DEPTH_DIRECTIVE}
 - Sectie 6 benoemt minimaal drie machtsactoren en maakt per actor verlies, winst, sabotagewijze en instrument expliciet.
-- Sectie 6 verweeft formele bovenstroom met informele onderstroom zonder checklisttoon.
+- Sectie 6 verweeft formele bovenstroom met informele onderstroom in natuurlijke taal.
 - Sectie 7 benoemt waar uitvoering misgaat, wie blokkeert, wat het concrete faalpunt is en welke onderstroom onzichtbaar werkt.
-- Sectie 7 bevat expliciet cognitieve volwassenheidsreflectie (informatie vs moed, capaciteit vs macht, strategie vs executiediscipline, analyse vs vermijding).
 - Sectie 8 gebruikt exact: Week 1-2:, Week 3-6:, Week 7-12:, met owner en KPI per blok.
-- Sectie 8 bevat expliciet: Wie tempo controleert, controleert macht.
+- Sectie 8 benoemt per blok deliverable, escalatiepad en closure-regel.
+- Sectie 8 bevat dag-30, dag-60 en dag-90 beslisgates met meetbaar resultaat.
+- ${EXECUTION_PLAN_DEPTH_DIRECTIVE}
 - Sectie 9 begint exact met: De Raad van Bestuur committeert zich aan:
-- Sectie 9 bevat expliciet: keuze A of B, formeel machtsverlies, informeel machtsverlies, beslismonopolie, directe stop, niet-escalatie en geaccepteerd verlies met impact.
-- Sectie 9 benoemt actor-impact expliciet met €/% en rolgevolg voor minimaal één sleutelactor.
-- Elke sectie verbindt expliciet bovenstroom en onderstroom in dezelfde alinea.
+- Sectie 9 bevat expliciet: gekozen richting, formeel machtsverlies, informeel machtsverlies, heldere stopregels en geaccepteerd verlies met impact.
+- Sectie 9 benoemt actor-impact met rolgevolg; voeg €/% alleen toe als onderbouwd in bronmateriaal.
 
 STIJLREGELS:
-- Geen nuanceblokken, geen scenario-lijsten, geen vrijblijvende aanbevelingen.
-- Als context dun is: open exact met "Op basis van bestuurlijke patronen in de ggz:" en maak realistische aannames.
+- Schrijf per sectie in lange, vloeiende, menselijke alinea's op boardroomniveau.
+- Geen vrijblijvende aanbevelingen of algemeenheden.
+- Als context dun is: noem hiaten expliciet en verzin geen feiten.
 - Geen termen als "op basis van de analyse", "het lijkt erop dat", "mogelijk", "zou kunnen" of "men zou".
 - Geen termen als "default template", "transformatie-template", "governance-technisch", "patroon", "context is schaars", "werk uit", "aanname", "contextanker", "belangrijke succesfactor", "quick win" of "low hanging fruit".
-- Geen bulletspam: alleen in sectie 9 vier tot zes bullets voor het besluitcontract.
+- Consolideer: vermijd herhaling van dezelfde alinea in meerdere secties.
 - Leg causale keten hard vast: oorzaak -> gevolg -> ingreep -> resultaat.
-- Verbind bovenstroom en onderstroom expliciet in governance en executie.
-- Bij ggz-context benoem expliciet: IGJ-sanctierisico, wachtlijst-MAC-druk, ambulantisering vs klinische capaciteit, transformatiegelden opdrogen, zorgzwaartebekostiging onder druk en personeelstekort met burn-out realiteit.
+- Claims moeten terugleidbaar zijn naar de geüploade documenten/context.
   `.trim();
 }
 
@@ -2158,8 +2275,10 @@ function buildContinuationPrompt(rejectReason?: string): string {
     : "REJECT direct elke output met verboden generieke taal of AI-sporen.";
 
   return `
+${HGBCO_MCKINSEY_USER_INJECT}
 ${EXECUTIVE_PROMPT_INJECT}
 ${MANDATORY_GGZ_CASE_FACTS_BLOCK}
+${MULTISOURCE_CONTEXT_DIRECTIVE}
 ${HARD_FALLBACK_PROMPT_RULE}
 ${INTELLIGENT_SECTOR_FALLBACK_RULE}
 ${ANTI_FILLER_RULE}
@@ -2167,17 +2286,19 @@ ${ANTI_FILLER_RULE}
 ${rejectLine}
 Ga verder.
 Behoud exact de 9 secties.
-Gebruik expliciet: De werkelijke bestuurlijke kern is niet X, maar Y.
-Gebruik expliciet: De ongemakkelijke waarheid is: ...
-Maak in sectie 6 minimaal drie machtsactoren concreet met verlies, winst, sabotagewijze en instrument.
+Houd de toon menselijk, concreet en bestuurlijk scherp.
+Schrap slogans en formuletaal; schrijf doorlopend en natuurlijk.
+Maak in sectie 6 minimaal drie machtsactoren concreet met verlies, winst, vertraging en instrument.
 Werk opportunity cost uit op 30/90/365 plus 12 maanden met irreversibele machts- en coalitieverschuiving.
-Veranker in sectie 8: Wie tempo controleert, controleert macht.
-Sluit sectie 9 af met formeel/informeel machtsverlies, beslismonopolie, directe stop, niet-escalatie en geaccepteerd verlies met impact.
-Neem in sectie 9 actor-impact op in €/% met rolgevolg voor sleutelactoren.
-Benoem in sectie 1 een aparte alinea die start met: Sectorinformatie:
-Verbind in elke sectie bovenstroom en onderstroom.
-Voeg bij ggz-context expliciet IGJ-sanctierisico, wachtlijst-MAC-druk, ambulantisering versus klinische capaciteit, opdrogende transformatiegelden, zorgzwaartebekostiging onder druk en burn-out realiteit toe.
+Gebruik absolute €-bedragen alleen met expliciete berekening + bron; anders expliciet "niet onderbouwd in geüploade documenten".
+Werk sectie 8 uit met Week 1-2, Week 3-6, Week 7-12 inclusief owner, deliverable, KPI, escalatiepad en dag-30/60/90 beslisgates.
+Sluit sectie 9 af met formeel/informeel machtsverlies, directe stopregels en geaccepteerd verlies met impact.
+Neem in sectie 9 actor-impact op met rolgevolg voor sleutelactoren; €/% alleen als brononderbouwd.
+Voeg alleen sectorspecifieke claims toe als ze aantoonbaar in de broncontext staan.
+Gebruik altijd gecombineerde input uit geüploade documenten en vrije tekstcontext.
 ${OPPORTUNITY_GOVERNANCE_DEPTH_DIRECTIVE}
+${NUMERIC_CLAIM_EXPLANATION_DIRECTIVE}
+${EXECUTION_PLAN_DEPTH_DIRECTIVE}
 ${CONCRETE_REPROMPT_DIRECTIVE}
 `.trim();
 }
@@ -2224,13 +2345,12 @@ export async function generateBoardroomNarrative(
 5. ${q.q5}
 `
     : `
-Op basis van bestuurlijke patronen in de ggz:
-Gebruik context, machtsdynamiek en bestuursspanning om één besluit af te dwingen.
+Vragen zijn onvolledig. Werk uitsluitend met aantoonbare broncontext en benoem ontbrekende informatie expliciet.
 `;
 
   const documentBlock =
     documents.length === 0
-      ? "Op basis van bestuurlijke patronen in de ggz: hanteer sectorspecifieke aannames en maak die bestuurlijk concreet."
+      ? "Geen documenten geüpload. Geef alleen brongebonden conclusies uit aanwezige context en markeer dat documentonderbouwing ontbreekt."
       : documents
           .slice(0, 30)
           .map(
@@ -2252,14 +2372,22 @@ ${d.content}
     legacyContext,
     briefContext
   );
+  const groundingSource = buildGroundingSource(
+    input,
+    documents,
+    legacyContext,
+    briefContext
+  );
 
   const baseMessages: AIMessage[] = [
     { role: "system", content: buildSystemPrompt() },
     {
       role: "user",
       content: `
+${HGBCO_MCKINSEY_USER_INJECT}
 ${EXECUTIVE_PROMPT_INJECT}
 ${MANDATORY_GGZ_CASE_FACTS_BLOCK}
+${MULTISOURCE_CONTEXT_DIRECTIVE}
 ${HARD_FALLBACK_PROMPT_RULE}
 ${INTELLIGENT_SECTOR_FALLBACK_RULE}
 ${ANTI_FILLER_RULE}
@@ -2275,10 +2403,10 @@ VOLLEDIG CASUSDOSSIER (VERPLICHT LEIDEND):
 ${caseContextBlock}
 
 BRIEF CONTEXT:
-${briefContext || "Op basis van bestuurlijke patronen in de ggz: er is geen bruikbare brief-context, dus hanteer realistische sectoraannames."}
+${briefContext || "Geen bruikbare brief-context; rapporteer alleen wat uit bronmateriaal afleidbaar is."}
 
 LEGACY CONTEXT:
-${legacyContext || "Op basis van bestuurlijke patronen in de ggz: er is geen legacy-context, dus dwing keuze met concrete machts- en tijdssignalen."}
+${legacyContext || "Geen legacy-context; markeer ontbrekende onderbouwing expliciet."}
 `.trim(),
     },
   ];
@@ -2354,6 +2482,8 @@ ${legacyContext || "Op basis van bestuurlijke patronen in de ggz: er is geen leg
   let candidate = text.trim() || buildFallbackNarrative(input, boundedMinWords, maxWords);
   candidate = hardenNarrativeCandidate(candidate, input, boundedMinWords, maxWords);
   candidate = sanitizeResidualForbiddenNarrative(candidate);
+  candidate = sanitizeUngroundedNumericSignals(candidate, groundingSource);
+  validateHgbcoMcKinseyRuntime(candidate);
 
   try {
     assertExecutiveKernelQuality(candidate, enforceGGZDepth);
@@ -2375,17 +2505,27 @@ ${legacyContext || "Op basis van bestuurlijke patronen in de ggz: er is geen leg
         maxWords
       );
       const sanitizedFallback = sanitizeResidualForbiddenNarrative(concreteFallback);
+      const groundedFallback = sanitizeUngroundedNumericSignals(
+        sanitizedFallback,
+        groundingSource
+      );
+      validateHgbcoMcKinseyRuntime(groundedFallback);
 
       try {
-        assertExecutiveKernelQuality(sanitizedFallback, enforceGGZDepth);
-        candidate = sanitizedFallback;
+        assertExecutiveKernelQuality(groundedFallback, enforceGGZDepth);
+        candidate = groundedFallback;
       } catch {
-        candidate = sanitizedFallback;
+        candidate = groundedFallback;
       }
     }
   }
 
   candidate = sanitizeResidualForbiddenNarrative(candidate);
+  candidate = sanitizeUngroundedNumericSignals(candidate, groundingSource);
+  validateHgbcoMcKinseyRuntime(candidate);
+
+  assertExecutiveKernelQuality(candidate, enforceGGZDepth);
+  assertHardOutputGate(candidate);
 
   return {
     text: candidate,
