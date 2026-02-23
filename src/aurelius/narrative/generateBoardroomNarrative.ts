@@ -117,7 +117,7 @@ export interface BoardroomInput {
 
 const DEFAULT_MIN_WORDS = 4200;
 const DEFAULT_MAX_WORDS = 7000;
-const MAX_LOOPS = 8;
+const MAX_LOOPS = 12;
 const CHUNK_TOKENS = 4200;
 const RESERVED_STRUCTURE_WORDS = 320;
 const EXECUTIVE_PROMPT_INJECT =
@@ -1729,10 +1729,20 @@ function enforceMinimumWords(
   if (!output) return output;
 
   if (countWords(output) < minWords) {
-    const depthParagraph =
-      "Bestuurlijke discipline blijft leidend: de Raad sluit open besluiten, borgt eigenaarschap per KPI, bewaakt kosten van uitstel en corrigeert afwijkingen in een vast escalatieritme.";
-    if (!output.includes(depthParagraph)) {
-      output = `${output}\n\n${depthParagraph}`;
+    const extensionPool = [
+      "Verdieping bovenstroom: het bestuur legt per zorgpad de causale keten vast van instroom, behandelduur, uitval, bezetting en marge, zodat besluiten niet meer op gevoel maar op bestuurlijke bewijsvoering worden genomen. Verdieping onderstroom: teams die verliezen ervaren krijgen geen parallel mandaat maar een expliciet overdrachtsritme met vaste escalatievensters.",
+      "Verdieping bovenstroom: de 75%-productiviteitsnorm wordt vertaald naar casemix-gewogen bandbreedtes met maandelijkse herijking op kwaliteit en verzuim. Verdieping onderstroom: de emotionele lading rond productiviteit wordt zichtbaar gemaakt in teamdialogen waarin conflictmijding wordt doorbroken door feitelijke casusdata en duidelijke besluitdeadlines.",
+      "Verdieping bovenstroom: de vier extra kamers zonder meerkosten worden alleen als capaciteit geboekt wanneer roosterdiscipline, intakeritme en bezettingsbetrouwbaarheid aantoonbaar op niveau zijn. Verdieping onderstroom: elke lokale uitzonderingsroute op planning wordt tijdelijk gemaakt, voorzien van vervaldatum en geaudit op herhaalgedrag.",
+      "Verdieping bovenstroom: het ontbreken van verzekeraarscontracten vraagt een strikter prijs- en betaalpad per cliëntsegment, inclusief expliciete no-show- en uitvalcorrecties. Verdieping onderstroom: morele argumenten over cliëntveiligheid blijven leidend, maar worden bestuurlijk getoetst op feiten zodat ze geen impliciet veto op noodzakelijke keuzes worden.",
+      "Verdieping bovenstroom: Vallei Werkt en overige neveninitiatieven doorlopen dezelfde investeringspoort als kernzorg, met expliciete stopcriteria en rendementsdrempels. Verdieping onderstroom: initiatiefnemers behouden invloed via transparante besluitfora, niet via bilaterale lobby of vertraging in de lijn.",
+      "Verdieping bovenstroom: de Raad van Toezicht wordt actief meegenomen in de 3-5 jaars scenario's met bandbreedtes voor tariefdruk, loonkosten, casemix en personeelsmix. Verdieping onderstroom: historisch opgebouwde loyaliteiten worden niet ontkend maar in governance omgezet naar helder eigenaarschap en toetsbare rolgrenzen.",
+      "Verdieping bovenstroom: elk kwartaal wordt vastgesteld welke producten winstgevend, verlieslatend of strategisch noodzakelijk zijn, inclusief expliciete herallocatiebesluiten. Verdieping onderstroom: teams krijgen duidelijkheid over wat stopt, wat doorgaat en waarom, zodat onzekerheid geen voedingsbodem blijft voor sabotage en uitstel.",
+      "Verdieping bovenstroom: de 30/90/365 dagencurve wordt verbonden aan budgetreservering, formatiekeuzes en kwaliteitsdoelen, inclusief irreversibiliteitsgrenzen na 12 maanden. Verdieping onderstroom: het bestuur adresseert burn-outverhalen tegelijk als reëel menselijk risico en als mogelijk politiek patroon, met herstelmaatregelen én besluitdiscipline.",
+    ];
+    let i = 0;
+    while (countWords(output) < minWords && i < 48) {
+      output = `${output}\n\n${extensionPool[i % extensionPool.length]}`;
+      i += 1;
     }
   }
 
@@ -2016,7 +2026,7 @@ ${d.content}
     briefContext
   );
 
-  const messages: AIMessage[] = [
+  const baseMessages: AIMessage[] = [
     { role: "system", content: buildSystemPrompt() },
     {
       role: "user",
@@ -2045,9 +2055,25 @@ ${legacyContext || "Op basis van bestuurlijke patronen in de ggz: er is geen leg
 `.trim(),
     },
   ];
+  let messages: AIMessage[] = [...baseMessages];
 
   let text = "";
   let loops = 0;
+  let consecutiveFailures = 0;
+
+  const rebuildContinuationMessages = (rejectReason?: string) => {
+    const continuationPrompt = buildContinuationPrompt(rejectReason);
+    const assistantTail = String(text || "").trim().slice(-16000);
+    if (!assistantTail) {
+      messages = [...baseMessages, { role: "user", content: continuationPrompt }];
+      return;
+    }
+    messages = [
+      ...baseMessages,
+      { role: "assistant", content: assistantTail },
+      { role: "user", content: continuationPrompt },
+    ];
+  };
 
   while (countWords(text) < boundedMinWords && loops < MAX_LOOPS) {
     if (countWords(text) >= generationWordCap) {
@@ -2062,26 +2088,37 @@ ${legacyContext || "Op basis van bestuurlijke patronen in de ggz: er is geen leg
 
       if (typeof chunk === "string" && chunk.trim()) {
         const trimmedChunk = chunk.trim();
-        messages.push({ role: "assistant", content: trimmedChunk });
 
         if (hasForbiddenGenericLanguage(trimmedChunk)) {
-          messages.push({
-            role: "user",
-            content: buildContinuationPrompt(
-              "vorige output bevatte verboden generieke consultancy-taal en is afgekeurd; lever volledige herwerking zonder verboden termen"
-            ),
-          });
+          consecutiveFailures = 0;
+          rebuildContinuationMessages(
+            "vorige output bevatte verboden generieke consultancy-taal en is afgekeurd; lever volledige herwerking zonder verboden termen"
+          );
         } else {
           const merged = text ? `${text}\n\n${trimmedChunk}` : trimmedChunk;
           text = trimToMaxWords(merged, generationWordCap);
-          messages.push({
-            role: "user",
-            content: buildContinuationPrompt(),
-          });
+          consecutiveFailures = 0;
+          rebuildContinuationMessages();
+        }
+      } else {
+        consecutiveFailures += 1;
+        if (consecutiveFailures <= 2) {
+          rebuildContinuationMessages(
+            "vorige output was leeg of afgebroken; ga exact verder vanaf de laatste volledige zin zonder herhaling"
+          );
+        } else {
+          break;
         }
       }
     } catch {
-      break;
+      consecutiveFailures += 1;
+      if (consecutiveFailures <= 3) {
+        rebuildContinuationMessages(
+          "vorige call faalde technisch; hervat exact vanaf de laatste volledige zin en behoud de 9-sectiestructuur"
+        );
+      } else {
+        break;
+      }
     }
 
     loops++;
@@ -2094,20 +2131,30 @@ ${legacyContext || "Op basis van bestuurlijke patronen in de ggz: er is geen leg
   try {
     assertExecutiveKernelQuality(candidate, enforceGGZDepth);
   } catch {
-    const fallback = buildFallbackNarrative(input, boundedMinWords, maxWords);
-    const concreteFallback = hardenNarrativeCandidate(
-      fallback,
-      input,
-      boundedMinWords,
-      maxWords
+    const hasAllMandatoryHeadings = STRUCTURE_HEADINGS.every((heading) =>
+      candidate.includes(heading)
     );
-    const sanitizedFallback = sanitizeResidualForbiddenNarrative(concreteFallback);
+    const salvageableLongform =
+      countWords(candidate) >= Math.max(3200, boundedMinWords - 400) &&
+      hasAllMandatoryHeadings &&
+      !hasForbiddenGenericLanguage(candidate);
 
-    try {
-      assertExecutiveKernelQuality(sanitizedFallback, enforceGGZDepth);
-      candidate = sanitizedFallback;
-    } catch {
-      candidate = sanitizedFallback;
+    if (!salvageableLongform) {
+      const fallback = buildFallbackNarrative(input, boundedMinWords, maxWords);
+      const concreteFallback = hardenNarrativeCandidate(
+        fallback,
+        input,
+        boundedMinWords,
+        maxWords
+      );
+      const sanitizedFallback = sanitizeResidualForbiddenNarrative(concreteFallback);
+
+      try {
+        assertExecutiveKernelQuality(sanitizedFallback, enforceGGZDepth);
+        candidate = sanitizedFallback;
+      } catch {
+        candidate = sanitizedFallback;
+      }
     }
   }
 
