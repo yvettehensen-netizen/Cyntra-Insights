@@ -121,7 +121,20 @@ const MAX_LOOPS = 8;
 const CHUNK_TOKENS = 4200;
 const RESERVED_STRUCTURE_WORDS = 320;
 const EXECUTIVE_PROMPT_INJECT =
-  "Schrijf als een zeer ervaren, licht cynische senior ggz-partner die rechtstreeks spreekt tot de Raad van Bestuur. Combineer harde bovenstroom (strategie, governance, cijfers, structuur) met confronterende onderstroom (machtsverlies, informele blokkades, sabotage, toxische patronen, verborgen agenda's en menselijke drijfveren). Schrijf vloeiend, natuurlijk en direct Nederlands. Geen generieke consultancy-taal, geen filler, geen herhaling, geen AI-sporen. Bij vage input activeer de ggz-template met echte pijnpunten: IGJ-sanctierisico, wachtlijst-MAC-druk, ambulantisering vs klinische capaciteit, transformatiegelden opdrogen, zorgzwaartebekostiging onder druk, personeelstekort en burn-out realiteit. Zorg dat elke sectie een vloeiende, menselijke alinea vormt.";
+  "Gebruik ALLE feiten uit de bijgevoegde casus van GGZ Voor Jou. Schrijf een volledig, diepgaand, 10-20 pagina's tellend strategisch besluitrapport in perfecte HGBCO-structuur. Schrijf als een zeer ervaren, licht cynische senior ggz-partner die rechtstreeks spreekt tot de Raad van Bestuur. Gebruik natuurlijk, vloeiend, menselijk Nederlands met lange, inzichtelijke alinea's. Combineer harde bovenstroom (strategie, governance, cijfers, structuur, mandaat, escalatie) met confronterende onderstroom (machtsverlies, informele blokkades, sabotage, toxische patronen, verborgen agenda's, burn-out-verhalen, loyaliteiten, territoriumdrang). Maak het concreet met echte ggz-pijnpunten: IGJ-sanctierisico, wachtlijst-MAC-druk, ambulantisering vs klinische capaciteit, transformatiegelden opdrogen, zorgzwaartebekostiging onder druk, personeelstekort, 7% tariefsverlaging, 5% loonkostenstijging, 30-40% eigen betaling, productiviteitsnorm 75%, HR-loket, verhuizing. Geen filler, geen herhaling, geen AI-taal, geen 'Contextsignaal', geen 'Aanname:', geen 'werk uit structureel', geen 'default template'. Elke sectie moet een coherente, vloeiende alinea vormen. Opportunity Cost: 3 volledig verschillende blokken met concrete EUR/% en irreversibiliteit. Decision Contract: hard, concreet met actor-impact.";
+const MANDATORY_GGZ_CASE_FACTS_BLOCK = `
+VERPLICHTE GGZ CASUSFEITEN (ALTIJD VERWERKEN, OOK BIJ ONVOLLEDIGE INPUT):
+- Krappe marge door loonkostenstijging >5% en tariefsverlaging 7% in 2026.
+- Geen contracten met zorgverzekeraars; clienten betalen 30-40% zelf.
+- Wachtlijst-vrije zorg is het unieke verkoopargument.
+- Productiviteitsnorm 75% (6 uur clientcontact per dag) wordt als te zwaar ervaren.
+- Plannen voor HR-loket Vallei Werkt als nieuw verdienmodel.
+- Verhuizing naar nieuw pand met 4 extra kamers zonder meerkosten.
+- Gebrek aan stuurinformatie en financieel inzicht.
+- Spanning tussen kwaliteit, werkdruk en financiele haalbaarheid.
+- Ambitie om te consolideren in plaats van te groeien.
+- Behoefte aan rust, overzicht en onderbouwde meerjarenstrategie.
+`.trim();
 const HARD_FALLBACK_PROMPT_RULE =
   "Als input dun is, begin zonder excuus met: 'Op basis van bestuurlijke patronen in de ggz:'. Maak realistische aannames die direct besluitdruk zetten. Gebruik nooit woorden als 'lijkt erop dat', 'mogelijk', 'zou kunnen' of 'men zou'.";
 const INTELLIGENT_SECTOR_FALLBACK_RULE =
@@ -197,6 +210,15 @@ const FORBIDDEN_SECTION_START_PATTERNS = [
   /^\s*Contextanker:/i,
   /^\s*beperkte context/i,
   /^\s*duid structureel/i,
+];
+const POST_SANITIZE_LINE_PATTERNS = [
+  /^\s*SIGNATURE LAYER WAARSCHUWING.*$/gim,
+  /^\s*Contextsignaal:.*$/gim,
+  /^\s*Aanname:.*$/gim,
+  /^\s*Contextanker:.*$/gim,
+  /^\s*beperkte context.*$/gim,
+  /^\s*duid structureel.*$/gim,
+  /\$\{facts\.[^}]+\}/gim,
 ];
 
 const STRUCTURE_HEADINGS = [
@@ -285,6 +307,155 @@ function countSentences(text: string): number {
 function toSafeString(value: unknown): string {
   if (typeof value === "string") return value.trim();
   return "";
+}
+
+function clampChars(value: string, maxChars: number): string {
+  const source = String(value ?? "").trim();
+  if (source.length <= maxChars) return source;
+  return `${source.slice(0, maxChars).trim()} ...`;
+}
+
+function decodeDataUrl(value: string): { mime: string; payloadBase64: string } | null {
+  const match = String(value ?? "")
+    .trim()
+    .match(/^data:([^;,]+)?(?:;charset=[^;,]+)?;base64,([\s\S]+)$/i);
+  if (!match) return null;
+  return {
+    mime: String(match[1] || "application/octet-stream").toLowerCase(),
+    payloadBase64: String(match[2] || "").trim(),
+  };
+}
+
+function decodeBase64Binary(base64: string): string {
+  try {
+    if (typeof atob !== "function") return "";
+    return atob(base64);
+  } catch {
+    return "";
+  }
+}
+
+function decodeBase64Utf8(base64: string): string {
+  const binary = decodeBase64Binary(base64);
+  if (!binary) return "";
+  try {
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    return new TextDecoder("utf-8").decode(bytes);
+  } catch {
+    return binary;
+  }
+}
+
+function decodePdfLiteralText(literal: string): string {
+  return literal
+    .replace(/\\([\\()])/g, "$1")
+    .replace(/\\n/g, " ")
+    .replace(/\\r/g, " ")
+    .replace(/\\t/g, " ")
+    .replace(/\\[0-7]{1,3}/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractPdfTextFromBinary(binary: string): string {
+  const fragments: string[] = [];
+  const tjPattern = /\(([^()]*(?:\\.[^()]*)*)\)\s*Tj/g;
+  let tjMatch: RegExpExecArray | null = null;
+  while ((tjMatch = tjPattern.exec(binary)) !== null) {
+    const decoded = decodePdfLiteralText(tjMatch[1] || "");
+    if (decoded.length >= 2) fragments.push(decoded);
+  }
+
+  const tjArrayPattern = /\[(.*?)\]\s*TJ/gs;
+  let tjArrayMatch: RegExpExecArray | null = null;
+  while ((tjArrayMatch = tjArrayPattern.exec(binary)) !== null) {
+    const chunk = tjArrayMatch[1] || "";
+    const literalPattern = /\(([^()]*(?:\\.[^()]*)*)\)/g;
+    let literalMatch: RegExpExecArray | null = null;
+    while ((literalMatch = literalPattern.exec(chunk)) !== null) {
+      const decoded = decodePdfLiteralText(literalMatch[1] || "");
+      if (decoded.length >= 2) fragments.push(decoded);
+    }
+  }
+
+  if (fragments.length >= 10) {
+    return clampChars(fragments.join("\n"), 24000);
+  }
+
+  const printableFallback =
+    binary.match(/[A-Za-z0-9€%(),.;:'"\/\-_ ]{20,}/g)?.slice(0, 500).join("\n") || "";
+  return clampChars(printableFallback, 20000);
+}
+
+function normalizeDocumentContentForPrompt(doc: ContextDocument): string {
+  const raw = toSafeString(doc?.content);
+  if (!raw) return "";
+
+  const dataUrl = decodeDataUrl(raw);
+  if (!dataUrl) {
+    return clampChars(raw, 24000);
+  }
+
+  const mime = dataUrl.mime;
+  if (mime.includes("pdf")) {
+    const binary = decodeBase64Binary(dataUrl.payloadBase64);
+    const extracted = extractPdfTextFromBinary(binary);
+    return extracted
+      ? `[PDF-TEXTEXTRACTIE]\n${extracted}`
+      : "[PDF-INHOUD NIET LEESBAAR IN TEKSTLAAG]";
+  }
+
+  if (
+    mime.startsWith("text/") ||
+    mime.includes("json") ||
+    mime.includes("xml") ||
+    mime.includes("csv")
+  ) {
+    const utf8 = decodeBase64Utf8(dataUrl.payloadBase64);
+    return clampChars(utf8, 24000);
+  }
+
+  const utf8Fallback = decodeBase64Utf8(dataUrl.payloadBase64);
+  if (utf8Fallback.trim().length >= 120) {
+    return clampChars(utf8Fallback, 18000);
+  }
+  return `[BINAR DOCUMENT: ${mime}]`;
+}
+
+function normalizeDocumentsForPrompt(documents: ContextDocument[]): ContextDocument[] {
+  return documents.map((doc) => ({
+    ...doc,
+    content: normalizeDocumentContentForPrompt(doc),
+  }));
+}
+
+function buildMandatoryCaseContextBlock(
+  documents: ContextDocument[],
+  legacyContext: string,
+  briefContext: string
+): string {
+  const prioritizedDocs = documents
+    .filter((doc) =>
+      /(gespreksverslag|casus|debrief|ggz|voor jou|voor jouw)/i.test(
+        `${doc.filename} ${doc.content}`
+      )
+    )
+    .slice(0, 6)
+    .map(
+      (doc, idx) =>
+        `Casusdocument ${idx + 1} (${doc.filename}):\n${clampChars(doc.content, 9000)}`
+    );
+
+  const sections = [
+    MANDATORY_GGZ_CASE_FACTS_BLOCK,
+    prioritizedDocs.length
+      ? `VERPLICHTE CASUSDOCUMENTEN (PRIMAIRE BRON):\n${prioritizedDocs.join("\n\n")}`
+      : "VERPLICHTE CASUSDOCUMENTEN (PRIMAIRE BRON): geen leesbare documenttekst gevonden; gebruik onderstaande feitenlijst en alle overige contextvelden.",
+    legacyContext ? `LEGACY CASUSCONTEXT:\n${clampChars(legacyContext, 12000)}` : "",
+    briefContext ? `SAMENGEVATTE BRIEFCONTEXT:\n${clampChars(briefContext, 12000)}` : "",
+  ].filter(Boolean);
+
+  return sections.join("\n\n");
 }
 
 function extractSection(text: string, heading: string): string {
@@ -1337,18 +1508,19 @@ function enforceCyntraBridge(text: string): string {
 }
 
 function detectSectorLabelFromInput(input: BoardroomInput): string {
+  const normalizedDocs = Array.isArray(input.documents)
+    ? normalizeDocumentsForPrompt(input.documents)
+    : [];
   const corpus = [
     toSafeString(input.company_name),
     toSafeString(input.company_context),
     toSafeString(input.executive_thesis),
     toSafeString(input.central_tension),
     toSafeString(input.strategic_narrative),
-    ...(Array.isArray(input.documents)
-      ? input.documents.flatMap((doc) => [
+    ...normalizedDocs.flatMap((doc) => [
           toSafeString(doc?.filename),
           toSafeString(doc?.content).slice(0, 1800),
-        ])
-      : []),
+        ]),
   ]
     .join(" ")
     .toLowerCase();
@@ -1464,10 +1636,22 @@ function hasForbiddenGenericLanguage(text: string): boolean {
   return STRICT_BANNED_LANGUAGE_GUARD.test(normalized);
 }
 
+function sanitizeResidualForbiddenNarrative(text: string): string {
+  let output = String(text ?? "");
+  for (const pattern of POST_SANITIZE_LINE_PATTERNS) {
+    output = output.replace(pattern, "");
+  }
+  output = output.replace(/\b(default template|transformatie-template)\b/gi, "");
+  output = output.replace(/\n{3,}/g, "\n\n");
+  return output.trim();
+}
+
 function hasThinBoardroomInput(input: BoardroomInput): boolean {
+  const normalizedDocs = Array.isArray(input.documents)
+    ? normalizeDocumentsForPrompt(input.documents)
+    : [];
   const hasRichDocuments =
-    Array.isArray(input.documents) &&
-    input.documents.some((doc) => toSafeString(doc?.content).length >= 180);
+    normalizedDocs.some((doc) => toSafeString(doc?.content).length >= 180);
   const hasLegacyContext = toSafeString(input.company_context).length >= 120;
   const hasBriefSignals =
     toSafeString(input.executive_thesis).length >= 80 ||
@@ -1478,6 +1662,9 @@ function hasThinBoardroomInput(input: BoardroomInput): boolean {
 }
 
 function shouldEnforceGGZDepthFromInput(input: BoardroomInput): boolean {
+  const normalizedDocs = Array.isArray(input.documents)
+    ? normalizeDocumentsForPrompt(input.documents)
+    : [];
   const pool: string[] = [];
   pool.push(toSafeString(input.company_name));
   pool.push(toSafeString(input.company_context));
@@ -1485,11 +1672,9 @@ function shouldEnforceGGZDepthFromInput(input: BoardroomInput): boolean {
   pool.push(toSafeString(input.central_tension));
   pool.push(toSafeString(input.strategic_narrative));
 
-  if (Array.isArray(input.documents)) {
-    for (const doc of input.documents.slice(0, 20)) {
-      pool.push(toSafeString(doc?.filename));
-      pool.push(toSafeString(doc?.content).slice(0, 1200));
-    }
+  for (const doc of normalizedDocs.slice(0, 20)) {
+    pool.push(toSafeString(doc?.filename));
+    pool.push(toSafeString(doc?.content).slice(0, 1200));
   }
 
   return GGZ_SIGNAL_GUARD.test(pool.join(" "));
@@ -1642,6 +1827,7 @@ function hardenNarrativeCandidate(
   output = sanitizeSectionOpeners(output);
   output = removeRepeatedSectionSentences(output);
   output = enforceReadableParagraphRhythm(output);
+  output = sanitizeResidualForbiddenNarrative(output);
   return trimToMaxWords(scrubForbiddenLanguage(output), maxWords);
 }
 
@@ -1652,6 +1838,7 @@ function hardenNarrativeCandidate(
 function buildSystemPrompt(): string {
   return `
 ${EXECUTIVE_PROMPT_INJECT}
+${MANDATORY_GGZ_CASE_FACTS_BLOCK}
 ${enforceLanguagePrompt("nl")}
 ${HARD_FALLBACK_PROMPT_RULE}
 ${INTELLIGENT_SECTOR_FALLBACK_RULE}
@@ -1737,6 +1924,7 @@ function buildContinuationPrompt(rejectReason?: string): string {
 
   return `
 ${EXECUTIVE_PROMPT_INJECT}
+${MANDATORY_GGZ_CASE_FACTS_BLOCK}
 ${HARD_FALLBACK_PROMPT_RULE}
 ${INTELLIGENT_SECTOR_FALLBACK_RULE}
 ${ANTI_FILLER_RULE}
@@ -1782,9 +1970,10 @@ export async function generateBoardroomNarrative(
     maxWords - RESERVED_STRUCTURE_WORDS
   );
 
-  const documents: ContextDocument[] = Array.isArray(input.documents)
+  const rawDocuments: ContextDocument[] = Array.isArray(input.documents)
     ? input.documents
     : [];
+  const documents = normalizeDocumentsForPrompt(rawDocuments);
 
   const q = input.questions ?? {};
   const hasQuestions =
@@ -1823,6 +2012,11 @@ ${d.content}
       : "";
 
   const briefContext = buildBriefContext(input);
+  const caseContextBlock = buildMandatoryCaseContextBlock(
+    documents,
+    legacyContext,
+    briefContext
+  );
 
   const messages: AIMessage[] = [
     { role: "system", content: buildSystemPrompt() },
@@ -1830,6 +2024,7 @@ ${d.content}
       role: "user",
       content: `
 ${EXECUTIVE_PROMPT_INJECT}
+${MANDATORY_GGZ_CASE_FACTS_BLOCK}
 ${HARD_FALLBACK_PROMPT_RULE}
 ${INTELLIGENT_SECTOR_FALLBACK_RULE}
 ${ANTI_FILLER_RULE}
@@ -1840,6 +2035,9 @@ ${questionBlock}
 
 CONTEXTDOCUMENTEN:
 ${documentBlock}
+
+VOLLEDIG CASUSDOSSIER (VERPLICHT LEIDEND):
+${caseContextBlock}
 
 BRIEF CONTEXT:
 ${briefContext || "Op basis van bestuurlijke patronen in de ggz: er is geen bruikbare brief-context, dus hanteer realistische sectoraannames."}
@@ -1893,6 +2091,7 @@ ${legacyContext || "Op basis van bestuurlijke patronen in de ggz: er is geen leg
 
   let candidate = text.trim() || buildFallbackNarrative(input, boundedMinWords, maxWords);
   candidate = hardenNarrativeCandidate(candidate, input, boundedMinWords, maxWords);
+  candidate = sanitizeResidualForbiddenNarrative(candidate);
 
   try {
     assertExecutiveKernelQuality(candidate, enforceGGZDepth);
@@ -1904,21 +2103,24 @@ ${legacyContext || "Op basis van bestuurlijke patronen in de ggz: er is geen leg
       boundedMinWords,
       maxWords
     );
+    const sanitizedFallback = sanitizeResidualForbiddenNarrative(concreteFallback);
 
     try {
-      assertExecutiveKernelQuality(concreteFallback, enforceGGZDepth);
-      candidate = concreteFallback;
+      assertExecutiveKernelQuality(sanitizedFallback, enforceGGZDepth);
+      candidate = sanitizedFallback;
     } catch {
-      candidate = concreteFallback;
+      candidate = sanitizedFallback;
     }
   }
+
+  candidate = sanitizeResidualForbiddenNarrative(candidate);
 
   return {
     text: candidate,
     metrics: {
       words: countWords(candidate),
       loops,
-      documents_used: documents.length,
+      documents_used: rawDocuments.length,
       used_questions: hasQuestions,
     },
   };

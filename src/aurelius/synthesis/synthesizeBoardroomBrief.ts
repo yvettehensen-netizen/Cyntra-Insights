@@ -15,7 +15,20 @@ import {
 
 const SIGNATURE_LAYER_ERROR_TEXT = CYNTRA_SIGNATURE_LAYER_VIOLATION;
 const EXECUTIVE_PROMPT_INJECT =
-  "Schrijf als een zeer ervaren, licht cynische senior ggz-partner die rechtstreeks spreekt tot de Raad van Bestuur. Combineer harde bovenstroom (strategie, governance, cijfers, structuur) met confronterende onderstroom (machtsverlies, informele blokkades, sabotage, toxische patronen, verborgen agenda's en menselijke drijfveren). Schrijf vloeiend, natuurlijk en direct Nederlands. Geen generieke consultancy-taal, geen filler, geen herhaling, geen AI-sporen. Bij vage input activeer de ggz-template met echte pijnpunten: IGJ-sanctierisico, wachtlijst-MAC-druk, ambulantisering vs klinische capaciteit, transformatiegelden opdrogen, zorgzwaartebekostiging onder druk, personeelstekort en burn-out realiteit. Zorg dat elke sectie een vloeiende, menselijke alinea vormt.";
+  "Gebruik ALLE feiten uit de bijgevoegde casus van GGZ Voor Jou. Schrijf een volledig, diepgaand, 10-20 pagina's tellend strategisch besluitrapport in perfecte HGBCO-structuur. Schrijf als een zeer ervaren, licht cynische senior ggz-partner die rechtstreeks spreekt tot de Raad van Bestuur. Gebruik natuurlijk, vloeiend, menselijk Nederlands met lange, inzichtelijke alinea's. Combineer harde bovenstroom (strategie, governance, cijfers, structuur, mandaat, escalatie) met confronterende onderstroom (machtsverlies, informele blokkades, sabotage, toxische patronen, verborgen agenda's, burn-out-verhalen, loyaliteiten, territoriumdrang). Maak het concreet met echte ggz-pijnpunten: IGJ-sanctierisico, wachtlijst-MAC-druk, ambulantisering vs klinische capaciteit, transformatiegelden opdrogen, zorgzwaartebekostiging onder druk, personeelstekort, 7% tariefsverlaging, 5% loonkostenstijging, 30-40% eigen betaling, productiviteitsnorm 75%, HR-loket, verhuizing. Geen filler, geen herhaling, geen AI-taal, geen 'Contextsignaal', geen 'Aanname:', geen 'werk uit structureel', geen 'default template'. Elke sectie moet een coherente, vloeiende alinea vormen. Opportunity Cost: 3 volledig verschillende blokken met concrete EUR/% en irreversibiliteit. Decision Contract: hard, concreet met actor-impact.";
+const MANDATORY_GGZ_CASE_FACTS_BLOCK = `
+VERPLICHTE GGZ CASUSFEITEN (ALTIJD VERWERKEN, OOK BIJ ONVOLLEDIGE INPUT):
+- Krappe marge door loonkostenstijging >5% en tariefsverlaging 7% in 2026.
+- Geen contracten met zorgverzekeraars; clienten betalen 30-40% zelf.
+- Wachtlijst-vrije zorg is het unieke verkoopargument.
+- Productiviteitsnorm 75% (6 uur clientcontact per dag) wordt als te zwaar ervaren.
+- Plannen voor HR-loket Vallei Werkt als nieuw verdienmodel.
+- Verhuizing naar nieuw pand met 4 extra kamers zonder meerkosten.
+- Gebrek aan stuurinformatie en financieel inzicht.
+- Spanning tussen kwaliteit, werkdruk en financiele haalbaarheid.
+- Ambitie om te consolideren in plaats van te groeien.
+- Behoefte aan rust, overzicht en onderbouwde meerjarenstrategie.
+`.trim();
 const OPPORTUNITY_GOVERNANCE_DEPTH_DIRECTIVE =
   "Opportunity Cost MOET drie unieke lagen bevatten: 30 dagen (direct signaalverlies + eerste gedragsverschuiving), 90 dagen (zichtbare machtsverschuiving + structurele erosie), 365 dagen (systeemverschuiving + onomkeerbare positie + dominante coalitie). Maak na 12 maanden concreet wat niet zonder reputatieschade terug te draaien is.";
 const HARD_FALLBACK_PROMPT_RULE =
@@ -27,6 +40,15 @@ const ANTI_FILLER_RULE =
 
 const STRICT_BANNED_LANGUAGE_GUARD =
   /\b(default template|transformatie-template|governance-technisch|patroon|context is schaars|werk uit|mogelijk|lijkt erop dat|zou kunnen|men zou|belangrijke succesfactor|quick win|quick wins|low-hanging fruit|low hanging fruit|aanname|contextanker)\b/i;
+const POST_SANITIZE_LINE_PATTERNS = [
+  /^\s*SIGNATURE LAYER WAARSCHUWING.*$/gim,
+  /^\s*Contextsignaal:.*$/gim,
+  /^\s*Aanname:.*$/gim,
+  /^\s*Contextanker:.*$/gim,
+  /^\s*beperkte context.*$/gim,
+  /^\s*duid structureel.*$/gim,
+  /\$\{facts\.[^}]+\}/gim,
+];
 
 const DOMINANT_HYPOTHESIS_GUARD =
   /\bde werkelijke bestuurlijke kern is niet\b[\s\S]{0,180}\bmaar\b/i;
@@ -74,6 +96,63 @@ function normalizeComparableText(text: string): string {
 function collectPowerActors(text: string): string[] {
   const matches = String(text ?? "").match(POWER_ACTOR_EXTRACT_GUARD) ?? [];
   return [...new Set(matches.map((m) => m.toLowerCase().replace(/\s+/g, " ").trim()))];
+}
+
+function clampChars(value: string, maxChars: number): string {
+  const source = String(value ?? "").trim();
+  if (source.length <= maxChars) return source;
+  return `${source.slice(0, maxChars).trim()} ...`;
+}
+
+function collectCaseFragmentsFromAnalysis(
+  analysis: AureliusAnalysisResult
+): string[] {
+  const fragments: string[] = [];
+  const keywordGuard =
+    /\b(ggz|zorg|igj|wachtlijst|mac|ambulantisering|klinische|transformatiegelden|zorgzwaartebekostiging|tarief|loonkosten|eigen betaling|productiviteitsnorm|vallei werkt|hr-loket|verhuizing|kamers|stuurinformatie|werkdruk|consolideren|meerjarenstrategie)\b/i;
+
+  const visit = (value: unknown, depth: number) => {
+    if (depth > 4 || value == null) return;
+    if (typeof value === "string") {
+      const cleaned = value.replace(/\s+/g, " ").trim();
+      if (cleaned.length >= 24 && keywordGuard.test(cleaned)) {
+        fragments.push(cleaned);
+      }
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.slice(0, 60).forEach((entry) => visit(entry, depth + 1));
+      return;
+    }
+    if (typeof value === "object") {
+      Object.values(value as Record<string, unknown>)
+        .slice(0, 80)
+        .forEach((entry) => visit(entry, depth + 1));
+    }
+  };
+
+  visit(analysis, 0);
+  return [...new Set(fragments)].slice(0, 60);
+}
+
+function buildMandatoryCaseContextFromAnalysis(
+  analysis: AureliusAnalysisResult
+): string {
+  const extracted = collectCaseFragmentsFromAnalysis(analysis);
+  const extractedBlock = extracted.length
+    ? `CASUSFRAGMENTEN UIT INPUTANALYSE:\n${extracted.map((line) => `- ${line}`).join("\n")}`
+    : "CASUSFRAGMENTEN UIT INPUTANALYSE: geen expliciete casuszinnen gevonden; gebruik verplichte feitenlijst als minimumcontext.";
+  return `${MANDATORY_GGZ_CASE_FACTS_BLOCK}\n\n${extractedBlock}`;
+}
+
+function sanitizeResidualForbiddenText(text: string): string {
+  let output = String(text ?? "");
+  for (const pattern of POST_SANITIZE_LINE_PATTERNS) {
+    output = output.replace(pattern, "");
+  }
+  output = output.replace(/\b(default template|transformatie-template)\b/gi, "");
+  output = output.replace(/\n{3,}/g, "\n\n");
+  return output.trim();
 }
 
 function scrubForbiddenLanguage(text: string): string {
@@ -524,6 +603,23 @@ function sanitizeBriefLanguage(brief: BoardroomBrief): BoardroomBrief {
   return brief;
 }
 
+function deepSanitizeResidualBrief<T>(value: T): T {
+  if (typeof value === "string") {
+    return sanitizeResidualForbiddenText(value) as T;
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry) => deepSanitizeResidualBrief(entry)) as T;
+  }
+  if (value && typeof value === "object") {
+    const output: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+      output[key] = deepSanitizeResidualBrief(entry);
+    }
+    return output as T;
+  }
+  return value;
+}
+
 function assertNoForbiddenLanguageInBrief(brief: BoardroomBrief) {
   const payload = JSON.stringify(brief);
   if (hasForbiddenGenericLanguage(payload)) {
@@ -682,8 +778,10 @@ export async function synthesizeBoardroomBrief(
   analysis: AureliusAnalysisResult
 ): Promise<BoardroomBrief> {
   const enforceGGZDepth = shouldEnforceGGZDepth(analysis);
+  const mandatoryCaseContext = buildMandatoryCaseContextFromAnalysis(analysis);
   const systemPrompt = `
 ${EXECUTIVE_PROMPT_INJECT}
+${MANDATORY_GGZ_CASE_FACTS_BLOCK}
 ${HARD_FALLBACK_PROMPT_RULE}
 ${INTELLIGENT_SECTOR_FALLBACK_RULE}
 ${ANTI_FILLER_RULE}
@@ -725,9 +823,13 @@ Expliciet verlies.
 
   const userPrompt = `
 ${EXECUTIVE_PROMPT_INJECT}
+${MANDATORY_GGZ_CASE_FACTS_BLOCK}
 ${HARD_FALLBACK_PROMPT_RULE}
 ${INTELLIGENT_SECTOR_FALLBACK_RULE}
 ${ANTI_FILLER_RULE}
+
+VOLLEDIG CASUSDOSSIER (VERPLICHT LEIDEND):
+${mandatoryCaseContext}
 
 INPUT — VOLLEDIGE AURELIUS ANALYSE:
 ${JSON.stringify(analysis, null, 2)}
@@ -869,7 +971,9 @@ OUTPUT — STRICT JSON (VOLG EXACT):
   const parseAndValidate = (raw: string): BoardroomBrief => {
     const rawParsed = JSON.parse(raw) as BoardroomBrief;
     assertNoForbiddenLanguageInRawPayload(rawParsed);
-    const parsed = sanitizeBriefLanguage(enforceConcreteBrief(rawParsed));
+    const parsed = deepSanitizeResidualBrief(
+      sanitizeBriefLanguage(enforceConcreteBrief(rawParsed))
+    );
     assertSignatureLayerCompliance(parsed);
     assertExecutiveHardRequirements(parsed);
     assertGGZSpecificDepthInBrief(parsed, enforceGGZDepth);
