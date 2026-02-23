@@ -1720,29 +1720,249 @@ function enforceGGZDepthHints(text: string, input: BoardroomInput): string {
   return output;
 }
 
+type LongformTimeWindow = {
+  intro: string;
+};
+
+type LongformExpansionTheme = {
+  label: string;
+  topstream: string;
+  understream: string;
+  commitment: string;
+  acceptedLoss: string;
+};
+
+const LONGFORM_TIME_WINDOWS: readonly LongformTimeWindow[] = [
+  {
+    intro:
+      "In het wekelijkse bestuursritme",
+  },
+  {
+    intro:
+      "Binnen 30 dagen na besluit",
+  },
+  {
+    intro:
+      "Binnen 90 dagen na besluit",
+  },
+  {
+    intro:
+      "Richting 365 dagen",
+  },
+  {
+    intro:
+      "Na 12 maanden zonder discipline",
+  },
+] as const;
+
+const LONGFORM_EXPANSION_THEMES: readonly LongformExpansionTheme[] = [
+  {
+    label: "margeklem",
+    topstream:
+      "loonkosten boven 5% per jaar en een tariefdaling van 7% in 2026 bijten direct in de operationele ruimte.",
+    understream:
+      "teams ervaren dat zij dezelfde zorg moeten leveren met minder buffer en verschuiven spanning naar informeel overleg.",
+    commitment:
+      "de CFO stuurt per zorgpad op oorzaak-gevolg tussen inzet, doorlooptijd en marge in plaats van op maandtotalen.",
+    acceptedLoss:
+      "het bestuur accepteert dat niet-rendabele zorgvormen tijdelijk worden begrensd totdat de kernmarge stabiliseert.",
+  },
+  {
+    label: "verzekeraarsafhankelijkheid",
+    topstream:
+      "het ontbreken van contracten met verzekeraars vergroot prijsdruk en maakt de vraag naar zorg minder voorspelbaar.",
+    understream:
+      "professionals voelen morele druk om toch iedereen te helpen, ook als het betaalpad voor clienten fragiel is.",
+    commitment:
+      "instroom wordt gekoppeld aan transparante betaalafspraken en segmentering op uitvalrisico.",
+    acceptedLoss:
+      "een deel van de instroom valt tijdelijk weg om latere uitval en onbeheersbare herplanning te voorkomen.",
+  },
+  {
+    label: "zelfbetaling",
+    topstream:
+      "clienten die 30-40% zelf betalen reageren sneller op prijsfrictie en onzekerheid over behandelduur.",
+    understream:
+      "behandelaren ervaren druk om alsnog uitzonderingen te maken, waardoor afspraken per team uiteenlopen.",
+    commitment:
+      "het bestuur standaardiseert het betaalpad en koppelt no-show- en uitvalcorrecties aan de planningstafel.",
+    acceptedLoss:
+      "conversie daalt tijdelijk in prijsgevoelige segmenten, maar leverbetrouwbaarheid en voorspelbaarheid nemen toe.",
+  },
+  {
+    label: "wachtlijstvrije belofte",
+    topstream:
+      "de belofte van wachtlijst-vrije zorg blijft alleen houdbaar met expliciete casemixgrenzen en planningsdiscipline.",
+    understream:
+      "lokale teams framen instroombegrenzing snel als verlies van mensgerichtheid en zoeken uitzonderingsroutes.",
+    commitment:
+      "de regietafel beslist centraal over intakeprioriteit, met 48-uurs escalatie op knelpunten.",
+    acceptedLoss:
+      "niet elke verwijzing wordt direct ingepland wanneer dit kwaliteit, veiligheid en marge tegelijk schaadt.",
+  },
+  {
+    label: "productiviteitsnorm",
+    topstream:
+      "de 75%-norm van zes clienturen per dag is bestuurlijk eenvoudig maar operationeel te grof voor complexe casemix.",
+    understream:
+      "de norm is emotioneel beladen en wordt door sommige teams gelezen als wantrouwen in vakmanschap.",
+    commitment:
+      "de organisatie verschuift naar bandbreedtes per behandeltype met expliciete koppeling aan verzuim en kwaliteit.",
+    acceptedLoss:
+      "de schijnzekerheid van een uniforme norm vervalt ten gunste van stabielere uitvoering.",
+  },
+  {
+    label: "adhd-diagnostiek",
+    topstream:
+      "de extra kost van circa EUR 90 per client voor ADHD-diagnostiek drukt op trajectrendement door vaste codes.",
+    understream:
+      "teams voelen dat inhoudelijke keuzes financieel worden beoordeeld en trekken zich terug in specialistische subculturen.",
+    commitment:
+      "diagnostische stappen worden strak geprotocolleerd met zicht op kosteneffect per traject.",
+    acceptedLoss:
+      "sommige trajecten krijgen langere doorlooptijd in ruil voor betere voorspelbaarheid van kostprijs.",
+  },
+  {
+    label: "kostprijs per traject",
+    topstream:
+      "een gemiddelde van 12 gesprekken en ongeveer EUR 1.800 kostprijs per client vraagt strakkere sturing op trajectontwerp.",
+    understream:
+      "zonder transparantie ontstaan verhalen over oneerlijke werkverdeling en verborgen voorkeuren in casuskeuze.",
+    commitment:
+      "elk team rapporteert maandelijks de relatie tussen trajectduur, uitkomst en bijdrage.",
+    acceptedLoss:
+      "niet-onderbouwde variatie in behandelduur wordt afgebouwd, ook wanneer dit lokale routines doorbreekt.",
+  },
+  {
+    label: "stuurinformatie",
+    topstream:
+      "zonder betrouwbare stuurinformatie op product, team en traject blijft prioritering incidentgedreven.",
+    understream:
+      "informele invloed groeit waar data ontbreekt en persoonlijke overtuiging de plaats inneemt van feiten.",
+    commitment:
+      "Vision Planner en dashboarding worden besluitverplicht: geen besluit zonder zichtbaar financieel en operationeel effect.",
+    acceptedLoss:
+      "snelheid in losse initiatieven zakt tijdelijk terwijl de informatiebasis wordt hersteld.",
+  },
+  {
+    label: "planning en intake",
+    topstream:
+      "centrale intake via secretariaat en inloopblokken vraagt strakke synchronisatie met feitelijke behandelcapaciteit.",
+    understream:
+      "bij frictie op roosters ontstaan bilaterale deals die formele prioritering ondergraven.",
+    commitment:
+      "intakeblokken worden wekelijks geherijkt op no-show, matchkwaliteit en doorstroom per behandelaar.",
+    acceptedLoss:
+      "lokale voorkeursroutes in intake verdwijnen waar zij ketenprestatie aantoonbaar verslechteren.",
+  },
+  {
+    label: "verhuizing en capaciteit",
+    topstream:
+      "vier extra kamers zonder hogere huur leveren alleen waarde als bezetting, planning en personeel gelijktijdig meeschalen.",
+    understream:
+      "extra ruimte wordt psychologisch snel gezien als oplossing, waardoor procesdiscipline verslapt.",
+    commitment:
+      "kamerbezetting wordt onderdeel van weeksturing met directe correctie op leegstand.",
+    acceptedLoss:
+      "ad-hoc gebruik van ruimtes stopt, ook als dat lokaal als verlies van autonomie wordt ervaren.",
+  },
+  {
+    label: "Vallei Werkt",
+    topstream:
+      "het HR-loket Vallei Werkt kan inkomsten verbreden, maar vraagt scherp gefaseerde governance in een consolidatiejaar.",
+    understream:
+      "nieuwe initiatieven trekken status en aandacht, waardoor de kernzorg zich achtergesteld kan voelen.",
+    commitment:
+      "opschaling verloopt alleen via poortcriteria op cashflow, capaciteit en effect op kern-KPI's.",
+    acceptedLoss:
+      "snelle commerciële zichtbaarheid wordt opgeofferd aan bestuurlijke stabiliteit van de kern.",
+  },
+  {
+    label: "nieuwe businesslijnen",
+    topstream:
+      "een vierde zakelijk onderdeel kan diversificatie brengen, maar verhoogt nu complexiteit in mandaat en uitvoering.",
+    understream:
+      "trekkers van nieuwe lijnen vormen coalities rond groeiverhalen die stopkeuzes proberen te vertragen.",
+    commitment:
+      "elke nieuwe lijn wordt getoetst op dezelfde investeringsdiscipline als de GGZ-kern.",
+    acceptedLoss:
+      "een deel van de innovatiepijplijn wordt bevroren om executie-erosie te vermijden.",
+  },
+  {
+    label: "overlegritme en cultuur",
+    topstream:
+      "vier teamvergaderingen per jaar en beperkte individuele gesprekken zijn onvoldoende voor snelle koerscorrectie.",
+    understream:
+      "de cultuur van hard werken zonder frictiegesprek houdt conflictmijding in stand en vertraagt escalatie.",
+    commitment:
+      "maandelijkse ritmes op productie, kwaliteit en werkdruk worden verplicht met heldere eigenaar per actie.",
+    acceptedLoss:
+      "de informele gewoonte van besluiten uitstellen om de sfeer te bewaken wordt expliciet beëindigd.",
+  },
+  {
+    label: "transparantie en vertrouwen",
+    topstream:
+      "gedeeltelijke financiële openheid door accountantsadvies vraagt een expliciete governancevertaling voor teams.",
+    understream:
+      "onvolledige informatie voedt geruchten over verborgen agenda's en vergroot territoriumdrang.",
+    commitment:
+      "het bestuur maakt zichtbaar welke cijfers waarom gedeeld worden en welke besluitrechten daaraan hangen.",
+    acceptedLoss:
+      "volledige lokale interpretatievrijheid op financiële signalen vervalt in ruil voor eenduidigheid.",
+  },
+  {
+    label: "meerjarenstrategie",
+    topstream:
+      "de 3-5 jaars scenario-analyse met Jan en Raad van Toezicht moet keuzes verankeren in één bestuurlijk pad.",
+    understream:
+      "zonder expliciete volgorde verschuiven loyaliteiten naar degene die de minste pijn belooft.",
+    commitment:
+      "de Raad legt per scenario vast wat stopt, wat doorgaat en welke KPI-drempel de volgende stap opent.",
+    acceptedLoss:
+      "ruimte voor parallelle interpretatie van strategie wordt beperkt om rust en voorspelbaarheid te herstellen.",
+  },
+] as const;
+
+function buildLongformExpansionPool(companyLabel: string): string[] {
+  const company = toSafeString(companyLabel) || "de organisatie";
+  const pool: string[] = [];
+
+  for (const window of LONGFORM_TIME_WINDOWS) {
+    for (const theme of LONGFORM_EXPANSION_THEMES) {
+      pool.push(
+        `${window.intro} op het thema ${theme.label} wordt de spanning tastbaar voor ${company}. ` +
+          `Bovenstroom: ${theme.topstream} ` +
+          `Onderstroom: ${theme.understream} ` +
+          `Bestuurlijk commitment: ${theme.commitment} ` +
+          `Geaccepteerd verlies: ${theme.acceptedLoss}`
+      );
+    }
+  }
+
+  return pool;
+}
+
 function enforceMinimumWords(
   text: string,
   minWords: number,
-  maxWords: number
+  maxWords: number,
+  companyLabel = "de organisatie"
 ): string {
   let output = String(text ?? "").trim();
   if (!output) return output;
 
   if (countWords(output) < minWords) {
-    const extensionPool = [
-      "Verdieping bovenstroom: het bestuur legt per zorgpad de causale keten vast van instroom, behandelduur, uitval, bezetting en marge, zodat besluiten niet meer op gevoel maar op bestuurlijke bewijsvoering worden genomen. Verdieping onderstroom: teams die verliezen ervaren krijgen geen parallel mandaat maar een expliciet overdrachtsritme met vaste escalatievensters.",
-      "Verdieping bovenstroom: de 75%-productiviteitsnorm wordt vertaald naar casemix-gewogen bandbreedtes met maandelijkse herijking op kwaliteit en verzuim. Verdieping onderstroom: de emotionele lading rond productiviteit wordt zichtbaar gemaakt in teamdialogen waarin conflictmijding wordt doorbroken door feitelijke casusdata en duidelijke besluitdeadlines.",
-      "Verdieping bovenstroom: de vier extra kamers zonder meerkosten worden alleen als capaciteit geboekt wanneer roosterdiscipline, intakeritme en bezettingsbetrouwbaarheid aantoonbaar op niveau zijn. Verdieping onderstroom: elke lokale uitzonderingsroute op planning wordt tijdelijk gemaakt, voorzien van vervaldatum en geaudit op herhaalgedrag.",
-      "Verdieping bovenstroom: het ontbreken van verzekeraarscontracten vraagt een strikter prijs- en betaalpad per cliëntsegment, inclusief expliciete no-show- en uitvalcorrecties. Verdieping onderstroom: morele argumenten over cliëntveiligheid blijven leidend, maar worden bestuurlijk getoetst op feiten zodat ze geen impliciet veto op noodzakelijke keuzes worden.",
-      "Verdieping bovenstroom: Vallei Werkt en overige neveninitiatieven doorlopen dezelfde investeringspoort als kernzorg, met expliciete stopcriteria en rendementsdrempels. Verdieping onderstroom: initiatiefnemers behouden invloed via transparante besluitfora, niet via bilaterale lobby of vertraging in de lijn.",
-      "Verdieping bovenstroom: de Raad van Toezicht wordt actief meegenomen in de 3-5 jaars scenario's met bandbreedtes voor tariefdruk, loonkosten, casemix en personeelsmix. Verdieping onderstroom: historisch opgebouwde loyaliteiten worden niet ontkend maar in governance omgezet naar helder eigenaarschap en toetsbare rolgrenzen.",
-      "Verdieping bovenstroom: elk kwartaal wordt vastgesteld welke producten winstgevend, verlieslatend of strategisch noodzakelijk zijn, inclusief expliciete herallocatiebesluiten. Verdieping onderstroom: teams krijgen duidelijkheid over wat stopt, wat doorgaat en waarom, zodat onzekerheid geen voedingsbodem blijft voor sabotage en uitstel.",
-      "Verdieping bovenstroom: de 30/90/365 dagencurve wordt verbonden aan budgetreservering, formatiekeuzes en kwaliteitsdoelen, inclusief irreversibiliteitsgrenzen na 12 maanden. Verdieping onderstroom: het bestuur adresseert burn-outverhalen tegelijk als reëel menselijk risico en als mogelijk politiek patroon, met herstelmaatregelen én besluitdiscipline.",
-    ];
+    const extensionPool = buildLongformExpansionPool(companyLabel);
     let i = 0;
-    while (countWords(output) < minWords && i < 48) {
-      output = `${output}\n\n${extensionPool[i % extensionPool.length]}`;
+    while (countWords(output) < minWords && i < extensionPool.length) {
+      output = `${output}\n\n${extensionPool[i]}`;
       i += 1;
+    }
+
+    let overflow = 0;
+    while (countWords(output) < minWords && overflow < 24) {
+      output = `${output}\n\nAanvullende contractverdieping ${overflow + 1}: bovenstroom en onderstroom worden in hetzelfde weekritme afgedwongen met expliciete eigenaar, harde deadline en zichtbare actor-impact in EUR/% voor bestuur, management en teams.`;
+      overflow += 1;
     }
   }
 
@@ -1801,7 +2021,7 @@ De Raad van Bestuur committeert zich aan:
 - De ongemakkelijke waarheid is: dit contract verdeelt macht opnieuw en maakt reputatieschade zichtbaar voor wie vertraagt.`;
 
   return trimToMaxWords(
-    enforceMinimumWords(base, minWords, maxWords),
+    enforceMinimumWords(base, minWords, maxWords, company),
     maxWords
   );
 }
@@ -1826,7 +2046,6 @@ function hardenNarrativeCandidate(
   output = sanitizeSectionOpeners(output);
   output = removeRepeatedSectionSentences(output);
   output = enforceReadableParagraphRhythm(output);
-  output = enforceMinimumWords(output, minWords, maxWords);
   output = enforceConcreteNarrativeMarkdown(
     output,
     input.company_context || input.company_name || ""
@@ -1836,6 +2055,14 @@ function hardenNarrativeCandidate(
   output = removeRepeatedSectionSentences(output);
   output = enforceReadableParagraphRhythm(output);
   output = sanitizeResidualForbiddenNarrative(output);
+  output = enforceMinimumWords(
+    output,
+    minWords,
+    maxWords,
+    input.company_name || "de organisatie"
+  );
+  output = sanitizeResidualForbiddenNarrative(output);
+  output = sanitizeSectionOpeners(output);
   return trimToMaxWords(scrubForbiddenLanguage(output), maxWords);
 }
 

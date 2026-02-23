@@ -18,7 +18,7 @@ export const CYNTRA_ZORG_THEME = {
   primary: "#4F46E5", // Deep Indigo (Cyntra Signature)
   accent: "#10B981", // Emerald (Innovation / Zorg)
   muted: "#6B7280",
-  font: "Inter", // ✅ Safe default font for PDF engines
+  font: "Helvetica", // React-PDF built-in font (no runtime registration required)
   watermark: "Cyntra Insights — Confidential Board Material",
 } as const;
 
