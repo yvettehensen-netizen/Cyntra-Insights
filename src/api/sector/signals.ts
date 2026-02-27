@@ -1,11 +1,11 @@
 import type { Sector } from "@/aurelius/sector/types";
+import { getSectorSignals } from "@/aurelius/sector/sectorSignals";
 
 export type SectorSignalsResponse = {
   sector: Sector;
   signals: string[];
-  sources: string[];
   fetchedAt: string;
-  source: "live" | "cache" | "fallback";
+  source: "cache" | "curated" | "fallback";
   sectorRiskIndex: number;
   regulatorPressureIndex: number;
   contractPowerScore: number;
@@ -14,11 +14,25 @@ export type SectorSignalsResponse = {
 };
 
 export async function fetchSectorSignals(sector: Sector): Promise<SectorSignalsResponse | null> {
+  const endpointEnabled = String(import.meta.env.VITE_SECTOR_ENDPOINT_ENABLED ?? "false") === "true";
+
+  if (!endpointEnabled) {
+    const local = await getSectorSignals(sector);
+    return {
+      ...local,
+      source: local.source || "fallback",
+    };
+  }
+
   try {
     const response = await fetch(`/api/sector/signals?sector=${encodeURIComponent(sector)}`);
-    if (!response.ok) return null;
+    if (!response.ok) {
+      const local = await getSectorSignals(sector);
+      return { ...local, source: "fallback" };
+    }
     return (await response.json()) as SectorSignalsResponse;
   } catch {
-    return null;
+    const local = await getSectorSignals(sector);
+    return { ...local, source: "fallback" };
   }
 }
