@@ -18,7 +18,22 @@
     "types": ["vite/client"]
   },
 
-  "include": ["src", "vite.config.ts"],
+  "include": [
+    "src/aurelius/narrative/**/*",
+    "src/aurelius/executive/**/*",
+    "src/aurelius/sector/**/*",
+    "src/aurelius/hooks/useCyntraAnalysis.tsx",
+    "src/api/sector/**/*",
+    "src/vite-env.d.ts"
+  ],
 
-  "exclude": ["supabase/functions"]
+  "exclude": [
+    "supabase/functions",
+    "src/academy",
+    "src/analytics",
+    "src/pages/old_analyses",
+    "src/cyntra",
+    "src/pages/ProcessAnalysisPage.tsx",
+    "node_modules"
+  ]
 }
