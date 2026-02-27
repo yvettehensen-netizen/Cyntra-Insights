@@ -812,6 +812,7 @@ export default function UnifiedAnalysisPage() {
   const reportRef = useRef<AureliusAnalysisResult | null>(null);
   const executiveReportRef = useRef<GuaranteedExecutiveReport | null>(null);
   const fallbackFlowTimerRef = useRef<number | null>(null);
+  const printDebounceRef = useRef(0);
   const analysisRunning = loading || isBuilding || isPending;
   const runtimeErrorMessage = error || localError;
   const isSignatureViolation = Boolean(
@@ -1173,7 +1174,13 @@ export default function UnifiedAnalysisPage() {
   /* ================= PDF ================= */
 
   const printReport = async () => {
-    if (isPrinting) return;
+    const now = Date.now();
+    if (now - printDebounceRef.current < 500) return;
+    printDebounceRef.current = now;
+    if (isPrinting) {
+      console.info("[pdf_start_skip_single_flight]");
+      return;
+    }
     const reportForPdf =
       report ??
       (executiveReportView
@@ -1182,11 +1189,18 @@ export default function UnifiedAnalysisPage() {
             analysisType
           )
         : null);
-    if (!reportForPdf) return;
+    if (!reportForPdf) {
+      console.info("[pdf_start_skip_no_report]");
+      return;
+    }
 
     setIsPrinting(true);
     setPdfPreflightError(null);
     setFlowStageIndex(8);
+    console.info("[pdf_start]", {
+      analysisType,
+      hasExecutiveReport: Boolean(executiveReportView),
+    });
     const pdfReport = toPDFReport(reportForPdf, executiveReportView);
     const sectionMap = pdfReport.sections ?? {};
     const sectionEntries = Object.entries(sectionMap).map(([key, section]) => ({
@@ -1224,6 +1238,7 @@ export default function UnifiedAnalysisPage() {
         `PDF pre-flight mislukt. narrativeLength=${narrativeLength}, sectionsCount=${filledSections.length}, emptySectionKeys=${emptySectionKeys.join(", ") || "none"}.`
       );
       setFlowStageIndex(hasReportOutput ? FLOW_COMPLETION_STAGE : 0);
+      console.info("[pdf_end]", { status: "preflight_failed", ...details });
       return;
     }
 
@@ -1248,10 +1263,15 @@ export default function UnifiedAnalysisPage() {
         { confidence: 0.82 }
       );
       setFlowStageIndex(FLOW_COMPLETION_STAGE);
+      console.info("[pdf_end]", { status: "success" });
     } catch (error) {
       setPdfPreflightError(
         error instanceof Error ? error.message : "PDF generatie mislukt."
       );
+      console.info("[pdf_end]", {
+        status: "error",
+        error: error instanceof Error ? error.message : "unknown",
+      });
     } finally {
       setIsPrinting(false);
     }
