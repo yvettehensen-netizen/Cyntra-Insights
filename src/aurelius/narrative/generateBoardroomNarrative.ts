@@ -22,6 +22,11 @@ import {
   hasDecisionContractCommitBlock,
   hasForbiddenHgbcoLanguage,
 } from "./guards/hgbcoMcKinseySpec";
+import {
+  ExecutiveGateError,
+  validateExecutiveGateStack,
+} from "@/aurelius/executive/ExecutiveGateStack";
+import { parseInputAnchors } from "@/aurelius/executive/anchor/anchorScan";
 
 /* ============================================================
    TYPES
@@ -120,6 +125,7 @@ export interface BoardroomInput {
   };
 
   meta?: Record<string, unknown>;
+  sector_selected?: string;
 }
 
 /* ============================================================
@@ -244,6 +250,7 @@ const STRUCTURE_HEADINGS = [
   "### 8. 90-DAGEN INTERVENTIEPLAN",
   "### 9. DECISION CONTRACT",
 ] as const;
+const runtimeLastOutputByContext = new Map<string, string>();
 
 const TOP_UNDER_BRIDGE_LINES: Record<(typeof STRUCTURE_HEADINGS)[number], string> = {
   "### 1. DOMINANTE BESTUURLIJKE THESE":
@@ -301,6 +308,15 @@ const SECTION_DEFAULTS: Record<(typeof STRUCTURE_HEADINGS)[number], string> = {
 
 function countWords(text: string): number {
   return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+function contextFingerprint(value: string): string {
+  const source = String(value ?? "");
+  let hash = 0;
+  for (let i = 0; i < source.length; i += 1) {
+    hash = (hash * 31 + source.charCodeAt(i)) >>> 0;
+  }
+  return `ctx_${hash.toString(16)}`;
 }
 
 function trimToMaxWords(text: string, maxWords: number): string {
@@ -490,6 +506,127 @@ function replaceSection(text: string, heading: string, nextBody: string): string
 
   const nextIndex = bodyStart + nextRel;
   return `${text.slice(0, bodyStart)}${sectionBody}${text.slice(nextIndex).trimStart()}`.trim();
+}
+
+function buildInterventionLine(anchor: string, idx: number, owner: string, day: number): string {
+  const kpiLine =
+    /€|%|\\b\\d+\\b/.test(anchor)
+      ? `KPI: Behoud of herstel van ${anchor} binnen afgesproken bandbreedte`
+      : `KPI: Meetwijze = wekelijkse trendverbetering op ${anchor} (zonder numerieke claim buiten input)`;
+
+  return [
+    `Actie: Veranker ${anchor} als besliscriterium in operationele weekstart ${idx + 1}.`,
+    `Eigenaar: ${owner}`,
+    `Deadline: Dag ${day}`,
+    kpiLine,
+    `Escalatiepad: Bij conflict beslist ${owner} binnen 48 uur met RvB-escalatie.`,
+    `Direct zichtbaar effect: Binnen 7 dagen minder frictie rond ${anchor}.`,
+  ].join("\n");
+}
+
+function enforceSection8InterventionArtifact(markdown: string, contextHint: string): string {
+  const heading = "### 8. 90-DAGEN INTERVENTIEPLAN";
+  const current = extractSection(markdown, heading);
+  const anchors = parseInputAnchors(contextHint).slice(0, 18);
+  const ownerPool = ["CEO", "CFO", "COO", "Programmadirecteur", "Operationeel manager"];
+
+  const month1 = anchors.slice(0, 5);
+  const month2 = anchors.slice(5, 10);
+  const month3 = anchors.slice(10, 15);
+  const pick = (list: string[], fallback: string[]) =>
+    (list.length ? list : fallback).map((anchor, idx) =>
+      buildInterventionLine(anchor, idx, ownerPool[idx % ownerPool.length], 10 + idx * 3)
+    );
+
+  const artifact = [
+    "MAAND 1 (dag 1–30): STABILISEREN EN KNOPEN DOORHAKKEN",
+    ...pick(month1, ["intake", "planning", "dashboard", "wachttijd", "instroomkader"]),
+    "",
+    "MAAND 2 (dag 31–60): HERONTWERPEN EN HERALLOCEREN",
+    ...pick(month2, ["contractvormen", "escalatie", "capaciteit", "besluitritme", "doorlooptijd"]),
+    "",
+    "MAAND 3 (dag 61–90): VERANKEREN EN CONTRACTEREN",
+    ...pick(month3, ["mandaat", "coalitie", "onderstroom", "governance", "KPI"]),
+    "",
+    "Dag 30 gates: Stop-doing compliance + owner accountability bevestigd.",
+    "Dag 60 gates: Mandaatverschuiving + escalatiepad hard vastgelegd.",
+    "Dag 90 gates: Adoptie + impact aantoonbaar op kern-KPI en casus-ankers.",
+    "",
+    "BOVENSTROOM-DOELEN",
+    "1. Besluitrecht eenduidig en conflictescalatie binnen 48 uur.",
+    "2. Intake- en planningsritme is stabiel en controleerbaar.",
+    "3. KPI-definities zijn uniform en auditbaar.",
+    "4. Stop-doing wordt daadwerkelijk uitgevoerd.",
+    "5. Point of no return expliciet geactiveerd bij gate-falen.",
+    "",
+    "ONDERSTROOM-DOELEN",
+    "1. Informele bypasses dalen zichtbaar binnen 30 dagen.",
+    "2. Conflictmijding maakt plaats voor expliciete escalatie.",
+    "3. Teamgedrag verschuift van ad-hoc naar ritmische besluituitvoering.",
+    "4. Statusverlies wordt benoemd en bestuurlijk geadresseerd.",
+    "5. Coalitievorming ondersteunt de gekozen koers in plaats van vertraging.",
+  ].join("\n\n");
+
+  const needsRewrite =
+    !current.includes("MAAND 1 (dag 1–30): STABILISEREN EN KNOPEN DOORHAKKEN") ||
+    !current.includes("MAAND 2 (dag 31–60): HERONTWERPEN EN HERALLOCEREN") ||
+    !current.includes("MAAND 3 (dag 61–90): VERANKEREN EN CONTRACTEREN") ||
+    (current.match(/\bActie:/g) ?? []).length < 15;
+
+  if (!needsRewrite) return markdown;
+  return replaceSection(markdown, heading, artifact);
+}
+
+function enforceDecisionContractLabels(markdown: string): string {
+  const heading = "### 9. DECISION CONTRACT";
+  const current = extractSection(markdown, heading);
+  const prefix = "De Raad van Bestuur committeert zich aan:";
+  const value = (label: string, fallback: string) => {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const m = current.match(new RegExp(`${escaped}\\s*(.+)`, "i"));
+    return (m?.[1] ?? fallback).trim();
+  };
+
+  const rewritten = [
+    prefix,
+    `Keuze: ${value("Keuze:", "Eén dominante koers met expliciet mandaat.")}`,
+    `Accepted loss: ${value("Accepted loss:", "Tijdelijke inperking van lokale uitzonderingsruimte.")}`,
+    `Besluitrecht ligt bij: ${value("Besluitrecht ligt bij:", "CEO met formele board-borging.")}`,
+    `Stoppen per direct: ${value("Stoppen per direct:", "Parallelle prioriteiten zonder owner/KPI/deadline.")}`,
+    `Niet meer escaleren: ${value("Niet meer escaleren:", "Informele bypasses buiten de formele lijn.")}`,
+    `Maandelijkse KPI: ${value("Maandelijkse KPI:", "Trend op doorlooptijd, kwaliteit en uitvoeringsdiscipline.")}`,
+    `Failure trigger: ${value("Failure trigger:", "Twee opeenvolgende gate-failures op Dag 30/60/90.")}`,
+    `Point of no return: ${value("Point of no return:", "Na Dag 90 zonder meetbare trendbreuk wordt herstel disproportioneel duur.")}`,
+    `Herijkingsmoment: ${value("Herijkingsmoment:", "Maandelijks boardreview met expliciete keuze tot doorpakken of stoppen.")}`,
+  ].join("\n");
+
+  return replaceSection(markdown, heading, rewritten);
+}
+
+function enforceSectorLayerBlock(markdown: string, input: BoardroomInput): string {
+  const context = String(input.company_context ?? "");
+  const hasSectorLayerInContext = context.includes("[SECTOR-LAYER | bron: extern | datum:");
+  if (!hasSectorLayerInContext) return markdown;
+
+  const heading = "### 1. DOMINANTE BESTUURLIJKE THESE";
+  const section = extractSection(markdown, heading);
+  if (section.includes("[SECTOR-LAYER | bron: extern | datum:")) return markdown;
+
+  const layer = context
+    .split(/\n{2,}/)
+    .find((block) => block.includes("[SECTOR-LAYER | bron: extern | datum:"));
+  if (!layer) return markdown;
+
+  const anchors = parseInputAnchors(context).slice(0, 3);
+  const relevance = `Relevantie voor deze casus: ${(anchors.length
+    ? anchors
+    : ["Niet onderbouwd in geüploade documenten of vrije tekst."]).join(", ")}`;
+  const safeLayer = layer
+    .split("\n")
+    .filter((line) => !/€\\s*\\d|\\d+\\s*%/.test(line))
+    .join("\n");
+  const next = `${safeLayer}\n${relevance}\n\n${section}`.trim();
+  return replaceSection(markdown, heading, next);
 }
 
 function splitIntoSentences(text: string): string[] {
@@ -2143,6 +2280,7 @@ function hardenNarrativeCandidate(
   minWords: number,
   maxWords: number
 ): string {
+  const contextHint = buildConcreteContextHint(input);
   let output = trimToCanonicalStart(
     scrubForbiddenLanguage(String(candidate ?? "").trim())
   );
@@ -2161,7 +2299,9 @@ function hardenNarrativeCandidate(
   output = consolidateOpportunityCostWindowDuplicates(output);
   output = enforceReadableParagraphRhythm(output);
   output = enforceNinetyDayInterventionParagraphs(output);
-  const contextHint = buildConcreteContextHint(input);
+  output = enforceSection8InterventionArtifact(output, contextHint);
+  output = enforceDecisionContractLabels(output);
+  output = enforceSectorLayerBlock(output, input);
   output = enforceConcreteNarrativeMarkdown(
     output,
     contextHint
@@ -2176,6 +2316,9 @@ function hardenNarrativeCandidate(
   output = removeRepeatedSectionSentences(output);
   output = enforceReadableParagraphRhythm(output);
   output = enforceNinetyDayInterventionParagraphs(output);
+  output = enforceSection8InterventionArtifact(output, contextHint);
+  output = enforceDecisionContractLabels(output);
+  output = enforceSectorLayerBlock(output, input);
   output = sanitizeResidualForbiddenNarrative(output);
   output = enforceMinimumWords(
     output,
@@ -2266,6 +2409,11 @@ STIJLREGELS:
 - Consolideer: vermijd herhaling van dezelfde alinea in meerdere secties.
 - Leg causale keten hard vast: oorzaak -> gevolg -> ingreep -> resultaat.
 - Claims moeten terugleidbaar zijn naar de geüploade documenten/context.
+- Externe sectorinformatie mag alleen als:
+  [SECTOR-LAYER | bron: extern | datum: YYYY-MM-DD]
+  gevolgd door macro-mechanisme en:
+  Relevantie voor deze casus: <3 casus-ankers>.
+- Sector-layer mag nooit doen alsof het uit uploads komt.
   `.trim();
 }
 
@@ -2378,6 +2526,8 @@ ${d.content}
     legacyContext,
     briefContext
   );
+  const contextHash = contextFingerprint(groundingSource);
+  const previousOutput = runtimeLastOutputByContext.get(contextHash);
 
   const baseMessages: AIMessage[] = [
     { role: "system", content: buildSystemPrompt() },
@@ -2485,6 +2635,91 @@ ${legacyContext || "Geen legacy-context; markeer ontbrekende onderbouwing explic
   candidate = sanitizeUngroundedNumericSignals(candidate, groundingSource);
   validateHgbcoMcKinseyRuntime(candidate);
 
+  const repairModes = [
+    "ANCHOR REPAIR MODE",
+    "POWER/IRREVERSIBILITY/CULTURE REPAIR MODE",
+    "INTERVENTION REWRITE MODE",
+  ] as const;
+
+  let gateLastError: ExecutiveGateError | null = null;
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
+    try {
+      validateExecutiveGateStack({
+        text: candidate,
+        context: groundingSource,
+        lastOutput: previousOutput,
+      });
+      gateLastError = null;
+      break;
+    } catch (error) {
+      if (!(error instanceof ExecutiveGateError)) {
+        throw error;
+      }
+
+      gateLastError = error;
+      if (attempt >= 4) break;
+
+      const mode = repairModes[attempt - 1];
+      const repairDirective =
+        error.repairDirective ||
+        (error.code === "REPETITION_TOO_HIGH"
+          ? "Volledig nieuwe formulering + andere mechanische keten; geen zinsdelen hergebruiken."
+          : "Herbouw output met exacte gate-compliance.");
+
+      const interventionOnly =
+        mode === "INTERVENTION REWRITE MODE" ||
+        error.code === "INTERVENTION_ARTEFACT_REQUIRED";
+
+      const repairPrompt = `
+${HGBCO_MCKINSEY_USER_INJECT}
+${mode}
+FOUTCODE: ${error.code}
+REPAIR DIRECTIVE: ${repairDirective}
+
+REGELS:
+- ${
+        interventionOnly
+          ? "Herschrijf uitsluitend sectie 8, maar retourneer volledige narrative met exact dezelfde 9 headings."
+          : "Herschrijf de volledige narrative opnieuw. Niet patchen."
+      }
+- Elke sectie minimaal 2 casus-ankers uit context.
+- Sectie 8: elke interventie verwijst expliciet naar een casus-anker.
+- Sectie 9 start exact met: De Raad van Bestuur committeert zich aan:
+- Bij REPETITION_TOO_HIGH: verplicht volledig nieuwe formulering + andere mechanische keten.
+
+CONTEXT:
+${caseContextBlock}
+
+VORIGE OUTPUT:
+${candidate}
+`.trim();
+
+      const repaired = await callAI(
+        "gpt-4o",
+        [
+          { role: "system", content: buildSystemPrompt() },
+          { role: "user", content: repairPrompt },
+        ],
+        { max_tokens: CHUNK_TOKENS, temperature }
+      );
+
+      if (typeof repaired === "string" && repaired.trim()) {
+        candidate = hardenNarrativeCandidate(
+          repaired.trim(),
+          input,
+          boundedMinWords,
+          maxWords
+        );
+        candidate = sanitizeUngroundedNumericSignals(candidate, groundingSource);
+        validateHgbcoMcKinseyRuntime(candidate);
+      }
+    }
+  }
+
+  if (gateLastError) {
+    throw gateLastError;
+  }
+
   try {
     assertExecutiveKernelQuality(candidate, enforceGGZDepth);
   } catch {
@@ -2526,6 +2761,7 @@ ${legacyContext || "Geen legacy-context; markeer ontbrekende onderbouwing explic
 
   assertExecutiveKernelQuality(candidate, enforceGGZDepth);
   assertHardOutputGate(candidate);
+  runtimeLastOutputByContext.set(contextHash, candidate);
 
   return {
     text: candidate,

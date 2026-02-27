@@ -21,7 +21,7 @@ import {
   enforceNoMetaNoTemplate,
   enforceUpperLowerStream,
   hasDecisionContractCommitBlock,
-  hasForbiddenHgbcoLanguage,
+  hasForbiddenLanguage,
 } from "@/aurelius/narrative/guards/hgbcoMcKinseySpec";
 
 const SIGNATURE_LAYER_ERROR_TEXT = CYNTRA_SIGNATURE_LAYER_VIOLATION;
@@ -253,7 +253,7 @@ function validateMcKinseyNarrativeRuntime(markdown: string) {
   if (!hasDecisionContractCommitBlock(markdown)) {
     throw new Error(SIGNATURE_LAYER_ERROR_TEXT);
   }
-  if (hasForbiddenHgbcoLanguage(markdown)) {
+  if (hasForbiddenLanguage(markdown)) {
     throw new Error(SIGNATURE_LAYER_ERROR_TEXT);
   }
 }

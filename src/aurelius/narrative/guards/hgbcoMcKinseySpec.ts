@@ -367,6 +367,10 @@ export function hasForbiddenHgbcoLanguage(markdown: string): boolean {
   return FORBIDDEN_PATTERNS.some((pattern) => pattern.test(source));
 }
 
+export function hasForbiddenLanguage(markdown: string): boolean {
+  return hasForbiddenHgbcoLanguage(markdown);
+}
+
 export function hasDecisionContractCommitBlock(markdown: string): boolean {
   const sectionNine = parseSections(markdown).find((section) => section.number === 9);
   if (!sectionNine) return false;
@@ -389,3 +393,4 @@ export function enforceNoMetaNoTemplateRuntime(markdown: string): string {
 }
 
 export const HGBCO_MCKINSEY_DECISION_TEMPLATE = DECISION_BLOCK_TEMPLATE;
+export const hasForbiddenHgbcoLanguageAlias = hasForbiddenHgbcoLanguage;

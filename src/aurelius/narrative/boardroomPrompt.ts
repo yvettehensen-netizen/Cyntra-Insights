@@ -17,6 +17,7 @@ TAALREGELS:
 - Geen vaagheid
 - Geen consultant-cliche
 - Bij dunne context: gebruik exact "Op basis van bestuurlijke patronen in vergelijkbare organisaties:"
+- Verboden zin: "Geen expliciete context aangeleverd."
 - Verboden woorden: default template, governance-technisch, patroon, context is schaars, werk uit, mogelijk, lijkt erop dat, zou kunnen, men zou, belangrijke succesfactor, quick win, low hanging fruit
 
 SIGNATURE LAYER (DOMINANT):
@@ -44,6 +45,7 @@ STRUCTUUR (VERPLICHT):
 ### 9. DECISION CONTRACT
 
 INHOUDSEISEN:
+- Elke sectie start met mechanisme (Omdat A -> ontstaat B -> leidt tot C) en koppelt direct naar casusanker.
 - Sectie 1: maximaal 10 zinnen, één dominante these
 - Sectie 1 opent met de denkvorm "De werkelijke bestuurlijke kern is niet X, maar Y."
 - Sectie 1 bevat expliciet "De ongemakkelijke waarheid is: ..."
@@ -55,8 +57,15 @@ INHOUDSEISEN:
 - Sectie 5: besluitkracht, escalatie, diffuse verantwoordelijkheid, centralisatie van macht
 - Sectie 6: minimaal drie concrete machtsactoren met verlies, winst, sabotagewijze en instrument
 - Sectie 7: waar het misgaat, wie blokkeert, welke onderstroom executie vertraagt
-- Sectie 8: exact met Week 1-2:, Week 3-6:, Week 7-12:, inclusief "Wie tempo controleert, controleert macht."
+- Sectie 8 is een interventie-bouwtekening met exact:
+  MAAND 1 (dag 1–30): STABILISEREN EN KNOPEN DOORHAKKEN
+  MAAND 2 (dag 31–60): HERONTWERPEN EN HERALLOCEREN
+  MAAND 3 (dag 61–90): VERANKEREN EN CONTRACTEREN
+  BOVENSTROOM-DOELEN (max 5)
+  ONDERSTROOM-DOELEN (max 5)
+- Sectie 8 bevat per interventie: Actie / Eigenaar / Deadline / KPI / Escalatiepad / Direct zichtbaar effect en expliciet casus-anker
 - Sectie 9: begint exact met "De Raad van Bestuur committeert zich aan:" en bevat keuze A of B, formeel/informeel machtsverlies, beslismonopolie, per-direct stop, niet-escalatie en geaccepteerd verlies met impact
+- Verplicht in totaal: minimaal 2 expliciete machtsverschuivingen, minimaal 1 point of no return met dag-trigger en minimaal 1 concrete culture drift gedragsverschuiving.
 
 STIJL:
 Hard maar rationeel.
