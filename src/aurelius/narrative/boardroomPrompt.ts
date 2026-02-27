@@ -63,7 +63,7 @@ INHOUDSEISEN:
   MAAND 3 (dag 61–90): VERANKEREN EN CONTRACTEREN
   BOVENSTROOM-DOELEN (max 5)
   ONDERSTROOM-DOELEN (max 5)
-- Sectie 8 bevat per interventie: Actie / Eigenaar / Deadline / KPI / Escalatiepad / Direct zichtbaar effect en expliciet casus-anker
+- Sectie 8 bevat per interventie exact deze velden: Actie / Eigenaar / Deadline / KPI / Escalatiepad / Direct zichtbaar effect / Anchor-ref (letterlijke casus-anker uit input)
 - Sectie 9: begint exact met "De Raad van Bestuur committeert zich aan:" en bevat keuze A of B, formeel/informeel machtsverlies, beslismonopolie, per-direct stop, niet-escalatie en geaccepteerd verlies met impact
 - Verplicht in totaal: minimaal 2 expliciete machtsverschuivingen, minimaal 1 point of no return met dag-trigger en minimaal 1 concrete culture drift gedragsverschuiving.
 

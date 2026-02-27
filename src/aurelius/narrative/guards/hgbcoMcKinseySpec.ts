@@ -79,17 +79,18 @@ const BOVEN_ONDERSTREAM_SENTENCES: Record<number, { boven: string; onder: string
   },
 };
 
-const DECISION_BLOCK_HEAD = "DE RAAD COMMITTEERT:";
+const DECISION_BLOCK_HEAD = "De Raad van Bestuur committeert zich aan:";
 const DECISION_BLOCK_TEMPLATE = [
-  "DE RAAD COMMITTEERT:",
+  "De Raad van Bestuur committeert zich aan:",
   "Keuze:",
   "Accepted loss:",
   "Besluitrecht ligt bij:",
-  "Stop per direct:",
+  "Stoppen per direct:",
   "Niet meer escaleren:",
   "Maandelijkse KPI:",
   "Failure trigger:",
-  "Herijking:",
+  "Point of no return:",
+  "Herijkingsmoment:",
 ].join("\n");
 
 function normalizeText(input: string): string {
@@ -196,6 +197,7 @@ function ensureDecisionContractBlock(sectionBody: string): string {
     readDecisionValue(cleaned, "beslismonopolie") ||
     "De expliciet benoemde eindverantwoordelijke in de Raad van Bestuur.";
   const stopDirect =
+    readDecisionValue(cleaned, "Stoppen per direct") ||
     readDecisionValue(cleaned, "Stop per direct") ||
     "Elke route zonder owner, deadline en KPI op kernstabiliteit.";
   const nietEscaleren =
@@ -207,7 +209,11 @@ function ensureDecisionContractBlock(sectionBody: string): string {
   const failureTrigger =
     readDecisionValue(cleaned, "Failure trigger") ||
     "Twee opeenvolgende periodes zonder meetbare voortgang op de dominante keuze.";
+  const pointOfNoReturn =
+    readDecisionValue(cleaned, "Point of no return") ||
+    "Als Dag 60-gates niet gehaald worden, wordt verlies aan contractmacht en retentie onomkeerbaar.";
   const herijking =
+    readDecisionValue(cleaned, "Herijkingsmoment") ||
     readDecisionValue(cleaned, "Herijking") ||
     "Maandelijks in de Raad, met expliciete keuze voor bijsturen of stoppen.";
 
@@ -216,11 +222,12 @@ function ensureDecisionContractBlock(sectionBody: string): string {
     `Keuze: ${keuze}`,
     `Accepted loss: ${acceptedLoss}`,
     `Besluitrecht ligt bij: ${besluitrecht}`,
-    `Stop per direct: ${stopDirect}`,
+    `Stoppen per direct: ${stopDirect}`,
     `Niet meer escaleren: ${nietEscaleren}`,
     `Maandelijkse KPI: ${maandKpi}`,
     `Failure trigger: ${failureTrigger}`,
-    `Herijking: ${herijking}`,
+    `Point of no return: ${pointOfNoReturn}`,
+    `Herijkingsmoment: ${herijking}`,
   ].join("\n");
 
   if (!cleaned) return decisionBlock;
@@ -283,7 +290,8 @@ Gebruik uitsluitend casusfeiten uit documentcontext en vrije velden.
 Gebruik exact 9 HGBCO-secties en per sectie ratio-opbouw A-E.
 In secties 2, 5, 6, 7, 9 moeten expliciet Bovenstroom en Onderstroom zichtbaar zijn.
 In secties 1, 4, 5, 9 moet economisch effect zichtbaar zijn: marge/cash, investeringsruimte/solvabiliteit, en opportunity cost 30/90/365 met irreversibiliteit.
-Decision Contract eindigt exact met het vaste commit-format.
+Sectie 8 bevat minimaal 15 interventies met exact: Actie, Eigenaar, Deadline, KPI, Escalatiepad, Direct zichtbaar effect, Anchor-ref.
+Decision Contract begint exact met "De Raad van Bestuur committeert zich aan:" en bevat alle verplichte labels.
 Verboden taal direct herschrijven: default transformatie-template, governance-technisch, duid structureel, context is schaars/ontbreekt, formuleer, analyseer, moet, key takeaway, succesfactor, quick win, low-hanging fruit, mogelijk, wellicht, zou kunnen.
 Als data impliciet blijft, gebruik bestuurlijke aannames in deze vorm: Op basis van bestuurlijke patronen in deze sector: ...
 `.trim();
@@ -294,7 +302,8 @@ Elke sectie bevat A. Analyse, B. Mechanisme, C. Gevolg, D. Bestuurlijke implicat
 Vermijd abstracte managementzinnen, herhaling en meta-tekst.
 Maak bovenstroom/onderstroom expliciet waar verplicht.
 Gebruik economische causaliteit met 30/90/365 irreversibiliteit.
-Decision Contract eindigt exact met het vaste DE RAAD COMMITTEERT-blok.
+Gebruik uitsluitend casus-ankers uit context; geen nieuwe feiten.
+Decision Contract begint exact met "De Raad van Bestuur committeert zich aan:".
 `.trim();
 
 export function enforceNoMetaNoTemplate(markdown: string): string {
@@ -362,21 +371,34 @@ export function enforceAtoERatioStructurePresence(markdown: string): boolean {
   );
 }
 
-export function hasForbiddenHgbcoLanguage(markdown: string): boolean {
+export function hasForbiddenLanguage(markdown: string): boolean {
   const source = String(markdown ?? "");
   return FORBIDDEN_PATTERNS.some((pattern) => pattern.test(source));
 }
 
-export function hasForbiddenLanguage(markdown: string): boolean {
-  return hasForbiddenHgbcoLanguage(markdown);
-}
+export const hasForbiddenHgbcoLanguage = hasForbiddenLanguage;
 
 export function hasDecisionContractCommitBlock(markdown: string): boolean {
   const sectionNine = parseSections(markdown).find((section) => section.number === 9);
   if (!sectionNine) return false;
   const body = sectionNine.body;
-  return [
-    /^DE RAAD COMMITTEERT:/im,
+  const hasCanonicalPrefix = /^De Raad van Bestuur committeert zich aan:/im.test(body);
+  const hasLegacyPrefix = /^DE RAAD COMMITTEERT:/im.test(body);
+  const hasPrefix = hasCanonicalPrefix || hasLegacyPrefix;
+
+  const hasCanonicalLabels = [
+    /^Keuze:/im,
+    /^Accepted loss:/im,
+    /^Besluitrecht ligt bij:/im,
+    /^Stoppen per direct:/im,
+    /^Niet meer escaleren:/im,
+    /^Maandelijkse KPI:/im,
+    /^Failure trigger:/im,
+    /^Point of no return:/im,
+    /^Herijkingsmoment:/im,
+  ].every((guard) => guard.test(body));
+
+  const hasLegacyLabels = [
     /^Keuze:/im,
     /^Accepted loss:/im,
     /^Besluitrecht ligt bij:/im,
@@ -386,6 +408,8 @@ export function hasDecisionContractCommitBlock(markdown: string): boolean {
     /^Failure trigger:/im,
     /^Herijking:/im,
   ].every((guard) => guard.test(body));
+
+  return hasPrefix && (hasCanonicalLabels || hasLegacyLabels);
 }
 
 export function enforceNoMetaNoTemplateRuntime(markdown: string): string {
@@ -393,4 +417,4 @@ export function enforceNoMetaNoTemplateRuntime(markdown: string): string {
 }
 
 export const HGBCO_MCKINSEY_DECISION_TEMPLATE = DECISION_BLOCK_TEMPLATE;
-export const hasForbiddenHgbcoLanguageAlias = hasForbiddenHgbcoLanguage;
+export const hasForbiddenHgbcoLanguageAlias = hasForbiddenLanguage;
