@@ -6,6 +6,7 @@
 
 import { useState, useRef, useCallback } from "react";
 import type { AnalysisType } from "@/aurelius/types";
+import type { Sector } from "@/aurelius/sector/types";
 
 /* ============================================================
    INPUT
@@ -15,6 +16,9 @@ export type RunCyntraInput = {
   company_context: string;
   analysis_type: AnalysisType;
   document_data?: string;
+  analysisContext?: {
+    sector_selected?: Sector;
+  };
 };
 
 /* ============================================================
@@ -109,6 +113,7 @@ export function useCyntraAnalysis() {
   }, []);
 
   return {
+    runCyntraFullPipeline: runCyntraAnalysis,
     runCyntraAnalysis,
     loading,
     error,

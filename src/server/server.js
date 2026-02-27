@@ -9,6 +9,7 @@ import aiRouter from "./ai.js";
 import intelligenceRouter from "./intelligence.js";
 import analysesRouter from "./analyses.js";
 import domainPersistenceRouter from "./domainPersistence.js";
+import sectorSignalsRouter from "./sector/signalsRoute.js";
 
 dotenv.config();
 
@@ -21,6 +22,7 @@ function attachApiRoutes(app) {
   app.use("/", aiRouter);
   app.use("/", analysesRouter);
   app.use("/", domainPersistenceRouter);
+  app.use("/", sectorSignalsRouter);
   app.use("/intelligence", intelligenceRouter);
 }
 
@@ -82,4 +84,3 @@ if (isExecutedDirectly()) {
     console.log(`[server] running on http://localhost:${port}`);
   });
 }
-

@@ -76,6 +76,7 @@ Gebruik HGBCO en VIBAAAN.
       company_name,
       questions,
       documents = [],
+      sector_selected,
     } = body;
 
     if (
@@ -111,6 +112,10 @@ Gebruik HGBCO en VIBAAAN.
       company_name,
       questions,
       documents: normalizedDocs,
+      sector_selected,
+      meta: {
+        sector_selected,
+      },
     });
 
     return json({

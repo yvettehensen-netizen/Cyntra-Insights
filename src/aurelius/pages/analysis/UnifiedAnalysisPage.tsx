@@ -36,6 +36,9 @@ import {
 } from "../../narrative/guards/enforceConcreteOutput";
 
 import type { AnalysisType as AureliusAnalysisType } from "../../types";
+import { parseInputAnchors } from "../../executive/anchor/anchorScan";
+import { fetchSectorSignals } from "@/api/sector/signals";
+import { SECTOR_OPTIONS, type Sector } from "@/aurelius/sector/types";
 
 import CyntraAnalysisLayout from "../../layouts/CyntraAnalysisLayout";
 import Watermark from "../../components/Watermark";
@@ -791,6 +794,8 @@ export default function UnifiedAnalysisPage() {
   const [flowStageIndex, setFlowStageIndex] = useState(0);
   const [isPending, startTransition] = useTransition();
   const [clientName, setClientName] = useState("");
+  const [sectorSelected, setSectorSelected] = useState<Sector | "">("");
+  const [isPrinting, setIsPrinting] = useState(false);
 
   const [linguisticSignals, setLinguisticSignals] =
     useState<LinguisticSignalBundle | null>(null);
@@ -957,6 +962,10 @@ export default function UnifiedAnalysisPage() {
 
   const startAnalysis = async () => {
     if (analysisRunning) return;
+    if (!sectorSelected) {
+      setLocalError("Selecteer eerst een sector.");
+      return;
+    }
 
     clearFallbackFlowTimer();
     setLocalError(null);
@@ -977,12 +986,29 @@ export default function UnifiedAnalysisPage() {
       const safeContext =
         context.trim() ||
         "Geen expliciete context aangeleverd. Analyseer structureel.";
+      const casusAnchors = parseInputAnchors([safeContext, clientName].filter(Boolean).join("\n")).slice(0, 3);
+      const sectorSignals = await fetchSectorSignals(sectorSelected);
+      const sectorLayer = sectorSignals
+        ? [
+            `[SECTOR-LAYER | bron: extern | datum: ${new Date().toISOString().slice(0, 10)}]`,
+            ...sectorSignals.signals.slice(0, 3).map((signal) => `- ${signal}`),
+            `Sector Risk Index: ${sectorSignals.sectorRiskIndex}`,
+            `Regulator Pressure Index: ${sectorSignals.regulatorPressureIndex}`,
+            `Contract Power Score: ${sectorSignals.contractPowerScore}`,
+            `Arbeidsmarktdruk-index: ${sectorSignals.arbeidsmarktdrukIndex}`,
+            `Relevantie voor deze casus: ${(casusAnchors.length ? casusAnchors : ["Niet onderbouwd in geüploade documenten of vrije tekst."]).join(", ")}`,
+          ].join("\n")
+        : "";
+      const contextualizedInput = [safeContext, sectorLayer].filter(Boolean).join("\n\n");
 
       setFlowStageIndex(2);
       await Promise.resolve();
       const intelligence = await runCyntraFullPipeline({
         analysis_type: analysisType,
-        company_context: safeContext,
+        company_context: contextualizedInput,
+        analysisContext: {
+          sector_selected: sectorSelected,
+        },
       });
 
       setFlowStageIndex(3);
@@ -1037,7 +1063,10 @@ export default function UnifiedAnalysisPage() {
               q5: intakeAnswers.q5,
             },
             documents,
-            company_context: reportText,
+            company_context: [reportText, sectorLayer].filter(Boolean).join("\n\n"),
+            meta: {
+              sector_selected: sectorSelected,
+            },
           },
           {
             minWords: MIN_NARRATIVE_WORDS,
@@ -1064,7 +1093,7 @@ export default function UnifiedAnalysisPage() {
 
       narrativeText = enforceConcreteNarrativeMarkdown(
         narrativeText,
-        safeContext
+        [safeContext, sectorLayer].filter(Boolean).join("\n\n")
       );
       if (hasSignatureFallbackWarning(narrativeText)) {
         usedSignatureFallback = true;
@@ -1144,6 +1173,7 @@ export default function UnifiedAnalysisPage() {
   /* ================= PDF ================= */
 
   const printReport = async () => {
+    if (isPrinting) return;
     const reportForPdf =
       report ??
       (executiveReportView
@@ -1154,6 +1184,7 @@ export default function UnifiedAnalysisPage() {
         : null);
     if (!reportForPdf) return;
 
+    setIsPrinting(true);
     setPdfPreflightError(null);
     setFlowStageIndex(8);
     const pdfReport = toPDFReport(reportForPdf, executiveReportView);
@@ -1196,17 +1227,34 @@ export default function UnifiedAnalysisPage() {
       return;
     }
 
-    const { generateAureliusPDF } = await import(
-      "../../utils/generateAureliusPDF"
-    );
+    try {
+      const modulePromise = import("../../utils/generateAureliusPDF");
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("PDF generatie timeout")), 20_000)
+      );
+      const module = (await Promise.race([modulePromise, timeoutPromise])) as {
+        generateAureliusPDF: (
+          title: string,
+          report: PDFAnalysisResult,
+          client: string,
+          meta?: { confidence?: number }
+        ) => void;
+      };
 
-    generateAureliusPDF(
-      reportForPdf.title || "Aurelius Analyse",
-      pdfReport,
-      clientName || "Onbekende organisatie",
-      { confidence: 0.82 }
-    );
-    setFlowStageIndex(FLOW_COMPLETION_STAGE);
+      module.generateAureliusPDF(
+        reportForPdf.title || "Aurelius Analyse",
+        pdfReport,
+        clientName || "Onbekende organisatie",
+        { confidence: 0.82 }
+      );
+      setFlowStageIndex(FLOW_COMPLETION_STAGE);
+    } catch (error) {
+      setPdfPreflightError(
+        error instanceof Error ? error.message : "PDF generatie mislukt."
+      );
+    } finally {
+      setIsPrinting(false);
+    }
   };
 
   /* ================= RESET ================= */
@@ -1224,6 +1272,7 @@ export default function UnifiedAnalysisPage() {
     setIsBuilding(false);
     setFlowStageIndex(0);
     setClientName("");
+    setSectorSelected("");
     setLinguisticSignals(null);
     setIntakeAnswers({ q1: "", q2: "", q3: "", q4: "", q5: "" });
     resetEngine();
@@ -1318,6 +1367,26 @@ export default function UnifiedAnalysisPage() {
             className="w-full mb-6 bg-black/40 border border-white/10 p-4 text-white"
           />
 
+          <div className="mb-6">
+            <label className="mb-2 block text-xs uppercase tracking-[0.15em] text-white/60">
+              Sector
+            </label>
+            <select
+              value={sectorSelected}
+              onChange={(event) =>
+                setSectorSelected(event.target.value as Sector | "")
+              }
+              className="w-full bg-black/40 border border-white/10 p-4 text-white"
+            >
+              <option value="">Selecteer sector</option>
+              {SECTOR_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <textarea
             value={context}
             onChange={(e) => setContext(e.target.value)}
@@ -1361,13 +1430,13 @@ export default function UnifiedAnalysisPage() {
 
             <button
               onClick={printReport}
-              disabled={!canDownloadPdf}
+              disabled={!canDownloadPdf || isPrinting}
               className={`flex items-center gap-2 ${
                 canDownloadPdf ? "text-[#d4af37]" : "text-white/35"
               }`}
             >
               <Printer className="h-4 w-4" />
-              PDF Download
+              {isPrinting ? "PDF wordt gemaakt..." : "PDF Download"}
             </button>
           </div>
 
