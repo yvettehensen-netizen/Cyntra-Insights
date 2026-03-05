@@ -1,6 +1,6 @@
 // src/aurelius/engine/nodes/ExpertNode.ts
 
-import type { AnalysisContext, ModelResult } from "../types";
+import type { AnalysisContext, ModelResult } from "@/aurelius/engine/types";
 
 /* ============================================================
    AURELIUS — EXPERT NODE CONTRACT (MAXIMAL CANON)

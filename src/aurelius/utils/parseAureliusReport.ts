@@ -155,7 +155,7 @@ function detectDecisionSignals(text: string) {
       lc.includes("besluit") || lc.includes("moet nu"),
     has_tradeoffs:
       lc.includes("keuze") ||
-      lc.includes("trade-off") ||
+      lc.includes("keuzeconflict") ||
       lc.includes("stop"),
     has_consequences:
       lc.includes("gevolg") ||

@@ -1,63 +1,28 @@
-import PublicNavbar from "@/components/PublicNavbar";
-import Footer from "@/layouts/Footer";
-import { TrendingUp, Rocket, ArrowRight, BarChart3, FileText } from "lucide-react";
+import { Link } from "react-router-dom";
 
 export default function GrowthPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#1a0a0f] via-[#2d1319] to-[#1a0a0f] text-gray-100">
-      <PublicNavbar />
-
-      <main className="pt-32 pb-24">
-        <section className="text-center container mx-auto px-6 max-w-4xl mb-20">
-          <h1 className="text-5xl lg:text-6xl font-bold text-white mb-6">Groei & Schaling</h1>
-          <p className="text-xl text-gray-300">
-            Analyse van groeikansen, nieuwe markten, productlijnen en schaalbaarheid.
-          </p>
-        </section>
-
-        <section className="container mx-auto px-6 max-w-5xl grid md:grid-cols-2 gap-10">
-          {[
-            {
-              icon: TrendingUp,
-              title: "Groeipaden",
-              desc: "Ontdek groei-scenario’s gebaseerd op marktdata en concurrentie.",
-            },
-            {
-              icon: BarChart3,
-              title: "Marktuitbreiding",
-              desc: "Analyse van geografische groei, segmenten en doelgroepverschuivingen.",
-            },
-            {
-              icon: Rocket,
-              title: "Innovatie & Producten",
-              desc: "Kansen voor nieuwe diensten, pricingmodellen en verbeteringen.",
-            },
-            {
-              icon: FileText,
-              title: "Schaalbaarheid",
-              desc: "Hoe schaalbaar is jouw businessmodel? Waar zitten bottlenecks?",
-            },
-          ].map((item, i) => (
-            <div key={i} className="p-8 bg-white/5 border border-white/10 rounded-2xl">
-              <item.icon className="w-10 h-10 text-[#D4AF37] mb-4" />
-              <h3 className="text-2xl font-bold text-white mb-3">{item.title}</h3>
-              <p className="text-gray-300">{item.desc}</p>
+    <div className="marketing-readable min-h-screen bg-[#F5F3EE] text-[#1F2328]">
+      <section className="max-w-7xl mx-auto px-6 pt-24 pb-16">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16">
+          <div>
+            <h1 className="text-4xl md:text-5xl font-semibold tracking-tight leading-[1.05]">Groei onder spanning</h1>
+            <p className="mt-6 text-xl text-[#3D4650]">Versnellen zonder volgorde vergroot bestuurlijke fragiliteit. Eerst keuze, dan schaal.</p>
+          </div>
+          <aside className="lg:sticky lg:top-24">
+            <div className="border border-[#7A5C3E]/45 bg-[#FAF8F3] p-6">
+              <h3 className="text-xl font-semibold tracking-tight mb-2">Besloten omgeving</h3>
+              <div className="space-y-3">
+                <Link to="/portal" className="w-full inline-flex items-center justify-center px-4 py-3 rounded-md bg-[#7A5C3E] text-white text-sm font-medium hover:bg-[#6A4F35] transition-colors">Ga naar Portal</Link>
+                <Link to="/aurelius/login" className="w-full inline-flex items-center justify-center px-4 py-3 rounded-md border border-[#7A5C3E] text-[#7A5C3E] text-sm font-medium hover:bg-[#7A5C3E] hover:text-white transition-colors">Login</Link>
+              </div>
             </div>
-          ))}
-        </section>
-
-        <section className="text-center mt-20">
-          <a
-            href="/quickscan-gratis"
-            className="inline-flex items-center gap-3 px-10 py-5 bg-gradient-to-r from-[#8B1538] to-[#6d1028] text-white rounded-xl font-semibold"
-          >
-            Start Groei Analyse
-            <ArrowRight />
-          </a>
-        </section>
-      </main>
-
-      <Footer />
+          </aside>
+        </div>
+      </section>
+      <section className="max-w-7xl mx-auto px-6 pb-32">
+        <Link to="/contact" className="inline-flex items-center justify-center px-8 py-4 rounded-md bg-[#7A5C3E] text-white font-medium hover:bg-[#6A4F35] transition-colors">Plan een Bestuurlijke Intake</Link>
+      </section>
     </div>
   );
 }

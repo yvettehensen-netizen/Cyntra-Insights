@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { resolveSectorSignals, scoreSignals } from '../../src/server/sector/signalsCore.js';
 
 function assert(condition, message) {
@@ -49,5 +50,8 @@ async function testCacheAndFetchMock() {
 (async () => {
   await testScoreRubric();
   await testCacheAndFetchMock();
+  execFileSync(process.execPath, [path.resolve(process.cwd(), 'scripts/test/run_stability_regression.mjs')], {
+    stdio: 'inherit',
+  });
   console.log('unit smoke tests passed');
 })();

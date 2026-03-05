@@ -1,68 +1,28 @@
-import PublicNavbar from "@/components/PublicNavbar";
-import Footer from "@/layouts/Footer";
-import { BarChart3, FileText, AlertTriangle, TrendingUp, ArrowRight } from "lucide-react";
+import { Link } from "react-router-dom";
 
 export default function FinancePage() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#1a0a0f] via-[#2d1319] to-[#1a0a0f] text-gray-100">
-      <PublicNavbar />
-
-      <main className="pt-32 pb-24">
-        {/* HERO */}
-        <section className="text-center container mx-auto px-6 max-w-4xl mb-20">
-          <h1 className="text-5xl lg:text-6xl font-bold text-white mb-6">
-            Financiële Gezondheid
-          </h1>
-          <p className="text-xl text-gray-300 leading-relaxed">
-            Analyse van cashflow, marges, winstgevendheid, KPI’s en sectorbenchmarks.
-          </p>
-        </section>
-
-        {/* CONTENT */}
-        <section className="container mx-auto px-6 max-w-5xl grid md:grid-cols-2 gap-10">
-          {[
-            {
-              icon: BarChart3,
-              title: "Cashflow & Liquiditeit",
-              desc: "Volledige analyse van je cashflowpositie, burn rate en liquiditeit.",
-            },
-            {
-              icon: TrendingUp,
-              title: "Rentabiliteit",
-              desc: "Breng marges, winstgevendheid en inefficiënties helder in beeld.",
-            },
-            {
-              icon: FileText,
-              title: "Financiële KPI’s",
-              desc: "Kritieke indicatoren zoals solvabiliteit, DSCR, DIO, DSO en DPO.",
-            },
-            {
-              icon: AlertTriangle,
-              title: "Risico’s & Kwetsbaarheden",
-              desc: "Ontdek financiële risico’s en hoe je ze kunt mitigeren.",
-            },
-          ].map((item, i) => (
-            <div key={i} className="p-8 bg-white/5 border border-white/10 rounded-2xl">
-              <item.icon className="w-10 h-10 text-[#D4AF37] mb-4" />
-              <h3 className="text-2xl font-bold text-white mb-3">{item.title}</h3>
-              <p className="text-gray-300">{item.desc}</p>
+    <div className="marketing-readable min-h-screen bg-[#F5F3EE] text-[#1F2328]">
+      <section className="max-w-7xl mx-auto px-6 pt-24 pb-16">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16">
+          <div>
+            <h1 className="text-4xl md:text-5xl font-semibold tracking-tight leading-[1.05]">Financiële frictie</h1>
+            <p className="mt-6 text-xl text-[#3D4650]">Tariefdruk, kostprijsdruk en besluituitstel worden vertaald naar onomkeerbare keuzes.</p>
+          </div>
+          <aside className="lg:sticky lg:top-24">
+            <div className="border border-[#7A5C3E]/45 bg-[#FAF8F3] p-6">
+              <h3 className="text-xl font-semibold tracking-tight mb-2">Besloten omgeving</h3>
+              <div className="space-y-3">
+                <Link to="/portal" className="w-full inline-flex items-center justify-center px-4 py-3 rounded-md bg-[#7A5C3E] text-white text-sm font-medium hover:bg-[#6A4F35] transition-colors">Ga naar Portal</Link>
+                <Link to="/aurelius/login" className="w-full inline-flex items-center justify-center px-4 py-3 rounded-md border border-[#7A5C3E] text-[#7A5C3E] text-sm font-medium hover:bg-[#7A5C3E] hover:text-white transition-colors">Login</Link>
+              </div>
             </div>
-          ))}
-        </section>
-
-        {/* CTA */}
-        <section className="text-center mt-20">
-          <a
-            href="/quickscan-gratis"
-            className="inline-flex items-center gap-3 px-10 py-5 bg-gradient-to-r from-[#8B1538] to-[#6d1028] text-white rounded-xl font-semibold"
-          >
-            Start Financiële Analyse
-            <ArrowRight />
-          </a>
-        </section>
-      </main>
-
-      <Footer />
+          </aside>
+        </div>
+      </section>
+      <section className="max-w-7xl mx-auto px-6 pb-32">
+        <Link to="/contact" className="inline-flex items-center justify-center px-8 py-4 rounded-md bg-[#7A5C3E] text-white font-medium hover:bg-[#6A4F35] transition-colors">Plan een Bestuurlijke Intake</Link>
+      </section>
     </div>
   );
 }

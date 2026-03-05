@@ -6,7 +6,7 @@
 // ✅ BESLUITVORMINGS- & EXECUTIEGEDREVEN
 // ✅ UPGRADE-ONLY (GEEN DOWNGRADES)
 
-import type { AnalysisContext, ModelResult } from "../../types";
+import type { AnalysisContext, ModelResult } from "@/aurelius/engine/types";
 
 /* ============================================================
    CONTEXT EXTRACTION (ONDERSTROOM – STRICT & SAFE)

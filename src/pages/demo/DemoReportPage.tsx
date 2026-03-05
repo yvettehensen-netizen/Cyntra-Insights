@@ -8,92 +8,57 @@ export default function DemoReportPage() {
   return (
     <section className="min-h-screen bg-gradient-to-b from-[#1a0a0f] via-[#2d1319] to-[#1a0a0f] text-white px-6 py-32">
       <div className="max-w-5xl mx-auto">
-
-        {/* HEADER */}
-        <div className="text-center mb-24">
+        <div className="text-center mb-20">
           <span className="inline-block px-5 py-2 rounded-full bg-[#D4AF37]/10 text-[#D4AF37] text-sm font-medium mb-8">
-            Voorbeeldresultaat • Geanonimiseerd
+            Voorbeeldresultaat • Bestuurlijk Besluitdocument
           </span>
 
           <h1 className="text-5xl md:text-6xl font-bold mb-8 leading-tight">
-            Strategisch inzicht<br />
-            <span className="text-[#D4AF37]">zonder ruis</span>
+            Geen rapport.
+            <br />
+            Wel interventiekader.
           </h1>
 
           <p className="text-xl text-gray-400 max-w-3xl mx-auto leading-relaxed">
-            Hieronder zie je een <strong>geanonimiseerde samenvatting</strong> van
-            een Cyntra-analyse voor een organisatie in{" "}
-            <span className="text-[#D4AF37] font-medium">
-              {context?.industry ?? "een vergelijkbare sector"}
-            </span>, met als kernvraag{" "}
-            <span className="text-[#D4AF37] font-medium">
-              {context?.challenge ?? "strategische focus en prioritering"}
-            </span>.
+            Geanonimiseerde samenvatting voor {context?.industry ?? "een vergelijkbare sector"} rond de vraag: {context?.challenge ?? "welke keuze niet langer uitstelbaar is"}.
           </p>
         </div>
 
-        {/* ANONIEME SAMENVATTING */}
-        <div className="relative bg-white/5 border border-white/10 rounded-3xl p-12 mb-24 backdrop-blur-xl shadow-2xl">
+        <div className="relative bg-white/5 border border-white/10 rounded-3xl p-12 mb-20 backdrop-blur-xl shadow-2xl">
           <div className="absolute inset-0 rounded-3xl bg-gradient-to-tr from-[#8B1538]/5 to-[#D4AF37]/5 pointer-events-none" />
 
           <div className="relative z-10">
-            <h2 className="text-3xl font-bold mb-10 flex items-center gap-4">
+            <h2 className="text-3xl font-bold mb-8 flex items-center gap-4">
               <FileText className="text-[#D4AF37]" />
-              Executive Summary — Geanonimiseerd
+              Kernstructuur
             </h2>
 
-            <ul className="space-y-6 text-lg text-gray-300">
-              <li className="flex gap-4">
-                <CheckCircle className="text-[#D4AF37] mt-1" />
-                De organisatie bevindt zich in een groeifase waarin complexiteit sneller toeneemt dan besluitvorming.
-              </li>
-
-              <li className="flex gap-4">
-                <CheckCircle className="text-[#D4AF37] mt-1" />
-                Strategische keuzes worden reactief genomen, wat leidt tot versnippering van focus en capaciteit.
-              </li>
-
-              <li className="flex gap-4">
-                <CheckCircle className="text-[#D4AF37] mt-1" />
-                De grootste hefboom ligt in scherpere prioritering, expliciete keuzes en heldere eigenaarschapstructuur.
-              </li>
+            <ul className="space-y-5 text-lg text-gray-300">
+              <li className="flex gap-4"><CheckCircle className="text-[#D4AF37] mt-1" />Dominante These</li>
+              <li className="flex gap-4"><CheckCircle className="text-[#D4AF37] mt-1" />Structurele Kernspanning en Onvermijdelijke Keuzes</li>
+              <li className="flex gap-4"><CheckCircle className="text-[#D4AF37] mt-1" />90-dagen interventieontwerp met 6 kerninterventies en beslisgates</li>
+              <li className="flex gap-4"><CheckCircle className="text-[#D4AF37] mt-1" />Decision contract met expliciet verlies en mandaatverschuiving</li>
             </ul>
 
             <div className="mt-10 p-6 rounded-2xl bg-black/30 border border-white/10 flex items-start gap-4">
               <Shield className="text-[#D4AF37] mt-1" />
               <p className="text-sm text-gray-400 leading-relaxed">
-                Deze samenvatting is bewust beperkt en geanonimiseerd.
-                Het volledige rapport bevat onder andere:
-                strategische scenario’s, risicoanalyse, besluitvormingspatronen
-                en een concreet actie- en prioriteitenkader.
+                Dit document is beperkt en geanonimiseerd. Volledige versie wordt in de besloten omgeving afgedwongen op ritme en eigenaarschap.
               </p>
             </div>
           </div>
         </div>
 
-        {/* CTA */}
         <div className="text-center">
-          <h3 className="text-4xl font-bold mb-8">
-            Ontvang helderheid in je strategische keuzes
-          </h3>
-
-          <p className="text-xl text-gray-400 mb-14 max-w-2xl mx-auto leading-relaxed">
-            Ontvang direct strategische richting en focus.
-            Het volledige, boardroom-klare rapport volgt
-            <strong> binnen 24 uur</strong>.
-          </p>
+          <h3 className="text-4xl font-bold mb-8">Plan de intake als besluituitstel moet stoppen</h3>
 
           <Link
-            to="/quickscan"
-            className="inline-flex items-center gap-4 px-14 py-6 rounded-2xl bg-[#D4AF37] text-black font-bold text-xl hover:bg-[#e0c04a] hover:shadow-[#D4AF37]/60 hover:scale-105 transition-all duration-300 shadow-2xl"
+            to="/contact"
+            className="inline-flex items-center gap-4 px-14 py-6 rounded-2xl bg-[#D4AF37] text-black font-bold text-xl hover:bg-[#e0c04a] transition-all duration-300"
           >
-            Ontvang mijn strategisch inzicht
+            Plan een Bestuurlijke Intake
             <ArrowRight />
           </Link>
-
-          <div className="mt-8 text-sm text-gray-500">
-            ± 5 minuten • Geen salesgesprek • Volledig vertrouwelijk
-          </div>
         </div>
       </div>
     </section>

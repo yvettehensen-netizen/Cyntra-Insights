@@ -107,6 +107,12 @@ export interface ModelResult {
   risks?: string[];
   opportunities?: string[];
   recommendations?: string[];
+  killer_insights?: string[];
+  killer_insights_meta?: {
+    score: number;
+    failed_checks: string[];
+    evidence_used: number;
+  };
 
   /** Optional execution data */
   interventions?: Intervention[];

@@ -36,7 +36,7 @@ export async function hardenNarrativeCandidate(params: {
   const plan: Array<{ mode: RepairMode; attempt: number; fullRegen: boolean }> = [
     { attempt: 2, mode: "ANCHOR_REPAIR", fullRegen: true },
     { attempt: 3, mode: "POWER_REPAIR", fullRegen: true },
-    { attempt: 4, mode: "FULL_REGEN", fullRegen: true },
+    { attempt: 4, mode: "FULL_REGEN_PRESSURE_MODE", fullRegen: true },
     { attempt: 5, mode: "SECTION8_REWRITE", fullRegen: false },
   ];
 

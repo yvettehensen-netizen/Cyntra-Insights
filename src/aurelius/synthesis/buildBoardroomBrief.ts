@@ -1,24 +1,356 @@
 import type { BoardroomBrief } from "./types";
 import type { RunCyntraResult } from "@/aurelius/hooks/useCyntraAnalysis";
+import { runBoardOutputGuard } from "./boardOutputGuard";
+import {
+  AureliusSlotKernelV4,
+  type SlotId,
+} from "./kernel/AureliusSlotKernelV4";
+import {
+  assertOutputIntegrity,
+  normalizeSectionBodyForOutput,
+} from "./outputIntegrity";
+import { ensureBoardroomOutputArtifacts } from "@/aurelius/narrative/BoardroomNarrativeComposer";
+import { assertBoardroomReportStructure } from "@/aurelius/narrative/BoardroomReportStructureValidator";
+
+const SECTION_SLOT_MAP: Array<{ heading: RegExp; slot: SlotId }> = [
+  { heading: /^\s*1\.\s+Dominante These\b/i, slot: "dominanteThese" },
+  { heading: /^\s*1\.\s+Dominante Bestuurlijke These\b/i, slot: "dominanteThese" },
+  { heading: /^\s*2\.\s+Structurele Kernspanning\b/i, slot: "kernspanning" },
+  { heading: /^\s*2\.\s+Kernconflict\b/i, slot: "kernspanning" },
+  { heading: /^\s*3\.\s+Keerzijde van de keuze\b/i, slot: "keerzijde" },
+  { heading: /^\s*3\.\s+Expliciete Trade-offs\b/i, slot: "keerzijde" },
+  { heading: /^\s*4\.\s+De Prijs van Uitstel\b/i, slot: "prijsUitstel" },
+  { heading: /^\s*4\.\s+Opportunity Cost\b/i, slot: "prijsUitstel" },
+  { heading: /^\s*5\.\s+Mandaat & Besluitrecht\b/i, slot: "mandaat" },
+  { heading: /^\s*5\.\s+Governance Impact\b/i, slot: "mandaat" },
+  { heading: /^\s*6\.\s+Onderstroom & Informele Macht\b/i, slot: "onderstroom" },
+  { heading: /^\s*6\.\s+Machtsdynamiek & Onderstroom\b/i, slot: "onderstroom" },
+  { heading: /^\s*7\.\s+Faalmechanisme\b/i, slot: "faalmechanisme" },
+  { heading: /^\s*7\.\s+Executierisico\b/i, slot: "faalmechanisme" },
+  { heading: /^\s*8\.\s+90-Dagen Interventieontwerp\b/i, slot: "interventie" },
+  { heading: /^\s*8\.\s+90-Dagen Interventieplan\b/i, slot: "interventie" },
+  { heading: /^\s*9\.\s+Besluitkader\b/i, slot: "besluitkader" },
+  { heading: /^\s*9\.\s+Decision Contract\b/i, slot: "besluitkader" },
+];
+
+const SLOT_FALLBACKS: Record<SlotId, string> = {
+  dominanteThese:
+    "Kernzin: Structurele druk ondermijnt binnen 12 maanden de kerncapaciteit en vereist directe consolidatiekeuze.",
+  kernspanning:
+    "Kernzin: Parallel sturen op consolidatie en verbreding vergroot het liquiditeitsrisico zolang kostprijsinzicht ontbreekt.",
+  keerzijde:
+    "Kernzin: Consolidatie levert grip op marge en contractering op, maar vraagt tijdelijk verlies van groeitempo buiten de kern.",
+  prijsUitstel:
+    "Kernzin: Uitstel veroorzaakt voorspelbaar verlies van marge, capaciteit en bestuurlijke voorspelbaarheid binnen 12 tot 18 maanden.",
+  mandaat:
+    "Kernzin: Centrale besluitvorming op capaciteit, contractruimte en portfolio wordt bindend met 48-uurs escalatieritme.",
+  onderstroom:
+    "Kernzin: Vermijding van productiegesprekken en beperkte financiële openheid blokkeert executie in de onderstroom.",
+  faalmechanisme:
+    "Kernzin: Zonder expliciete volgorde en stoplijst loopt de organisatie vast in dubbel sturen en vertraagde uitvoering.",
+  interventie:
+    "Kernzin: Het 90-dagenplan borgt eigenaarschap, deadlines, KPI-sturing en automatische escalatie op blokkades.",
+  besluitkader:
+    "Kernzin: Geen nieuw initiatief zonder margevalidatie en capaciteitsimpactanalyse; bij KPI-mis beslist centrale prioritering bindend.",
+};
+
+const SLOT_DECISION_PRESSURE: Record<SlotId, string> = {
+  dominanteThese:
+    "Zonder consolidatie binnen 12 maanden verliest de GGZ-kern direct behandelcapaciteit.",
+  kernspanning:
+    "Zonder volgordebesluit tussen consolideren en verbreden neemt liquiditeitsdruk direct toe.",
+  keerzijde:
+    "Zonder expliciete stopkeuzes blijft groei buiten de kern verliesvolume vergroten.",
+  prijsUitstel:
+    "Zonder correctie binnen 90 dagen verschuift een financieel vraagstuk naar een cultuur- en uitvoeringsprobleem.",
+  mandaat:
+    "Zonder bindend besluitrecht op capaciteit en contractruimte blijft governance niet afdwingbaar.",
+  onderstroom:
+    "Zonder ritmische sturing op gedrag blijft informele macht formele besluiten neutraliseren.",
+  faalmechanisme:
+    "Zonder maandelijkse correctie schuift escalatie naar achterafsturing met hoger capaciteitsverlies.",
+  interventie:
+    "Zonder dag-30, dag-60 en dag-90 sluiting blijft het plan een intentie zonder executiekracht.",
+  besluitkader:
+    "Zonder expliciet verlies, mandaatverschuiving en stopregels is het besluit bestuurlijk niet afdwingbaar.",
+};
+
+function splitSentences(text: string): string[] {
+  return String(text ?? "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\s+/g, " ")
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+}
+
+function normalizeToSentences(text: string): string[] {
+  return String(text ?? "")
+    .replace(/\r\n/g, "\n")
+    .split(/\n{2,}/)
+    .map((paragraph) => {
+      const trimmed = paragraph.trim();
+      if (!trimmed) return [];
+      const lines = trimmed.split("\n").map((line) => line.trim()).filter(Boolean);
+      if (!lines.length) return [];
+      const compact = lines
+        .map((line) => line.replace(/^[-*]\s+/, "").replace(/^\d+\.\s+/, ""))
+        .map((line) => line.replace(/^[A-Z][^:]{1,40}:\s*/i, ""))
+        .join(" ");
+      return splitSentences(compact);
+    })
+    .flat()
+    .map((sentence) => sentence.replace(/\s+\./g, ".").trim())
+    .filter(Boolean);
+}
+
+function clampSentenceCount(sentences: string[], maxSentences: number): string {
+  return sentences.slice(0, maxSentences).join(" ").trim();
+}
+
+function buildContextParagraph(slotId: SlotId, sentences: string[]): string {
+  const core = clampSentenceCount(sentences, 3);
+  if (!core) return "";
+  if (slotId === "dominanteThese") {
+    const normalized = core.charAt(0).toLowerCase() + core.slice(1);
+    return clampSentenceCount(
+      [
+        `De dominante bestuurlijke these is dat ${normalized}`,
+        "De spanning ontstaat doordat ambitie en operationele realiteit niet meer in hetzelfde ritme lopen.",
+      ],
+      4
+    );
+  }
+  return clampSentenceCount(
+    [core, "De spanning zit in het verschil tussen bestuurlijke ambitie en uitvoerbare capaciteit."],
+    4
+  );
+}
+
+function buildMechanismParagraph(sentences: string[]): string {
+  const symptom = sentences.find((sentence) =>
+    /\b(druk|uitval|vertraging|verlies|frictie|onrust|plafond|tekort)\b/i.test(sentence)
+  );
+  const structuralCause = sentences.find((sentence) =>
+    /\b(kostprijs|contract|tarief|capaciteit|mandaat|transparantie|planning|norm)\b/i.test(sentence)
+  );
+  const systemEffect = sentences.find((sentence) =>
+    /\b(liquiditeit|marge|behandelcapaciteit|wachtlijst|voorspelbaarheid|doorlooptijd)\b/i.test(sentence)
+  );
+
+  return clampSentenceCount(
+    [
+      `Mechanisme: ${symptom ?? "Symptomen worden zichtbaar als vertraging, druk en oplopende frictie."}`,
+      `Structurele oorzaak: ${structuralCause ?? "Randvoorwaarden in contracten, capaciteit en sturing begrenzen wat uitvoerbaar is."}`,
+      `Systeemeffect: ${systemEffect ?? "Daardoor verschuift druk van cijfers naar gedrag, planning en continuiteit."}`,
+    ],
+    4
+  );
+}
+
+function buildImplicationParagraph(slotId: SlotId, sentences: string[]): string {
+  const implication = sentences.find((sentence) =>
+    /\b(bestuurlijk|besluit|mandaat|escalatie|stopregel|prioritering|keuze)\b/i.test(sentence)
+  );
+  return clampSentenceCount(
+    [
+      `Bestuurlijke implicatie: ${implication ?? "Het bestuur moet keuzevolgorde, mandaat en stopregels expliciet en afdwingbaar maken."}`,
+      SLOT_DECISION_PRESSURE[slotId],
+    ],
+    4
+  );
+}
+
+function enforceNarrativeSectionFlow(slotId: SlotId, body: string): string {
+  const source = normalizeSectionBodyForOutput(body, slotId);
+  const sentences = normalizeToSentences(source);
+  if (!sentences.length) return source.trim();
+
+  const context = buildContextParagraph(slotId, sentences);
+  const mechanism = buildMechanismParagraph(sentences);
+  const implication = buildImplicationParagraph(slotId, sentences);
+  return [context, mechanism, implication].filter(Boolean).join("\n\n").trim();
+}
+
+function buildSituationReconstruction(executiveText: string, narrativeText: string): string {
+  const source = `${executiveText}\n${narrativeText}`;
+  const lines = String(source ?? "")
+    .replace(/\r\n/g, "\n")
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const facts = lines
+    .filter((line) =>
+      /\b(ggz|jeugdzorg|contract|verzekeraar|plafond|productiviteit|behandel|intake|planning|capaciteit)\b/i.test(
+        line
+      )
+    )
+    .slice(0, 2);
+  const numbers = lines
+    .filter((line) => /€\s?\d|(?:\d+[,.]?\d*\s*%|\b\d+\s*(?:dagen|maanden|FTE|cliënten?)\b)/i.test(line))
+    .slice(0, 2);
+
+  const factSentence =
+    facts.length > 0
+      ? facts.join(" ")
+      : "De organisatie opereert in een context met hoge druk op capaciteit, tarieven en contractruimte.";
+  const numberSentence =
+    numbers.length > 0
+      ? numbers.join(" ")
+      : "Kritieke stuurcijfers zijn deels beschikbaar, maar nog niet overal ritmisch gekoppeld aan besluitvorming.";
+
+  return [
+    "0. Situatiereconstructie",
+    `${factSentence} ${numberSentence}`.replace(/\s+/g, " ").trim(),
+  ].join("\n");
+}
+
+function extractNumberedSections(text: string): Partial<Record<SlotId, string>> {
+  const source = String(text ?? "").trim();
+  if (!source) return {};
+  const headingRegex = /^\s*[1-9]\.\s+[^\n]+$/gm;
+  const matches = [...source.matchAll(headingRegex)];
+  if (!matches.length) return {};
+
+  const extracted: Partial<Record<SlotId, string>> = {};
+  for (let index = 0; index < matches.length; index += 1) {
+    const match = matches[index];
+    const heading = String(match[0] ?? "").trim();
+    const slot = SECTION_SLOT_MAP.find((entry) => entry.heading.test(heading))?.slot;
+    if (!slot || extracted[slot]) continue;
+
+    const start = (match.index ?? 0) + heading.length;
+    const end = matches[index + 1]?.index ?? source.length;
+    const body = normalizeSectionBodyForOutput(source.slice(start, end).trim(), slot);
+    if (body) extracted[slot] = body;
+  }
+  return extracted;
+}
+
+function readKillerInsights(intelligence: RunCyntraResult): string[] {
+  const raw = (intelligence as RunCyntraResult & { killer_insights?: unknown }).killer_insights;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((entry) => String(entry ?? "").trim())
+    .filter(Boolean);
+}
 
 export function buildBoardroomBrief(
   intelligence: RunCyntraResult,
   context: string
 ): BoardroomBrief {
+  const finalText = intelligence.report ?? "Geen executive thesis gegenereerd.";
+  const processedExecutiveText = runBoardOutputGuard(finalText, {
+    fullDocument: false,
+  });
+  const processedNarrative = runBoardOutputGuard(String(context ?? ""), {
+    fullDocument: true,
+  });
+
+  const sectionHeadings = new Set<string>();
+  const pushUnique = (heading: string, value: string, target: string[]) => {
+    if (!heading || !value) return;
+    const key = heading.toLowerCase().trim();
+    if (!sectionHeadings.has(key)) {
+      sectionHeadings.add(key);
+      target.push(value);
+    }
+  };
+
+  const keyChoices: string[] = [];
+  pushUnique(
+    "korte termijn stabiliteit versus lange termijn transformatie",
+    "Korte termijn stabiliteit versus lange termijn transformatie",
+    keyChoices
+  );
+  pushUnique(
+    "decentrale autonomie versus centrale sturing",
+    "Decentrale autonomie versus centrale sturing",
+    keyChoices
+  );
+
+  const kernel = new AureliusSlotKernelV4();
+  const extractedSections = extractNumberedSections(processedNarrative);
+  const killerInsights = readKillerInsights(intelligence);
+  const slotOrder: SlotId[] = [
+    "dominanteThese",
+    "kernspanning",
+    "keerzijde",
+    "prijsUitstel",
+    "mandaat",
+    "onderstroom",
+    "faalmechanisme",
+    "interventie",
+    "besluitkader",
+  ];
+  const writeCount: Record<SlotId, number> = {
+    dominanteThese: 0,
+    kernspanning: 0,
+    keerzijde: 0,
+    prijsUitstel: 0,
+    mandaat: 0,
+    onderstroom: 0,
+    faalmechanisme: 0,
+    interventie: 0,
+    besluitkader: 0,
+  };
+
+  const traceHash = (value: string): string => {
+    let hash = 0x811c9dc5;
+    for (let i = 0; i < value.length; i += 1) {
+      hash ^= value.charCodeAt(i);
+      hash = Math.imul(hash, 0x01000193);
+    }
+    return (hash >>> 0).toString(16).padStart(8, "0");
+  };
+
+  for (const slotId of slotOrder) {
+    let candidateRaw =
+      extractedSections[slotId] ??
+      (slotId === "dominanteThese" ? processedExecutiveText : SLOT_FALLBACKS[slotId]);
+    if (slotId === "prijsUitstel" && killerInsights.length) {
+      const killerBlock = killerInsights
+        .map((insight) => insight.replace(/^[-*]\s+/, "").trim())
+        .filter(Boolean)
+        .join(" ");
+      candidateRaw = [
+        `Nieuwe inzichten: ${killerBlock}`.trim(),
+        String(candidateRaw ?? "").trim(),
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+    }
+    const candidate = enforceNarrativeSectionFlow(slotId, candidateRaw);
+    writeCount[slotId] += 1;
+    console.info("[slot_write_trace]", {
+      sectionId: slotId,
+      hash: traceHash(candidate),
+      writeCount: writeCount[slotId],
+    });
+    kernel.writeSlot(slotId, candidate);
+  }
+
+  kernel.freeze();
+  const stabilizedNarrative = kernel.assembleDocument();
+  assertOutputIntegrity(stabilizedNarrative);
+  const situationReconstruction = buildSituationReconstruction(
+    processedExecutiveText,
+    processedNarrative
+  );
+  const narrativeWithSituation = `${situationReconstruction}\n\n${stabilizedNarrative}`.trim();
+  const narrativeWithArtifacts = ensureBoardroomOutputArtifacts(narrativeWithSituation);
+  assertBoardroomReportStructure(narrativeWithArtifacts);
+
   return {
-    executive_thesis:
-      intelligence.report?.slice(0, 1200) ??
-      "Geen executive thesis gegenereerd.",
+    executive_thesis: processedExecutiveText,
 
     central_tension:
       "Spanning tussen huidige operationele realiteit en strategische noodzaak.",
 
-    strategic_narrative: context,
+    strategic_narrative: narrativeWithArtifacts,
 
-    key_tradeoffs: [
-      "Korte termijn stabiliteit versus lange termijn transformatie",
-      "Decentrale autonomie versus centrale sturing",
-    ],
+    key_tradeoffs: keyChoices,
 
     irreversible_decisions: [
       "Structuur van leiderschap",

@@ -5,7 +5,7 @@
 // ✅ McKinsey+ inhoud
 // ✅ ADD-ONLY / NO DOWNGRADE
 
-import type { AnalysisContext, ModelResult } from "../../types";
+import type { AnalysisContext, ModelResult } from "@/aurelius/engine/types";
 
 /* ============================================================
    EXPERT CONTRACT (ENGINE-COMPATIBLE)

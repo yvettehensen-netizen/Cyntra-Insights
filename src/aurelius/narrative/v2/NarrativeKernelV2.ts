@@ -1,16 +1,23 @@
 import { callAI } from "@/aurelius/engine/utils/callAI";
-import {
-  generateBoardroomNarrative,
-  type BoardroomInput,
-} from "@/aurelius/narrative/generateBoardroomNarrative";
 import { BOARDROOM_NARRATIVE_PROMPT } from "@/aurelius/narrative/boardroomPrompt";
 import {
   HGBCO_MCKINSEY_SYSTEM_INJECT,
   HGBCO_MCKINSEY_USER_INJECT,
 } from "@/aurelius/narrative/guards/hgbcoMcKinseySpec";
 import { hardenNarrativeCandidate } from "@/aurelius/narrative/harden/hardenNarrativeCandidate";
+import { buildStructuralSkeleton } from "@/aurelius/narrative/harden/buildStructuralSkeleton";
 import { validateNarrativeV2 } from "@/aurelius/narrative/v2/NarrativeValidatorV2";
 import { getPreviousReport, setPreviousReport } from "@/aurelius/narrative/tools/reportStore";
+import { extractAnchors, anchorValues } from "@/aurelius/narrative/anchors/anchorExtractor";
+
+export type BoardroomInput = {
+  analysis_id?: string;
+  company_name?: string;
+  company_context?: string;
+  documents?: Array<{ id: string; filename: string; content: string }>;
+  questions?: Record<string, string | undefined>;
+  meta?: Record<string, unknown>;
+};
 
 function stableKey(input: BoardroomInput): string {
   const source = [input.analysis_id, input.company_name, input.company_context]
@@ -44,23 +51,31 @@ function replaceSectionBody(text: string, number: number, newBody: string): stri
   return `${source.slice(0, start)}\n${newBody.trim()}\n${source.slice(end)}`.trim();
 }
 
-function systemPrompt(): string {
-  return [
-    HGBCO_MCKINSEY_SYSTEM_INJECT,
-    BOARDROOM_NARRATIVE_PROMPT,
-    "Gebruik uitsluitend anchors uit context; geen nieuwe feiten.",
-  ]
-    .filter(Boolean)
+function buildContext(input: BoardroomInput): string {
+  const base = String(input.company_context ?? "").trim();
+  const questionBlock = Object.entries(input.questions ?? {})
+    .filter(([, value]) => String(value ?? "").trim())
+    .map(([key, value]) => `${key}: ${String(value)}`)
+    .join("\n");
+  const docs = (input.documents ?? [])
+    .map((doc) => `${doc.filename}\n${doc.content.slice(0, 3000)}`)
     .join("\n\n");
+
+  return [base, questionBlock, docs].filter(Boolean).join("\n\n").trim();
 }
 
-async function regenerateFullNarrative(params: {
+function systemPrompt(): string {
+  return [HGBCO_MCKINSEY_SYSTEM_INJECT, BOARDROOM_NARRATIVE_PROMPT].filter(Boolean).join("\n\n");
+}
+
+async function generateCyntraNarrative(params: {
+  input: BoardroomInput;
   mode: string;
   directive: string;
-  input: BoardroomInput;
-  previousNarrative: string;
+  previousOutput?: string;
 }): Promise<string> {
-  const context = String(params.input.company_context ?? "");
+  const context = buildContext(params.input);
+  const anchors = anchorValues(extractAnchors(context)).slice(0, 30);
   const prompt = `
 ${HGBCO_MCKINSEY_USER_INJECT}
 MODE: ${params.mode}
@@ -69,14 +84,19 @@ REPAIR DIRECTIVE: ${params.directive}
 CONTEXT (LEIDEND):
 ${context}
 
-VORIGE OUTPUT (NIET HERHALEN):
-${params.previousNarrative.slice(0, 7000)}
+ALLOWED ANCHORS:
+${anchors.join(" | ")}
+
+STRUCTURAL SKELETON (EXACT VOLGEN):
+${buildStructuralSkeleton()}
+
+${params.previousOutput ? `VORIGE OUTPUT (NIET HERHALEN):\n${params.previousOutput.slice(0, 6000)}` : ""}
 
 HARD:
-- Geen nieuwe feiten buiten context.
-- Minimaal 15 interventies in sectie 8.
-- Minimaal 3 causale ketens per sectie.
-- Exact 9 headings.
+- Gebruik exact 8 secties met exact de headings uit het skeleton.
+- Geen bullets buiten sectie 7 en 8.
+- Geen nieuwe feiten buiten anchors/context.
+- Geen verboden woorden.
 `.trim();
 
   const out = await callAI(
@@ -85,31 +105,49 @@ HARD:
       { role: "system", content: systemPrompt() },
       { role: "user", content: prompt },
     ],
-    { temperature: 0.28, max_tokens: 12_000 }
+    { temperature: 0.22, max_tokens: 12000 }
   );
 
   return typeof out === "string" ? out.trim() : "";
 }
 
-async function rewriteSection8Only(params: {
+async function rewriteSection7Only(params: {
   directive: string;
   input: BoardroomInput;
   previousNarrative: string;
 }): Promise<string> {
-  const section8 = sectionBody(params.previousNarrative, 8);
+  const section7 = sectionBody(params.previousNarrative, 7);
+  const context = buildContext(params.input);
+  const anchors = anchorValues(extractAnchors(context)).slice(0, 30);
+
   const prompt = `
 ${HGBCO_MCKINSEY_USER_INJECT}
-SECTION8_REWRITE_MODE
+MODE: SECTION7_REWRITE
 DIRECTIVE: ${params.directive}
 
-CONTEXT (LEIDEND):
-${String(params.input.company_context ?? "")}
+CONTEXT:
+${context}
 
-HUIDIGE SECTIE 8:
-${section8}
+ALLOWED ANCHORS:
+${anchors.join(" | ")}
 
-HERBOUW ALLEEN SECTIE 8 volgens regels, start direct met:
-MAAND 1 (dag 1–30): STABILISEREN EN KNOPEN DOORHAKKEN
+HUIDIGE SECTIE 7:
+${section7}
+
+HERBOUW ALLEEN SECTIE 7 MET:
+- MAAND 1 (1-30)
+- MAAND 2 (31-60)
+- MAAND 3 (61-90)
+- Minimaal 6 kerninterventies totaal (2 per maand)
+- Elk blok met exact velden:
+  Actie:
+  Eigenaar:
+  Deadline:
+  KPI:
+  Escalatiepad:
+  Direct zichtbaar effect (<=7 dagen):
+  Casus-anker:
+- Expliciete Dag 30 / Dag 60 / Dag 90 gates.
 `.trim();
 
   const out = await callAI(
@@ -118,16 +156,16 @@ MAAND 1 (dag 1–30): STABILISEREN EN KNOPEN DOORHAKKEN
       { role: "system", content: systemPrompt() },
       { role: "user", content: prompt },
     ],
-    { temperature: 0.22, max_tokens: 7000 }
+    { temperature: 0.2, max_tokens: 7000 }
   );
 
   const rewritten = typeof out === "string" ? out.trim() : "";
-  return replaceSectionBody(params.previousNarrative, 8, rewritten || section8);
+  return replaceSectionBody(params.previousNarrative, 7, rewritten || section7);
 }
 
 export async function runNarrativeKernelV2(
   input: BoardroomInput,
-  options?: {
+  _options?: {
     minWords?: number;
     maxWords?: number;
     temperature?: number;
@@ -137,26 +175,33 @@ export async function runNarrativeKernelV2(
   metrics: Record<string, unknown>;
   gateLogs: Array<Record<string, unknown>>;
 }> {
-  const base = await generateBoardroomNarrative(input, options);
   const key = stableKey(input);
   const previous = getPreviousReport(key);
 
   console.info("[narrative_start]", { key });
+
+  const baseText = await generateCyntraNarrative({
+    input,
+    mode: "NORMAL",
+    directive: "Genereer een CYNTRA-native executive decision report volgens het exacte 8-blokken skelet.",
+    previousOutput: previous,
+  });
+
   console.info("[harden_start]", { key });
 
   const hardened = await hardenNarrativeCandidate({
-    candidate: base.text,
-    context: String(input.company_context ?? ""),
+    candidate: baseText,
+    context: buildContext(input),
     previousOutput: previous,
     regenerateFull: ({ mode, directive, previousNarrative }) =>
-      regenerateFullNarrative({
+      generateCyntraNarrative({
+        input,
         mode,
         directive,
-        input,
-        previousNarrative,
+        previousOutput: previousNarrative,
       }),
     rewriteSection8: ({ directive, previousNarrative }) =>
-      rewriteSection8Only({
+      rewriteSection7Only({
         directive,
         input,
         previousNarrative,
@@ -165,7 +210,7 @@ export async function runNarrativeKernelV2(
 
   const finalValidation = validateNarrativeV2({
     narrativeText: hardened.narrative,
-    context: String(input.company_context ?? ""),
+    context: buildContext(input),
     previousOutput: previous,
   });
 
@@ -173,6 +218,10 @@ export async function runNarrativeKernelV2(
     key,
     passed: finalValidation.passed,
     firstFailure: finalValidation.firstFailure?.code,
+    executivePressureIndex: finalValidation.diagnostics.executivePressureIndex,
+    besluitdwangScore: finalValidation.diagnostics.besluitdwangScore,
+    interventieRealiteitScore: finalValidation.diagnostics.interventieRealiteitScore,
+    organisatieFrictieScore: finalValidation.diagnostics.organisatieFrictieScore,
   });
   console.info("[narrative_end]", { key });
 
@@ -181,9 +230,12 @@ export async function runNarrativeKernelV2(
   return {
     text: hardened.narrative,
     metrics: {
-      ...base.metrics,
       hardenAttempts: hardened.logs.length,
       gatePassed: finalValidation.passed,
+      executivePressureIndex: finalValidation.diagnostics.executivePressureIndex,
+      besluitdwangScore: finalValidation.diagnostics.besluitdwangScore,
+      interventieRealiteitScore: finalValidation.diagnostics.interventieRealiteitScore,
+      organisatieFrictieScore: finalValidation.diagnostics.organisatieFrictieScore,
     },
     gateLogs: hardened.logs,
   };

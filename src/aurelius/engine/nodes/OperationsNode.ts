@@ -5,7 +5,7 @@
 // ✅ BOARDROOM-READY
 // ✅ ADD-ONLY — NO DOWNGRADES
 
-import type { AnalysisContext, ModelResult } from "../../types";
+import type { AnalysisContext, ModelResult } from "@/aurelius/engine/types";
 
 /* ============================================================
    EXPERT CONTRACT

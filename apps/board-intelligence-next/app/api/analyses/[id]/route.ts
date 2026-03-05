@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAnalysisWithOptionalReport } from "@/lib/run-analysis";
+import {
+  getAnalysisWithOptionalReportInMemory,
+  isMemoryBackendEnabled,
+} from "@/lib/dev-memory-backend";
 
 export const runtime = "nodejs";
 
@@ -9,7 +13,9 @@ export async function GET(
 ): Promise<NextResponse> {
   try {
     const { id: analysisId } = await context.params;
-    const payload = await getAnalysisWithOptionalReport(analysisId);
+    const payload = isMemoryBackendEnabled()
+      ? getAnalysisWithOptionalReportInMemory(analysisId)
+      : await getAnalysisWithOptionalReport(analysisId);
     return NextResponse.json(payload, { status: 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";

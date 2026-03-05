@@ -16,7 +16,10 @@ const REQUIRED_FIELDS = [
   "Deadline:",
   "KPI:",
   "Escalatiepad:",
+  "Effect organisatie:",
+  "Effect cliënt:",
   "Direct zichtbaar effect:",
+  "Casus-anker:",
 ] as const;
 
 export function validateInterventionGates(text: string, context: string): void {
@@ -39,12 +42,12 @@ export function validateInterventionGates(text: string, context: string): void {
     .map((block) => block.trim())
     .filter(Boolean);
 
-  if (actionBlocks.length < 15) {
+  if (actionBlocks.length !== 6) {
     throw new ExecutiveGateError(
-      "Sectie 8 bevat minder dan 15 interventies.",
+      "Sectie 8 bevat niet exact 6 kerninterventies.",
       "INTERVENTION_ARTEFACT_REQUIRED",
-      { interventions: actionBlocks.length, required: 15 },
-      "INTERVENTION REWRITE MODE: minimaal 5 interventies per maand (15 totaal)."
+      { interventions: actionBlocks.length, required: 6 },
+      "INTERVENTION REWRITE MODE: exact 2 interventies per maand (6 totaal)."
     );
   }
 
@@ -72,12 +75,12 @@ export function validateInterventionGates(text: string, context: string): void {
     const interventions = (untilNext.match(/\bActie:/g) ?? []).length;
     const escalations = (untilNext.match(/\bEscalatiepad:/g) ?? []).length;
 
-    if (interventions < 5 || escalations < 1) {
+    if (interventions < 2 || escalations < 1) {
       throw new ExecutiveGateError(
         `Maand ${index + 1} interventievolume of escalatiepad onvoldoende.`,
         "INTERVENTION_ARTEFACT_REQUIRED",
         { month: index + 1, interventions, escalations },
-        "INTERVENTION REWRITE MODE: minimaal 5 interventies en 1 escalatiepad per maand."
+        "INTERVENTION REWRITE MODE: minimaal 2 interventies en 1 escalatiepad per maand."
       );
     }
   }

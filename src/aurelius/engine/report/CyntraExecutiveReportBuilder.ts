@@ -4,7 +4,7 @@
 // ============================================================
 
 import { BoardroomReportBuilder } from "./BoardroomReportBuilder";
-import type { AnalysisContext, ModelResult } from "@/aurelius/types";
+import type { AnalysisContext, ModelResult } from "@/aurelius/engine/types";
 
 export class CyntraExecutiveReportBuilder extends BoardroomReportBuilder {
   build(context: AnalysisContext, models: ModelResult[]) {

@@ -8,13 +8,13 @@ export default function ExecutiveSummary() {
       visualImage="/assets/aurelius/visual-executive.svg"
     >
       <section className="space-y-6">
-        <p className="text-gray-300 text-lg leading-relaxed">
+        <p className="text-gray-300 text-lg leading-relaxed break-words max-w-[65ch] [overflow-wrap:anywhere] [word-break:break-word] [hyphens:auto]">
           This executive summary highlights the most critical findings
           identified by the Aurelius Engine.
         </p>
 
         <div className="p-6 bg-white/5 border border-white/10 rounded-xl">
-          <p className="text-[#D4AF37] font-semibold">
+          <p className="text-[#D4AF37] font-semibold break-words max-w-[65ch] leading-relaxed [overflow-wrap:anywhere] [word-break:break-word] [hyphens:auto]">
             Immediate action required on execution discipline and accountability.
           </p>
         </div>

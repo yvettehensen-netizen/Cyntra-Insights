@@ -5,7 +5,7 @@
 // ✅ UPGRADE-ONLY (NO DOWNGRADES)
 // ✅ CYNTRA TYPES CONSISTENT
 
-import type { AnalysisContext, ModelResult } from "../../types";
+import type { AnalysisContext, ModelResult } from "@/aurelius/engine/types";
 
 /* ============================================================
    CONTEXT EXTRACTION (STRICT & SAFE)

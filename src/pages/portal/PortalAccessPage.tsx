@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { supabase } from "@/lib/supabaseClient";
-import CyntraLogo from "@/components/CyntraLogo";
+import { supabase } from "../../lib/supabaseClient";
+import CyntraLogo from "../../components/CyntraLogo";
 
 /* =====================
    ERROR MESSAGES
@@ -28,6 +28,12 @@ export default function PortalAccessPage() {
   ===================== */
   const handleSubmit = useCallback(async () => {
     const value = code.trim().toUpperCase();
+
+    
+
+
+
+
 
     if (!value) {
       setError("empty");

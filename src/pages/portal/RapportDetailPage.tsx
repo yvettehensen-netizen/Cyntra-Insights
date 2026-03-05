@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
+import BackToDashboard from "@/components/navigation/BackToDashboard";
 
 /* ✅ CANONIEK: bestuurs-executieplan */
 import ExecutionPlan90D from "@/aurelius/components/report/ExecutionPlan90D";
@@ -68,43 +69,73 @@ export default function RapportDetailPage() {
 
     let cancelled = false;
 
-    fetch(`/api/analyses/${encodeURIComponent(id)}`)
-      .then(async (res) => {
-        const json = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          const message =
-            typeof json?.error === "string" ? json.error : "Rapport niet gevonden.";
-          throw new Error(message);
-        }
+    const fetchAnalysis = async (): Promise<AnalysisRecord> => {
+      const res = await fetch(`/api/analyses/${encodeURIComponent(id)}`);
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const message =
+          typeof json?.error === "string" ? json.error : "Rapport niet gevonden.";
+        throw new Error(message);
+      }
 
-        const analysis = (json?.analysis ?? {}) as Record<string, any>;
-        const resultPayload =
-          (analysis.result_payload as AnalysisResult | undefined) ||
-          (analysis.result as AnalysisResult | undefined) ||
-          {};
-        const inputPayload = (analysis.input_payload ?? {}) as Record<string, any>;
+      const analysis = (json?.analysis ?? {}) as Record<string, any>;
+      const resultPayload =
+        (analysis.result_payload as AnalysisResult | undefined) ||
+        (analysis.result as AnalysisResult | undefined) ||
+        {};
+      const inputPayload = (analysis.input_payload ?? {}) as Record<string, any>;
 
-        const mapped: AnalysisRecord = {
-          id: String(analysis.id || id),
-          analysis_type: String(analysis.analysis_type || analysis.type || "executive"),
-          created_at: String(analysis.created_at || new Date().toISOString()),
-          result: resultPayload,
-          input_data: {
-            companyName: String(
-              inputPayload.organization_name ||
-                inputPayload.companyName ||
-                analysis.organization_id ||
-                "Organisatie"
-            ),
-          },
-          execution_plan:
-            (resultPayload as any)?.execution_plan ??
-            (resultPayload as any)?.roadmap_90d ??
-            undefined,
-        };
+      return {
+        id: String(analysis.id || id),
+        analysis_type: String(analysis.analysis_type || analysis.type || "executive"),
+        created_at: String(analysis.created_at || new Date().toISOString()),
+        result: resultPayload,
+        input_data: {
+          companyName: String(
+            inputPayload.organization_name ||
+              inputPayload.companyName ||
+              analysis.organization_id ||
+              "Organisatie"
+          ),
+        },
+        execution_plan:
+          (resultPayload as any)?.execution_plan ??
+          (resultPayload as any)?.roadmap_90d ??
+          undefined,
+      };
+    };
 
-        return mapped;
-      })
+    const fetchSessionFallback = async (): Promise<AnalysisRecord> => {
+      const res = await fetch(`/api/platform/sessions/${encodeURIComponent(id)}`);
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.success || !json?.data) {
+        throw new Error("Sessierapport niet gevonden.");
+      }
+
+      const session = json.data as Record<string, any>;
+      const resultPayload: AnalysisResult = {
+        executive_summary: String(session.executive_summary || "").trim(),
+        insights: Array.isArray(session?.strategic_metadata?.interventies)
+          ? session.strategic_metadata.interventies.map((value: unknown) => String(value))
+          : [],
+        risks: Array.isArray(session?.strategic_metadata?.mechanismen)
+          ? session.strategic_metadata.mechanismen.map((value: unknown) => String(value))
+          : [],
+      };
+
+      return {
+        id: String(session.session_id || id),
+        analysis_type: String(session.analysis_type || "Strategische analyse"),
+        created_at: String(session.analyse_datum || session.updated_at || new Date().toISOString()),
+        result: resultPayload,
+        input_data: {
+          companyName: String(session.organization_name || session.organization_id || "Organisatie"),
+        },
+      };
+    };
+
+    fetchAnalysis()
+      .catch(() => fetchSessionFallback())
       .then((mapped) => {
         if (cancelled) return;
         setReport(mapped);
@@ -124,7 +155,7 @@ export default function RapportDetailPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0A090A] text-gray-500 flex items-center justify-center text-xl">
+      <div className="cyntra-shell flex items-center justify-center text-xl text-cyntra-secondary">
         Rapport laden…
       </div>
     );
@@ -132,7 +163,7 @@ export default function RapportDetailPage() {
 
   if (!report) {
     return (
-      <div className="min-h-screen bg-[#0A090A] text-gray-500 flex items-center justify-center text-xl">
+      <div className="cyntra-shell flex items-center justify-center text-xl text-cyntra-secondary">
         Rapport niet gevonden.
       </div>
     );
@@ -168,26 +199,27 @@ export default function RapportDetailPage() {
   });
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#0A090A] via-[#120B10] to-[#0A090A] text-white">
+    <div className="cyntra-shell">
+      <BackToDashboard />
       <main className="max-w-5xl mx-auto px-6 pt-32 pb-40 space-y-40">
 
         {/* ================= HEADER ================= */}
         <header>
-          <p className="text-xs tracking-[0.35em] text-[#D4AF37] uppercase mb-6">
+          <p className="text-xs tracking-[0.35em] text-cyntra-gold uppercase mb-6">
             Cyntra Insights · Confidential
           </p>
 
-          <h1 className="text-6xl font-bold leading-tight mb-8">
+          <h1 className="text-5xl md:text-6xl font-semibold leading-tight mb-8 normal-case">
             {analysis_type.charAt(0).toUpperCase() + analysis_type.slice(1)} Analyse
           </h1>
 
-          <div className="flex items-center gap-8 text-lg text-gray-400">
-            <span className="text-white font-medium">
+          <div className="flex items-center gap-8 text-lg text-cyntra-secondary">
+            <span className="text-cyntra-primary font-medium">
               {input_data?.companyName || "Organisatie"}
             </span>
 
             <span className="flex items-center gap-3">
-              <Calendar className="w-5 h-5 text-[#D4AF37]" />
+              <Calendar className="w-5 h-5 text-cyntra-gold" />
               {formattedDate}
             </span>
           </div>
@@ -198,12 +230,12 @@ export default function RapportDetailPage() {
         {/* ================= EXECUTIVE SUMMARY ================= */}
         {result.executive_summary && (
           <section>
-            <p className="text-xs tracking-[0.3em] text-[#D4AF37] uppercase mb-10">
+            <p className="text-xs tracking-[0.3em] text-cyntra-gold uppercase mb-10">
               Executive Verdict
             </p>
 
             <div className="border-l-4 border-[#D4AF37] pl-12">
-              <p className="text-3xl font-light leading-relaxed text-gray-200 whitespace-pre-line">
+              <p className="text-3xl font-light leading-relaxed text-cyntra-primary whitespace-pre-line">
                 {result.executive_summary}
               </p>
             </div>
@@ -212,8 +244,8 @@ export default function RapportDetailPage() {
 
         {/* ================= BESLUITCONTRACT ================= */}
         {(decisionFailureText || decisionContract) && (
-          <section className="rounded-3xl border border-[#D4AF37]/30 bg-black/60 p-10 space-y-6">
-            <p className="text-xs tracking-[0.3em] text-[#D4AF37] uppercase">
+          <section className="cyntra-panel rounded-3xl p-10 space-y-6">
+            <p className="text-xs tracking-[0.3em] text-cyntra-gold uppercase">
               Besluitcontract
             </p>
 
@@ -224,7 +256,7 @@ export default function RapportDetailPage() {
             )}
 
             {!decisionFailureText && decisionContract && (
-              <div className="space-y-4 text-white/80">
+              <div className="space-y-4 text-cyntra-primary">
                 {typeof decisionContract === "string" ? (
                   <p>{sanitizeText(decisionContract)}</p>
                 ) : (
@@ -253,7 +285,7 @@ export default function RapportDetailPage() {
                 )}
 
                 {decisionScore !== null && (
-                  <p className="text-xs text-white/40">
+                  <p className="text-xs text-cyntra-secondary">
                     Score: {decisionScore} / 100
                   </p>
                 )}
@@ -265,7 +297,7 @@ export default function RapportDetailPage() {
         {/* ================= INSIGHTS ================= */}
         {result.insights?.length ? (
           <section>
-            <h2 className="text-4xl font-bold mb-24">
+            <h2 className="text-4xl font-semibold mb-24 normal-case">
               Kerninzichten
             </h2>
 
@@ -275,7 +307,7 @@ export default function RapportDetailPage() {
                   <div className="text-5xl font-light text-[#D4AF37]/30 w-16">
                     {String(i + 1).padStart(2, "0")}
                   </div>
-                  <p className="text-2xl leading-relaxed text-gray-200 max-w-3xl">
+                  <p className="text-2xl leading-relaxed text-cyntra-primary max-w-3xl">
                     {insight}
                   </p>
                 </div>
@@ -289,7 +321,7 @@ export default function RapportDetailPage() {
           <section>
             <div className="flex items-center gap-4 mb-12">
               <AlertTriangle className="w-8 h-8 text-red-400" />
-              <h2 className="text-4xl font-bold text-red-400">
+              <h2 className="text-4xl font-semibold text-red-400 normal-case">
                 Risico bij niet-handelen
               </h2>
             </div>
@@ -298,7 +330,7 @@ export default function RapportDetailPage() {
               {result.risks.map((risk, i) => (
                 <p
                   key={i}
-                  className="text-2xl leading-relaxed text-gray-300 border-l-2 border-red-400/40 pl-10"
+                  className="text-2xl leading-relaxed text-cyntra-secondary border-l-2 border-red-400/40 pl-10"
                 >
                   {risk}
                 </p>
@@ -310,11 +342,11 @@ export default function RapportDetailPage() {
         {/* ================= OPPORTUNITIES ================= */}
         {result.opportunities?.length ? (
           <section>
-            <h2 className="text-4xl font-bold mb-20">
+            <h2 className="text-4xl font-semibold mb-20 normal-case">
               Strategische kansen
             </h2>
 
-            <ul className="space-y-10 text-2xl text-gray-200 max-w-3xl">
+            <ul className="space-y-10 text-2xl text-cyntra-primary max-w-3xl">
               {result.opportunities.map((opportunity, i) => (
                 <li key={i} className="flex gap-8">
                   <span className="text-[#D4AF37] font-medium">
@@ -329,7 +361,7 @@ export default function RapportDetailPage() {
 
         {/* ================= 90-DAGEN EXECUTIEPLAN ================= */}
         {execution_plan && (
-          <section className="border border-[#D4AF37]/40 bg-black/40 backdrop-blur-xl rounded-3xl p-20 shadow-3xl">
+          <section className="cyntra-panel border-[#D4AF37]/40 rounded-3xl p-8 md:p-12 shadow-3xl">
             <ExecutionPlan90D plan={execution_plan} />
           </section>
         )}
@@ -354,7 +386,7 @@ function DecisionRow({ label, value }: { label: string; value?: string }) {
   if (!value) return null;
   return (
     <p>
-      <span className="text-white/50">{label}:</span>{" "}
+      <span className="text-cyntra-secondary">{label}:</span>{" "}
       {sanitizeText(value)}
     </p>
   );

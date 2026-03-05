@@ -9,9 +9,9 @@ This is NOT a plan.
 
 Analyze & classify using ONLY these diagnostic lenses — do not add others:
 
-1. Choice architecture & real trade-off avoidance
+1. Choice architecture & real keuzeconflict avoidance
    • Where is the organization structurally attempting to preserve mutually exclusive paths simultaneously?
-   • Map explicit, implicit, and denied trade-offs: which strategic options are being quietly sacrificed to maintain the illusion of optionality?
+   • Map explicit, implicit, and denied keuzeconflicten: which strategic options are being quietly sacrificed to maintain the illusion of optionality?
    • Quantify directional opportunity-cost leakage: how does spreading finite attention/capital across N parallel bets reduce per-bet potency and decision clarity?
 
 2. Focus surface area & coherence entropy

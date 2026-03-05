@@ -3,11 +3,13 @@ import type {
   DecisionIntelligenceSignal,
   StrategicHealthOutput,
 } from "@/cyntra/intelligence/types";
+import type { BoardIndexResult } from "@/aurelius/governance/BoardLegitimacyEngine";
 
 interface StrategicHealthIndexProps {
   sri: SriResponse;
   health: StrategicHealthOutput;
   decision: DecisionIntelligenceSignal;
+  boardIndexOverride?: BoardIndexResult | null;
 }
 
 function deltaWaarde(sri: SriResponse, dagen: number): number {
@@ -45,9 +47,13 @@ export default function StrategicHealthIndex({
   sri,
   health,
   decision,
+  boardIndexOverride,
 }: StrategicHealthIndexProps) {
   const delta7d = Number.isFinite(health.trend7d) ? health.trend7d : deltaWaarde(sri, 7);
   const delta30d = Number.isFinite(health.trend30d) ? health.trend30d : deltaWaarde(sri, 30);
+
+  const boardIndexValue = boardIndexOverride?.baliScore ?? health.board_adoption_legitimacy_index;
+  const boardIndexClass = boardIndexOverride?.classification ?? "Onbekend";
 
   return (
     <section className="rounded-3xl border border-white/10 bg-[#0f141c] p-5" aria-label="Strategische gezondheidsindex">
@@ -92,9 +98,11 @@ export default function StrategicHealthIndex({
             Board Adoption & Legitimiteitsindex
           </p>
           <p className="mt-2 text-3xl font-semibold text-white">
-            {health.board_adoption_legitimacy_index.toFixed(1)}
+            {boardIndexValue.toFixed(1)}
           </p>
-          <p className="mt-2 text-xs text-white/60">Schaal 0-10 (bestuurlijke adoptie)</p>
+          <p className="mt-2 text-xs text-white/60">
+            Schaal 0-10 · {boardIndexClass}
+          </p>
         </article>
 
         <article className="rounded-2xl border border-white/10 bg-[#0b1017] p-4">

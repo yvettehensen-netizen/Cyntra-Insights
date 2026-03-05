@@ -5,7 +5,6 @@
 // ============================================================================
 
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 
 import {
   BarChart,
@@ -18,10 +17,8 @@ import {
 } from "recharts";
 
 import {
-  PlayCircle,
   ShieldAlert,
   Activity,
-  ArrowRight,
   Radar,
   Siren,
   Eye,
@@ -30,8 +27,6 @@ import {
 } from "lucide-react";
 
 import { supabase } from "@/lib/supabaseClient";
-import { ANALYSES } from "@/aurelius/config/analyses.config";
-import { Card, CardContent } from "@/components/ui/card";
 
 /* ============================================================================
    TYPES
@@ -60,35 +55,13 @@ type DecisionBriefRow = {
   created_at: string;
 };
 
-const ENABLED_ANALYSIS_TYPES: string[] = [
-  "strategy",
-  "finance",
-  "financial_strategy",
-  "growth",
-  "market",
-  "process",
-  "leadership",
-  "team_culture",
-  "team_dynamics",
-  "change_resilience",
-  "onderstroom",
-  "swot",
-  "esg",
-  "ai_data",
-  "marketing",
-  "sales",
-];
-
 /* ============================================================================
    WAR ROOM — CYNTRA DECISION COMMAND CENTER
 ============================================================================ */
 
 export default function DashboardPage() {
-  const navigate = useNavigate();
-
   const [analyses, setAnalyses] = useState<AnalysisRow[]>([]);
   const [companyName, setCompanyName] = useState<string>("uw organisatie");
-  const [loading, setLoading] = useState(true);
 
   /* ================= ADD — ACTIVE DECISION ================= */
 
@@ -99,8 +72,6 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const load = async () => {
-      setLoading(true);
-
       const { data: analysisData } = await supabase
         .from("analyses")
         .select("id, analysis_type, created_at, risk_score")
@@ -136,7 +107,6 @@ export default function DashboardPage() {
         }
       }
 
-      setLoading(false);
     };
 
     load();
@@ -177,16 +147,6 @@ export default function DashboardPage() {
 
   /* ================= PRIORITY MODULE ================= */
 
-  const priorityModule = useMemo(() => {
-    const modules = Object.values(ANALYSES).filter((a) =>
-      ENABLED_ANALYSIS_TYPES.includes(a.analysisType)
-    );
-
-    if (modules.length === 0) return null;
-
-    return modules.sort((a, b) => b.strategicWeight - a.strategicWeight)[0];
-  }, []);
-
   /* ============================================================================
      RENDER
   ============================================================================ */
@@ -210,33 +170,6 @@ export default function DashboardPage() {
             Elke analyse leidt tot richting. Elk rapport tot een besluit.
           </p>
         </header>
-
-        {/* ======================================================
-            ANALYSE START (CRUCIAAL — WAS JE KWIJT)
-        ====================================================== */}
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {priorityModule && (
-            <Card className="bg-black/70 border border-[#d4af37]/40 rounded-2xl">
-              <CardContent className="p-8 space-y-4">
-                <PlayCircle className="h-6 w-6 text-[#d4af37]" />
-                <p className="text-xs uppercase tracking-widest text-white/40">
-                  Start analyse
-                </p>
-                <p className="text-lg font-semibold text-[#d4af37]">
-                  {priorityModule.title}
-                </p>
-                <button
-                  onClick={() =>
-                    navigate(`/portal/analyse/${priorityModule.analysisType}`)
-                  }
-                  className="mt-4 inline-flex items-center gap-2 text-xs uppercase tracking-widest text-[#d4af37]"
-                >
-                  Start analyse <ArrowRight className="h-4 w-4" />
-                </button>
-              </CardContent>
-            </Card>
-          )}
-        </section>
 
         {/* ======================================================
             ACTIVE BOARDROOM DECISION (DECISION OS — ADD ONLY)

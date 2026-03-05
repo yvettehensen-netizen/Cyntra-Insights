@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { runAnalysisJob } from "@/lib/run-analysis";
 import { normalizeAnalysisRow, type NewAnalysisRequest } from "@/lib/types";
 import { linkUploadsToAnalysis, resolveUploadsById } from "@/lib/uploads";
+import { createAnalysisInMemory, isMemoryBackendEnabled } from "@/lib/dev-memory-backend";
 
 export const runtime = "nodejs";
 
@@ -64,6 +65,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const raw = await request.json();
     const parsed = requestSchema.parse(raw);
+
+    if (isMemoryBackendEnabled()) {
+      const analysis = await createAnalysisInMemory({
+        organizationId: parsed.organizationId,
+        organization: parsed.organization,
+        description: parsed.description,
+        context: parsed.context,
+        uploadIds: parsed.uploadIds,
+        runImmediately:
+          parsed.runImmediately ?? process.env.ANALYSIS_INLINE_PROCESSING === "true",
+      });
+      return NextResponse.json({ analysis }, { status: 201 });
+    }
+
     const supabase = getSupabaseAdmin();
 
     const organizationId = await resolveOrganizationId(parsed);

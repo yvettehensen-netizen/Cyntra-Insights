@@ -64,6 +64,61 @@ export type RunCyntraResult = {
   };
 };
 
+function extractNarrativeText(input: unknown): string {
+  if (typeof input === "string") return input;
+  if (!input || typeof input !== "object") return "";
+  const obj = input as Record<string, unknown>;
+  if (typeof obj.report === "string") return obj.report;
+  if (obj.report && typeof obj.report === "object") {
+    const report = obj.report as Record<string, unknown>;
+    if (typeof report.narrative === "string") return report.narrative;
+  }
+  if (typeof obj.narrative === "string") return obj.narrative;
+  return "";
+}
+
+async function runLocalAnalyseFallback(
+  payload: Pick<RunCyntraInput, "analysis_type" | "company_context" | "document_data">,
+  onProgress?: (progress: number, partial: string) => void
+): Promise<unknown> {
+  const runId =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `fallback-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+  const startRes = await fetch("/api/analyse", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ runId, payload }),
+  });
+  if (!startRes.ok) {
+    const txt = await startRes.text();
+    throw new Error(`Lokale analyse start mislukt (${startRes.status}): ${txt}`);
+  }
+
+  const maxAttempts = 90;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const statusRes = await fetch(`/api/analyse/status/${encodeURIComponent(runId)}`);
+    if (!statusRes.ok) continue;
+    const statusJson = (await statusRes.json()) as {
+      status?: string;
+      progress?: number;
+      result?: unknown;
+      error?: string;
+    };
+    const pct = Math.max(0, Math.min(100, Number(statusJson.progress ?? 0)));
+    onProgress?.(pct, "");
+
+    if (statusJson.status === "completed") return statusJson.result;
+    if (statusJson.status === "error") {
+      throw new Error(statusJson.error || "Lokale analyse mislukt.");
+    }
+  }
+
+  throw new Error("Lokale analyse timeout.");
+}
+
 /* ============================================================
    HOOK — CYNTRA CORE ENGINE
 ============================================================ */
@@ -122,49 +177,71 @@ export function useCyntraAnalysis() {
           headers.Accept = "text/event-stream";
         }
 
-        const res = await fetch(
-          `${import.meta.env.VITE_SUPABASE_FUNCTIONS_URL}/aurelius-analyze`,
-          {
-            method: "POST",
-            headers,
-            body: JSON.stringify(payload),
-            signal: abortRef.current.signal,
-          }
-        );
-
-        if (!res.ok) throw new Error("Analyse mislukt");
-
         let fullReport = "";
         let json: any = {};
 
-        if (payload.enable_streaming && res.body) {
-          const reader = res.body.getReader();
-          const decoder = new TextDecoder();
+        try {
+          const res = await fetch(
+            `${import.meta.env.VITE_SUPABASE_FUNCTIONS_URL}/aurelius-analyze`,
+            {
+              method: "POST",
+              headers,
+              body: JSON.stringify(payload),
+              signal: abortRef.current.signal,
+            }
+          );
 
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
+          if (!res.ok) throw new Error("Analyse mislukt");
 
-            const chunk = decoder.decode(value);
-            fullReport += chunk;
+          if (payload.enable_streaming && res.body) {
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
 
-            const pct = Math.min(
-              99,
-              Math.round((fullReport.length / 120000) * 100)
-            );
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
 
-            setProgress(pct);
-            input.onProgress?.(pct, fullReport);
+              const chunk = decoder.decode(value);
+              fullReport += chunk;
+
+              const pct = Math.min(
+                99,
+                Math.round((fullReport.length / 120000) * 100)
+              );
+
+              setProgress(pct);
+              input.onProgress?.(pct, fullReport);
+            }
+
+            try {
+              json = JSON.parse(fullReport);
+            } catch {
+              json.report = fullReport;
+            }
+          } else {
+            json = await res.json();
+            fullReport = json.report ?? "";
+            setProgress(100);
+            input.onProgress?.(100, fullReport);
           }
-
-          try {
-            json = JSON.parse(fullReport);
-          } catch {
-            json.report = fullReport;
-          }
-        } else {
-          json = await res.json();
-          fullReport = json.report ?? "";
+        } catch {
+          const fallbackResult = await runLocalAnalyseFallback(
+            {
+              analysis_type: payload.analysis_type,
+              company_context: payload.company_context,
+              document_data: payload.document_data,
+            },
+            (pct) => {
+              setProgress(pct);
+              input.onProgress?.(pct, "");
+            }
+          );
+          fullReport = extractNarrativeText(fallbackResult);
+          json = {
+            report: fullReport,
+            confidence: "medium",
+            stream_processed: false,
+          };
           setProgress(100);
           input.onProgress?.(100, fullReport);
         }

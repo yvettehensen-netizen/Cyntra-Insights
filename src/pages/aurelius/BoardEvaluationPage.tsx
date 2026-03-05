@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Download, Loader2, Save } from "lucide-react";
 import { BoardScorecard } from "@/components/aurelius/board-evaluation";
+import BackToDashboard from "@/components/navigation/BackToDashboard";
 import {
   aggregateBoardEvaluations,
   normalizeBoardScores,
@@ -15,6 +16,14 @@ import {
 } from "@/api/boardEvaluation";
 import { exportBoardEvaluationPdf } from "@/cyntra/board-evaluation/exportBoardEvaluationPdf";
 import { supabase } from "@/lib/supabaseClient";
+import {
+  computeBoardIndex,
+  type BoardIndexResult,
+} from "@/aurelius/governance/BoardLegitimacyEngine";
+import {
+  getBoardIndexSnapshot,
+  saveBoardIndexSnapshot,
+} from "@/aurelius/storage/BoardIndexRepository";
 
 const SCORE_KEYS: Array<keyof BoardEvaluationScores> = [
   "clarity_score",
@@ -59,6 +68,7 @@ export default function BoardEvaluationPage() {
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [liveBoardIndex, setLiveBoardIndex] = useState<BoardIndexResult | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -81,6 +91,16 @@ export default function BoardEvaluationPage() {
         setBoardMemberId(userId);
         setOrganisationId(orgId);
         setRows(data);
+
+        const stored = await getBoardIndexSnapshot(`org:${orgId}:board-evaluation`);
+        if (stored) {
+          setLiveBoardIndex({
+            baliScore: stored.baliScore,
+            classification: stored.classification,
+            spread: stored.spread,
+            reliabilityBand: stored.reliabilityBand,
+          });
+        }
       } catch (bootstrapError) {
         if (!active) return;
         setError(
@@ -104,6 +124,26 @@ export default function BoardEvaluationPage() {
     const latest = rows[0];
     return latest ? toBoardEvaluationOutput(latest) : null;
   }, [rows]);
+  const computedFromRows = useMemo(() => {
+    return computeBoardIndex({
+      sliders: SCORE_KEYS.map((key) => scores[key]),
+      interventionState: {
+        gateCompliance: aggregate.overall_average,
+        gateMissedCount: Math.max(0, 5 - Math.round(aggregate.overall_average / 2)),
+      },
+      executionMetrics: {
+        adoptionWithin72hRate: aggregate.averages.governance_trust,
+        escalationResolutionScore: aggregate.averages.risk_understanding,
+      },
+      decisionHistory: {
+        totalDecisions: rows.length || 1,
+        reopenedDecisions: Math.max(
+          0,
+          Math.round((10 - aggregate.averages.decision_certainty) / 2)
+        ),
+      },
+    });
+  }, [aggregate, rows.length, scores]);
 
   async function refreshRows(orgId: string) {
     const data = await fetchBoardEvaluations(orgId);
@@ -129,6 +169,31 @@ export default function BoardEvaluationPage() {
       });
 
       setRows((current) => [inserted, ...current]);
+      const boardIndex = computeBoardIndex({
+        sliders: SCORE_KEYS.map((key) => normalized[key]),
+        interventionState: {
+          gateCompliance: normalized.decision_certainty,
+          gateMissedCount: Math.max(0, 10 - Math.round(normalized.decision_certainty)),
+        },
+        executionMetrics: {
+          adoptionWithin72hRate: normalized.governance_trust,
+          escalationResolutionScore: normalized.risk_understanding,
+        },
+        decisionHistory: {
+          totalDecisions: rows.length + 1,
+          reopenedDecisions: Math.max(
+            0,
+            Math.round((10 - normalized.decision_certainty) / 2)
+          ),
+        },
+      });
+      setLiveBoardIndex(boardIndex);
+      await saveBoardIndexSnapshot({
+        ...boardIndex,
+        analysisId: `org:${organisationId}:board-evaluation`,
+        organisationId,
+        createdAt: new Date().toISOString(),
+      });
       setStatus("Board Adoption & Legitimiteitsindex opgeslagen.");
     } catch (submitError) {
       setError(
@@ -177,6 +242,7 @@ export default function BoardEvaluationPage() {
 
   return (
     <div className="mx-auto max-w-[1280px] space-y-4 px-4 pb-10 md:px-8">
+      <BackToDashboard />
       <section className="rounded-3xl border border-white/10 bg-[#0f141c] p-6">
         <header className="mb-4">
           <p className="text-[11px] uppercase tracking-[0.28em] text-white/45">
@@ -244,6 +310,21 @@ export default function BoardEvaluationPage() {
             {error}
           </p>
         ) : null}
+
+        <div className="mt-4 rounded-2xl border border-[#D4AF37]/30 bg-[#14100a] p-4">
+          <p className="text-xs uppercase tracking-[0.2em] text-[#f3d983]">
+            Live BALI
+          </p>
+          <p className="mt-2 text-2xl font-semibold text-white">
+            {(liveBoardIndex?.baliScore ?? computedFromRows.baliScore).toFixed(2)} ·{" "}
+            {liveBoardIndex?.classification ?? computedFromRows.classification}
+          </p>
+          <p className="mt-1 text-xs text-white/70">
+            Reliability band:{" "}
+            {(liveBoardIndex?.reliabilityBand.low ?? computedFromRows.reliabilityBand.low).toFixed(2)} -{" "}
+            {(liveBoardIndex?.reliabilityBand.high ?? computedFromRows.reliabilityBand.high).toFixed(2)}
+          </p>
+        </div>
       </section>
 
       <BoardScorecard aggregate={aggregate} />

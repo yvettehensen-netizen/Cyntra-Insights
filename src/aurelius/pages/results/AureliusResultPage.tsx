@@ -70,7 +70,7 @@ export default function AureliusResultPage() {
             </span>
           </div>
 
-          <h1 className="text-5xl lg:text-6xl xl:text-7xl font-bold leading-tight max-w-5xl mx-auto">
+          <h1 className="text-5xl lg:text-6xl xl:text-7xl font-bold leading-tight max-w-[65ch] mx-auto break-words [overflow-wrap:anywhere] [word-break:break-word] [hyphens:auto]">
             <span className="text-[#D4AF37] [text-shadow:_0_0_60px_rgba(212,175,55,0.8)] drop-shadow-2xl">
               {result.executive_truth}
             </span>
@@ -89,7 +89,7 @@ export default function AureliusResultPage() {
                 key={i}
                 className="group relative bg-black/40 backdrop-blur-xl border border-white/10 rounded-3xl p-12 text-center shadow-2xl hover:border-[#D4AF37]/50 hover:shadow-[#D4AF37]/30 transition-all duration-700 hover:-translate-y-4"
               >
-                <p className="text-2xl lg:text-3xl font-bold text-[#D4AF37]">
+                <p className="text-2xl lg:text-3xl font-bold text-[#D4AF37] break-words max-w-[65ch] leading-relaxed [overflow-wrap:anywhere] [word-break:break-word] [hyphens:auto]">
                   {tension}
                 </p>
               </div>
@@ -111,7 +111,7 @@ export default function AureliusResultPage() {
               </h3>
               <ul className="space-y-6 text-xl lg:text-2xl text-gray-200">
                 {result.forced_choices.stop.map((item, i) => (
-                  <li key={i} className="flex items-center justify-center gap-4">
+                  <li key={i} className="flex items-center justify-center gap-4 break-words max-w-[65ch] mx-auto leading-relaxed [overflow-wrap:anywhere] [word-break:break-word] [hyphens:auto]">
                     <div className="w-4 h-4 rounded-full bg-red-500" />
                     {item}
                   </li>
@@ -126,7 +126,7 @@ export default function AureliusResultPage() {
               </h3>
               <ul className="space-y-6 text-xl lg:text-2xl text-gray-200">
                 {result.forced_choices.choose.map((item, i) => (
-                  <li key={i} className="flex items-center justify-center gap-4">
+                  <li key={i} className="flex items-center justify-center gap-4 break-words max-w-[65ch] mx-auto leading-relaxed [overflow-wrap:anywhere] [word-break:break-word] [hyphens:auto]">
                     <div className="w-4 h-4 rounded-full bg-[#D4AF37]" />
                     {item}
                   </li>
@@ -136,7 +136,7 @@ export default function AureliusResultPage() {
           </div>
 
           <div className="mt-16 text-center">
-            <p className="text-2xl lg:text-3xl text-red-400 italic leading-relaxed max-w-4xl mx-auto">
+            <p className="text-2xl lg:text-3xl text-red-400 italic leading-relaxed max-w-[65ch] mx-auto break-words [overflow-wrap:anywhere] [word-break:break-word] [hyphens:auto]">
               Kosten van niets doen:
               <br />
               <span className="text-3xl font-bold">
@@ -152,7 +152,7 @@ export default function AureliusResultPage() {
             <AlertTriangle size={48} className="text-red-500" />
             Risico bij niet-handelen
           </h2>
-          <p className="text-2xl lg:text-3xl text-gray-200 max-w-5xl mx-auto leading-relaxed">
+          <p className="text-2xl lg:text-3xl text-gray-200 max-w-[65ch] mx-auto leading-relaxed break-words [overflow-wrap:anywhere] [word-break:break-word] [hyphens:auto]">
             {result.risk_of_inaction}
           </p>
         </section>
@@ -164,9 +164,9 @@ export default function AureliusResultPage() {
               Boardroom Summary
             </h2>
 
-            <ul className="space-y-10 text-xl lg:text-2xl text-gray-200 max-w-5xl mx-auto">
+            <ul className="space-y-10 text-xl lg:text-2xl text-gray-200 max-w-[65ch] mx-auto">
               {result.boardroom_summary.map((point, i) => (
-                <li key={i} className="flex items-center justify-center gap-6">
+                <li key={i} className="flex items-center justify-center gap-6 break-words leading-relaxed [overflow-wrap:anywhere] [word-break:break-word] [hyphens:auto]">
                   <div className="w-5 h-5 rounded-full bg-[#D4AF37]" />
                   {point}
                 </li>
@@ -182,4 +182,3 @@ export default function AureliusResultPage() {
     </div>
   );
 }
-

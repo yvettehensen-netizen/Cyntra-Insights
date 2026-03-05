@@ -9,7 +9,8 @@ export default defineConfig({
     trace: "on-first-retry"
   },
   webServer: {
-    command: "ANALYSIS_INLINE_PROCESSING=true next dev --hostname 127.0.0.1 --port 3000",
+    command:
+      "CYNTRA_USE_MEMORY_BACKEND=true ANALYSIS_INLINE_PROCESSING=true next dev --hostname 127.0.0.1 --port 3000",
     port: 3000,
     timeout: 120_000,
     reuseExistingServer: true

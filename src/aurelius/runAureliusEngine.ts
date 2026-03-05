@@ -8,6 +8,12 @@ export interface AureliusResult {
   insights: string[];
   risks: string[];
   opportunities: string[];
+  killer_insights?: string[];
+  killer_insights_meta?: {
+    score: number;
+    failed_checks: string[];
+    evidence_used: number;
+  };
   roadmap_90d: {
     month1: string[];
     month2: string[];
@@ -21,6 +27,9 @@ export interface AureliusResult {
   execution_risks?: string[];
   confidence_score?: number;
   decision_card_id?: string;
+  strategic_depth_score?: number;
+  strategic_reasoning_gate_passed?: boolean;
+  strategic_warnings?: string[];
 }
 
 export type EngineSuccess = {
@@ -71,6 +80,35 @@ export async function runAureliusEngine(input: {
         context: {
           analysis_type: input.analysis_type,
           document_data: input.document_data ?? "",
+          pipeline: [
+            "Context Engine",
+            "StrategicMemoryRetriever",
+            "KnowledgeGraphQuery",
+            "HypothesisGenerator",
+            "HypothesisCompetition",
+            "CausalMechanismDetector",
+            "BlindSpotDetector",
+            "StrategicThinkingPatterns",
+            "Structurele Diagnose Engine",
+            "Strategic Insight Engine",
+            "Organisatiedynamiek Engine",
+            "Boardroom Intelligence Node",
+            "Killer Insight Node",
+            "Strategische Hypothese Engine",
+            "StrategicForesightEngine",
+            "Scenario Simulation Node",
+            "Interventie Engine",
+            "DecisionOptionGenerator",
+            "DecisionTradeoffAnalyzer",
+            "DecisionPressureEngine",
+            "OrganizationalSimulationEngine",
+            "MetaReasoningEngine",
+            "Decision Quality Node",
+            "StrategicReasoningGate",
+            "NarrativeStructureEngine",
+            "NarrativeCausalityValidator",
+            "BoardroomNarrativeComposer",
+          ],
         },
         runImmediately: true,
       }),
@@ -90,6 +128,17 @@ export async function runAureliusEngine(input: {
       throw new Error("Analyse afgerond zonder resultaat payload");
     }
 
+    const warnings: string[] = [];
+    const score = Number(result.strategic_depth_score ?? NaN);
+    const gatePassed = result.strategic_reasoning_gate_passed;
+    if (gatePassed === false || (Number.isFinite(score) && score < 70)) {
+      warnings.push("Strategic reasoning insufficient. Analyse opnieuw genereren met meer diepgang.");
+    }
+
+    if (warnings.length) {
+      result.strategic_warnings = [...(result.strategic_warnings ?? []), ...warnings];
+    }
+
     return { success: true, result };
   } catch (e: unknown) {
     return {
@@ -100,4 +149,3 @@ export async function runAureliusEngine(input: {
     };
   }
 }
-

@@ -1,6 +1,7 @@
 import { useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
+import BackToDashboard from "@/components/navigation/BackToDashboard";
 
 function extractNarrativeMarkdown(report: any): string {
   const candidates = [
@@ -98,6 +99,7 @@ export default function ReportViewPage() {
 
   return (
     <div className="min-h-screen bg-black text-white px-10 py-20">
+      <BackToDashboard />
       <h1 className="text-3xl text-[#d4af37] mb-6">{report.title}</h1>
 
       {narrativeMarkdown ? (

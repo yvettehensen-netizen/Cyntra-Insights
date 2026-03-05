@@ -1,55 +1,47 @@
 import { Link } from "react-router-dom";
-import PublicNavbar from "@/components/PublicNavbar";
-import Footer from "@/layouts/Footer";
-import { Briefcase, Users, FileText, ArrowRight } from "lucide-react";
 
 export default function VoorConsultantsPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#1a0a0f] via-[#2d1319] to-[#1a0a0f] text-gray-100">
-      <PublicNavbar />
-
-      <main className="pt-40 pb-24 container mx-auto px-6 max-w-5xl">
-        
-        <h1 className="text-6xl font-bold text-white text-center mb-6">
-          Voor Consultants & Adviesbureaus
+    <main className="marketing-readable marketing-shell py-24 md:py-32">
+      <section className="marketing-container text-center">
+        <p className="text-sm uppercase tracking-[0.18em] mb-6">Voor adviseurs</p>
+        <h1 className="text-5xl md:text-7xl font-black tracking-tight leading-[1.04] mb-8">
+          Niet iedereen past bij Cyntra.
         </h1>
-
-        <p className="text-xl text-gray-300 text-center max-w-3xl mx-auto mb-16">
-          Schaal jouw consultancy — lever premium analyses in recordtijd.
+        <p className="mx-auto text-xl md:text-2xl text-[#b8c2d4] max-w-4xl">
+          Alleen voor interventiegedreven adviseurs die besluitvorming afdwingen onder druk.
         </p>
+      </section>
 
-        <div className="grid md:grid-cols-3 gap-8">
-          <Link to="/consultants" className="p-8 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition">
-            <Briefcase className="w-10 h-10 text-[#D4AF37] mb-4" />
-            <h3 className="text-xl font-semibold text-white mb-2">Consultants</h3>
-            <p className="text-gray-400">Voor solo-consultants en kleine bureaus.</p>
-          </Link>
+      <section className="marketing-container mt-16 md:mt-20">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-10">
+          <article className="marketing-card">
+            <h2 className="text-3xl md:text-4xl font-black mb-8">Mandaatgedreven</h2>
+            <div className="space-y-4 text-lg md:text-xl">
+              <p>Bestuurlijke scherpte</p>
+              <p>Financiële discipline</p>
+              <p>Escalatiecomfort</p>
+            </div>
+          </article>
 
-          <Link to="/pricing" className="p-8 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition">
-            <Users className="w-10 h-10 text-[#D4AF37] mb-4" />
-            <h3 className="text-xl font-semibold text-white mb-2">Pakketten & Tarieven</h3>
-            <p className="text-gray-400">Inclusief white-label professional pakket.</p>
-          </Link>
-
-          <Link to="/demo" className="p-8 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 transition">
-            <FileText className="w-10 h-10 text-[#D4AF37] mb-4" />
-            <h3 className="text-xl font-semibold text-white mb-2">Demo Rapport</h3>
-            <p className="text-gray-400">Bekijk een volledig voorbeeldrapport.</p>
-          </Link>
+          <article className="marketing-card">
+            <h2 className="text-3xl md:text-4xl font-black mb-8">Niet geschikt voor</h2>
+            <div className="space-y-4 text-lg md:text-xl">
+              <p>Comfortconsultancy</p>
+              <p>Culturele warmte zonder besluitkracht</p>
+            </div>
+          </article>
         </div>
 
-        <div className="text-center mt-20">
-          <Link
-            to="/pricing"
-            className="inline-flex items-center gap-3 px-10 py-5 bg-gradient-to-r from-[#8B1538] to-[#6d1028] text-white rounded-xl font-semibold"
-          >
-            Bekijk Pakketten <ArrowRight />
+        <div className="mt-14 md:mt-16 flex flex-wrap justify-center gap-4">
+          <Link to="/portal" className="marketing-btn-primary px-8 py-4 text-lg md:text-xl">
+            Ga naar Portal
+          </Link>
+          <Link to="/aurelius/login" className="marketing-btn-secondary px-8 py-4 text-lg md:text-xl">
+            Login
           </Link>
         </div>
-
-      </main>
-
-      <Footer />
-    </div>
+      </section>
+    </main>
   );
 }

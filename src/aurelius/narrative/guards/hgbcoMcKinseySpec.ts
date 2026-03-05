@@ -1,89 +1,45 @@
-const CANONICAL_HGBCO_HEADINGS = [
-  "### 1. DOMINANTE BESTUURLIJKE THESE",
-  "### 2. HET KERNCONFLICT",
-  "### 3. EXPLICIETE TRADE-OFFS",
-  "### 4. OPPORTUNITY COST",
+const CYNTRA_HEADINGS = [
+  "### 1. DOMINANTE THESE",
+  "### 2. KERNCONFLICT",
+  "### 3. KEERZIJDE VAN DE KEUZE",
+  "### 4. PRIJS VAN UITSTEL",
   "### 5. GOVERNANCE IMPACT",
-  "### 6. MACHTSDYNAMIEK & ONDERSTROOM",
+  "### 6. MACHTSDYNAMIEK",
   "### 7. EXECUTIERISICO",
-  "### 8. 90-DAGEN INTERVENTIEPLAN",
-  "### 9. DECISION CONTRACT",
+  "### 8. 90-DAGEN INTERVENTIEPROGRAMMA",
+  "### 9. BESLUITKADER",
 ] as const;
-
-const RATIO_SUBHEADS = [
-  "#### A. Analyse — Wat zien we?",
-  "#### B. Mechanisme — Waarom gebeurt dit?",
-  "#### C. Gevolg — Wat betekent dit financieel, operationeel en cultureel?",
-  "#### D. Bestuurlijke implicatie — Welke keuze, welk mandaat, welk verlies?",
-  "#### E. Overgang — Waarom dit logisch leidt naar het volgende hoofdstuk",
-] as const;
-
-const BOVEN_ONDERSTROOM_REQUIRED_SECTIONS = new Set([2, 5, 6, 7, 9]);
+const STRATEGIC_INSIGHTS_HEADING = "### 3 STRATEGISCHE INZICHTEN";
 
 const FORBIDDEN_PATTERNS: RegExp[] = [
-  /default\s+transformatie-template/gi,
-  /default\s+template/gi,
-  /governance-technisch/gi,
-  /duid\s+structureel/gi,
-  /context\s+is\s+schaars\s*\/\s*ontbreekt/gi,
-  /context\s+is\s+schaars/gi,
-  /formuleer/gi,
-  /analyseer/gi,
-  /\bmoet\b/gi,
-  /key\s+takes?away/gi,
-  /succesfactor/gi,
-  /quick\s+win/gi,
-  /low[-\s]?hanging\s+fruit/gi,
+  /\bstaat onder druk\b/gi,
   /\bmogelijk\b/gi,
-  /\bwellicht\b/gi,
-  /\bzou\s+kunnen\b/gi,
-  /als\s+ai/gi,
-  /als\s+taalmodel/gi,
-  /op\s+basis\s+van\s+de\s+analyse/gi,
-  /gebruik\s+alle\s+feiten/gi,
+  /\bzou kunnen\b/gi,
+  /\bbelangrijk om\b/gi,
+  /\bvaak zien we\b/gi,
+  /\bin veel organisaties\b/gi,
+  /\bquick win\b/gi,
+  /\blaaghangend fruit\b/gi,
+  /\bessentieel\b/gi,
+  /\bcruciaal\b/gi,
+  /\balignment\b/gi,
+  /\boptimaliseren\b/gi,
+  /\btransformatie\b/gi,
+  /\broadmap\b/gi,
+  /\bblueprint\b/gi,
+  /\bbest practice\b/gi,
+  /\ber is sprake van\b/gi,
+  /\ber lijkt sprake van\b/gi,
+  /\bdefault template\b/gi,
+  /\bas ai\b/gi,
+  /\bals taalmodel\b/gi,
 ];
 
-const SECTION_DEFAULT_INFERENCE =
-  "Op basis van bestuurlijke patronen in deze sector: de casus vraagt nu een expliciete keuze met direct mandaat en zichtbaar verlies.";
-
-const BOVEN_ONDERSTREAM_SENTENCES: Record<number, { boven: string; onder: string }> = {
-  2: {
-    boven:
-      "In de bovenstroom staat de formele keuze helder op tafel: prioriteit, mandaat en volgorde moeten nu onomkeerbaar worden vastgezet.",
-    onder:
-      "In de onderstroom beschermen teams en leidinggevenden begrijpelijkerwijs hun dagelijkse werkbaarheid, waardoor uitstel zich vermomt als zorgvuldigheid.",
-  },
-  5: {
-    boven:
-      "In de bovenstroom wordt governance zichtbaar in besluitrechten, escalatieregels en het wekelijkse ritme waarin keuzes worden afgedwongen.",
-    onder:
-      "In de onderstroom bepaalt de feitelijke informatie- en planningsmacht of die governance echt wordt nageleefd of opnieuw wordt omzeild.",
-  },
-  6: {
-    boven:
-      "In de bovenstroom verschuift macht via formele mandaten, budgetrechten en expliciete prioritering van schaarse capaciteit.",
-    onder:
-      "In de onderstroom verschuift macht via relationeel krediet, uitzonderingen en de actor die tempo kan remmen zonder formeel nee te zeggen.",
-  },
-  7: {
-    boven:
-      "In de bovenstroom is executie een ritmevraag: wie beslist, wanneer corrigeert men en welke afwijking accepteert het bestuur niet meer.",
-    onder:
-      "In de onderstroom ontstaat terugval zodra spanning oploopt en oude loyaliteiten sterker worden dan de nieuw afgesproken keuzevolgorde.",
-  },
-  9: {
-    boven:
-      "In de bovenstroom bindt het contract de Raad aan één keuze, één beslisrecht en één zichtbaar ritme van maandelijkse toetsing.",
-    onder:
-      "In de onderstroom markeert dit contract welke informele route per direct ophoudt en welk verlies de organisatie volwassen accepteert.",
-  },
-};
-
-const DECISION_BLOCK_HEAD = "De Raad van Bestuur committeert zich aan:";
+const DECISION_BLOCK_HEAD = "Het bestuur committeert zich aan het volgende besluit:";
 const DECISION_BLOCK_TEMPLATE = [
-  "De Raad van Bestuur committeert zich aan:",
+  DECISION_BLOCK_HEAD,
   "Keuze:",
-  "Accepted loss:",
+  "Expliciet verlies:",
   "Besluitrecht ligt bij:",
   "Stoppen per direct:",
   "Niet meer escaleren:",
@@ -91,17 +47,11 @@ const DECISION_BLOCK_TEMPLATE = [
   "Failure trigger:",
   "Point of no return:",
   "Herijkingsmoment:",
+  "Dit betekent dat het bestuur nu moet kiezen voor ...",
 ].join("\n");
 
 function normalizeText(input: string): string {
   return String(input ?? "").replace(/\r\n?/g, "\n").trim();
-}
-
-function splitParagraphs(value: string): string[] {
-  return normalizeText(value)
-    .split(/\n\s*\n+/)
-    .map((part) => part.trim())
-    .filter(Boolean);
 }
 
 function parseSections(markdown: string): Array<{ heading: string; number: number; body: string }> {
@@ -125,250 +75,126 @@ function parseSections(markdown: string): Array<{ heading: string; number: numbe
 function buildCanonicalMarkdown(
   sections: Array<{ heading: string; number: number; body: string }>
 ): string {
-  const bodyByNumber = new Map<number, string>();
+  const byNumber = new Map<number, string>();
   for (const section of sections) {
     if (!section.number) continue;
-    if (!bodyByNumber.has(section.number)) {
-      bodyByNumber.set(section.number, section.body || SECTION_DEFAULT_INFERENCE);
+    if (!byNumber.has(section.number)) {
+      byNumber.set(section.number, section.body || "Niet onderbouwd in geuploade documenten of vrije tekst.");
     }
   }
 
-  const rebuilt = CANONICAL_HGBCO_HEADINGS.map((heading, index) => {
+  const canonicalBlocks = CYNTRA_HEADINGS.map((heading, index) => {
     const number = index + 1;
-    const body = normalizeText(bodyByNumber.get(number) || SECTION_DEFAULT_INFERENCE);
+    const body = normalizeText(
+      byNumber.get(number) || "Niet onderbouwd in geuploade documenten of vrije tekst."
+    );
     return `${heading}\n\n${body}`;
   });
 
-  return rebuilt.join("\n\n").trim();
-}
+  const strategicInsightBlock = [
+    STRATEGIC_INSIGHTS_HEADING,
+    "INZICHT: Niet onderbouwd in geuploade documenten of vrije tekst.",
+    "WAAROM DIT BELANGRIJK IS: Niet onderbouwd in geuploade documenten of vrije tekst.",
+    "BESTUURLIJKE CONSEQUENTIE: Niet onderbouwd in geuploade documenten of vrije tekst.",
+    "",
+    "INZICHT: Niet onderbouwd in geuploade documenten of vrije tekst.",
+    "WAAROM DIT BELANGRIJK IS: Niet onderbouwd in geuploade documenten of vrije tekst.",
+    "BESTUURLIJKE CONSEQUENTIE: Niet onderbouwd in geuploade documenten of vrije tekst.",
+    "",
+    "INZICHT: Niet onderbouwd in geuploade documenten of vrije tekst.",
+    "WAAROM DIT BELANGRIJK IS: Niet onderbouwd in geuploade documenten of vrije tekst.",
+    "BESTUURLIJKE CONSEQUENTIE: Niet onderbouwd in geuploade documenten of vrije tekst.",
+  ].join("\n");
 
-function ensureRatioStructureForSectionBody(body: string): string {
-  const source = normalizeText(body);
-  if (!source) {
-    return `${RATIO_SUBHEADS[0]}\n${SECTION_DEFAULT_INFERENCE}\n\n${RATIO_SUBHEADS[1]}\n${SECTION_DEFAULT_INFERENCE}\n\n${RATIO_SUBHEADS[2]}\n${SECTION_DEFAULT_INFERENCE}\n\n${RATIO_SUBHEADS[3]}\n${SECTION_DEFAULT_INFERENCE}\n\n${RATIO_SUBHEADS[4]}\n${SECTION_DEFAULT_INFERENCE}`;
-  }
-
-  const hasAllRatioBlocks = ["A", "B", "C", "D", "E"].every((letter) =>
-    new RegExp(`^\\s*#{0,6}\\s*${letter}\\.`, "im").test(source)
-  );
-
-  if (hasAllRatioBlocks) {
-    return source;
-  }
-
-  const paragraphs = splitParagraphs(source);
-  const getParagraph = (index: number) =>
-    paragraphs[index] || paragraphs[paragraphs.length - 1] || SECTION_DEFAULT_INFERENCE;
-
-  return [
-    `${RATIO_SUBHEADS[0]}\n${getParagraph(0)}`,
-    `${RATIO_SUBHEADS[1]}\n${getParagraph(1)}`,
-    `${RATIO_SUBHEADS[2]}\n${getParagraph(2)}`,
-    `${RATIO_SUBHEADS[3]}\n${getParagraph(3)}`,
-    `${RATIO_SUBHEADS[4]}\n${getParagraph(4)}`,
-  ]
-    .join("\n\n")
-    .trim();
-}
-
-function readDecisionValue(source: string, label: string): string {
-  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = source.match(new RegExp(`${escaped}\\s*:?\\s*([^\\n]+)`, "i"));
-  if (!match) return "";
-  return String(match[1] || "").trim();
+  const first = canonicalBlocks[0] ?? "";
+  const rest = canonicalBlocks.slice(1);
+  return [first, strategicInsightBlock, ...rest].filter(Boolean).join("\n\n").trim();
 }
 
 function ensureDecisionContractBlock(sectionBody: string): string {
-  const cleaned = normalizeText(sectionBody).replace(
-    /DE RAAD COMMITTEERT:[\s\S]*$/i,
-    ""
-  ).trim();
+  const cleaned = normalizeText(sectionBody)
+    .replace(/Het bestuur committeert zich aan het volgende besluit:[\s\S]*$/i, "")
+    .trim();
 
-  const keuze =
-    readDecisionValue(cleaned, "Keuze") ||
-    readDecisionValue(cleaned, "choice") ||
-    "De Raad kiest één dominante koers met directe uitvoering.";
-  const acceptedLoss =
-    readDecisionValue(cleaned, "Accepted loss") ||
-    readDecisionValue(cleaned, "Geaccepteerd verlies") ||
-    "Tijdelijke inlevering van parallelle initiatieven en lokale uitzonderingsruimte.";
-  const besluitrecht =
-    readDecisionValue(cleaned, "Besluitrecht ligt bij") ||
-    readDecisionValue(cleaned, "beslismonopolie") ||
-    "De expliciet benoemde eindverantwoordelijke in de Raad van Bestuur.";
-  const stopDirect =
-    readDecisionValue(cleaned, "Stoppen per direct") ||
-    readDecisionValue(cleaned, "Stop per direct") ||
-    "Elke route zonder owner, deadline en KPI op kernstabiliteit.";
-  const nietEscaleren =
-    readDecisionValue(cleaned, "Niet meer escaleren") ||
-    "Informele bypasses buiten de formele regietafel.";
-  const maandKpi =
-    readDecisionValue(cleaned, "Maandelijkse KPI") ||
-    "Doorlooptijd, werkdruk, margedruk en executiediscipline op 30/90/365.";
-  const failureTrigger =
-    readDecisionValue(cleaned, "Failure trigger") ||
-    "Twee opeenvolgende periodes zonder meetbare voortgang op de dominante keuze.";
-  const pointOfNoReturn =
-    readDecisionValue(cleaned, "Point of no return") ||
-    "Als Dag 60-gates niet gehaald worden, wordt verlies aan contractmacht en retentie onomkeerbaar.";
-  const herijking =
-    readDecisionValue(cleaned, "Herijkingsmoment") ||
-    readDecisionValue(cleaned, "Herijking") ||
-    "Maandelijks in de Raad, met expliciete keuze voor bijsturen of stoppen.";
+  const readLabel = (label: string): string => {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const match = cleaned.match(new RegExp(`^${escaped}\\s*(.*)$`, "im"));
+    return String(match?.[1] ?? "").trim();
+  };
 
-  const decisionBlock = [
+  const block = [
     DECISION_BLOCK_HEAD,
-    `Keuze: ${keuze}`,
-    `Accepted loss: ${acceptedLoss}`,
-    `Besluitrecht ligt bij: ${besluitrecht}`,
-    `Stoppen per direct: ${stopDirect}`,
-    `Niet meer escaleren: ${nietEscaleren}`,
-    `Maandelijkse KPI: ${maandKpi}`,
-    `Failure trigger: ${failureTrigger}`,
-    `Point of no return: ${pointOfNoReturn}`,
-    `Herijkingsmoment: ${herijking}`,
+    `Keuze: ${readLabel("Keuze:") || "Een expliciete voorkeurskeuze met direct mandaat."}`,
+    `Expliciet verlies: ${readLabel("Expliciet verlies:") || "Tijdelijke inlevering van parallelle prioriteiten."}`,
+    `Besluitrecht ligt bij: ${readLabel("Besluitrecht ligt bij:") || "De benoemde eindverantwoordelijke in het bestuur."}`,
+    `Stoppen per direct: ${readLabel("Stoppen per direct:") || "Alle uitzonderingsroutes buiten het besluitritme."}`,
+    `Niet meer escaleren: ${readLabel("Niet meer escaleren:") || "Informele bypasses buiten het formele escalatiepad."}`,
+    `Maandelijkse KPI: ${readLabel("Maandelijkse KPI:") || "Doorlooptijd, escalaties en uitvoeringsdiscipline."}`,
+    `Failure trigger: ${readLabel("Failure trigger:") || "Twee opeenvolgende periodes zonder aantoonbare voortgang."}`,
+    `Point of no return: ${readLabel("Point of no return:") || "Na het missen van Dag 60-gate wordt verlies onomkeerbaar."}`,
+    `Herijkingsmoment: ${readLabel("Herijkingsmoment:") || "Maandelijks bestuursmoment met stop/door-besluit."}`,
+    "Dit betekent dat het bestuur nu moet kiezen voor ...",
   ].join("\n");
 
-  if (!cleaned) return decisionBlock;
-  return `${cleaned}\n\n${decisionBlock}`.trim();
-}
-
-function replaceForbiddenLanguage(source: string): string {
-  let output = source;
-
-  output = output
-    .replace(/op basis van de analyse/gi, "")
-    .replace(/als ai[^,.\n]*/gi, "")
-    .replace(/als taalmodel[^,.\n]*/gi, "")
-    .replace(/\bmoet\b/gi, "is direct nodig")
-    .replace(/key\s+takes?away/gi, "bestuurlijke conclusie")
-    .replace(/succesfactor/gi, "harde randvoorwaarde")
-    .replace(/quick\s+win/gi, "directe ingreep")
-    .replace(/low[-\s]?hanging\s+fruit/gi, "direct uitvoerbare ingreep")
-    .replace(/governance-technisch/gi, "bestuurlijk scherp")
-    .replace(/default\s+transformatie-template/gi, "sectordiscipline")
-    .replace(/default\s+template/gi, "vaste structuur")
-    .replace(/\bwellicht\b/gi, "")
-    .replace(/\bmogelijk\b/gi, "")
-    .replace(/\bzou\s+kunnen\b/gi, "leidt")
-    .replace(/\s{2,}/g, " ")
-    .replace(/\n{3,}/g, "\n\n");
-
-  return output.trim();
-}
-
-function appendUpperLowerStream(body: string, sectionNumber: number): string {
-  if (!BOVEN_ONDERSTROOM_REQUIRED_SECTIONS.has(sectionNumber)) {
-    return body;
-  }
-
-  const current = normalizeText(body);
-  const hasBoven = /^\s*#{0,6}\s*Bovenstroom\b/im.test(current);
-  const hasOnder = /^\s*#{0,6}\s*Onderstroom\b/im.test(current);
-  const hints = BOVEN_ONDERSTREAM_SENTENCES[sectionNumber];
-
-  if (hasBoven && hasOnder) return current;
-
-  const injections: string[] = [];
-  if (!hasBoven) {
-    injections.push(`#### Bovenstroom\n${hints?.boven || SECTION_DEFAULT_INFERENCE}`);
-  }
-  if (!hasOnder) {
-    injections.push(`#### Onderstroom\n${hints?.onder || SECTION_DEFAULT_INFERENCE}`);
-  }
-
-  if (!injections.length) return current;
-  return `${current}\n\n${injections.join("\n\n")}`.trim();
+  return cleaned ? `${cleaned}\n\n${block}`.trim() : block;
 }
 
 export const HGBCO_MCKINSEY_SYSTEM_INJECT = `
-HGBCO v5 — MCKINSEY+ BOARDROOM SPEC
-Schrijf met boardroom-hardheid en sectorinzicht: empathisch in mensbeeld, economisch onontkoombaar in besluitlogica.
-Elke sectie brengt nieuwe informatie, geen herhaling, geen templatespraak.
-Gebruik uitsluitend casusfeiten uit documentcontext en vrije velden.
-Gebruik exact 9 HGBCO-secties en per sectie ratio-opbouw A-E.
-In secties 2, 5, 6, 7, 9 moeten expliciet Bovenstroom en Onderstroom zichtbaar zijn.
-In secties 1, 4, 5, 9 moet economisch effect zichtbaar zijn: marge/cash, investeringsruimte/solvabiliteit, en opportunity cost 30/90/365 met irreversibiliteit.
-Sectie 8 bevat minimaal 15 interventies met exact: Actie, Eigenaar, Deadline, KPI, Escalatiepad, Direct zichtbaar effect, Anchor-ref.
-Decision Contract begint exact met "De Raad van Bestuur committeert zich aan:" en bevat alle verplichte labels.
-Verboden taal direct herschrijven: default transformatie-template, governance-technisch, duid structureel, context is schaars/ontbreekt, formuleer, analyseer, moet, key takeaway, succesfactor, quick win, low-hanging fruit, mogelijk, wellicht, zou kunnen.
-Als data impliciet blijft, gebruik bestuurlijke aannames in deze vorm: Op basis van bestuurlijke patronen in deze sector: ...
+CYNTRA Executive Decision Engine Spec.
+Volg exact de sectiestructuur die in de actieve prompt of skeleton is opgegeven.
+Gebruik waar gevraagd een 1-pagina Board Memo direct boven het Decision Contract.
+Schrijf menselijk, financieel hard, bestuurlijk rustig en zonder dreigtoon.
+Geen algemene statements, geen meta-tekst, geen AI-taal, geen consultant-jargon.
+Maak besluituitstel psychologisch onmogelijk: geen twijfelzinnen, geen open einde.
+Formuleer bestuurlijke causaliteit als onvermijdelijkheid, niet als advies.
+Het 90-dagenplan bevat exact 6 kerninterventies (2 per maand) met velden:
+Probleem dat wordt opgelost/Concrete actie/Waarom deze interventie/Eigenaar/Deadline/Meetbare KPI/Escalatieregel met gevolg/Gevolg voor organisatie/Gevolg voor klant-cliënt/Risico van niet handelen/Direct zichtbaar effect/Casus-anker.
+Escalatie gebruikt niveaus L1-L2-L3 (operationeel, MT, bestuurlijke herprioritering).
+Decision Contract bevat een rustig geformuleerd point of no return en mandaatverschuiving.
+In zorgcontext (GGZ/Jeugdzorg) zijn deze zinnen verplicht aanwezig:
+1) "De combinatie van vaste tarieven, stijgende loonkosten en plafondcontracten maakt autonome groei rekenkundig onmogelijk zonder margeherstel."
+2) "Dan is het escalatiemoment geen marktrisico meer, maar een bestuurlijke keuze."
+3) "Na dag 90 zonder volledige margekaart vervalt het mandaat om nieuwe initiatieven te starten automatisch, tenzij RvT schriftelijk herbevestigt."
+Vertaal capaciteit altijd naar menselijk effect: behandelcontinuiteit, wachtlijst, behandeluitkomst en verwijzersvertrouwen.
 `.trim();
 
 export const HGBCO_MCKINSEY_USER_INJECT = `
-Verwerk de casus als één doorlopend strategisch verhaal.
-Elke sectie bevat A. Analyse, B. Mechanisme, C. Gevolg, D. Bestuurlijke implicatie, E. Overgang.
-Vermijd abstracte managementzinnen, herhaling en meta-tekst.
-Maak bovenstroom/onderstroom expliciet waar verplicht.
-Gebruik economische causaliteit met 30/90/365 irreversibiliteit.
-Gebruik uitsluitend casus-ankers uit context; geen nieuwe feiten.
-Decision Contract begint exact met "De Raad van Bestuur committeert zich aan:".
+Schrijf uitsluitend op basis van broncontext.
+Geen nieuwe feiten buiten input.
+Geen bullets buiten sectie 8 en 9.
+Geen verboden generieke woorden.
 `.trim();
 
 export function enforceNoMetaNoTemplate(markdown: string): string {
-  let output = normalizeText(markdown);
-  if (!output) return output;
-
-  output = output
+  return normalizeText(markdown)
     .split("\n")
-    .filter((line) => {
-      const trimmed = line.trim();
-      if (!trimmed) return true;
-      if (/^(meta|toelichting|uitleg|opmerking)\s*:/i.test(trimmed)) return false;
-      if (/^gebruik\s+alle\s+feiten/i.test(trimmed)) return false;
-      return true;
-    })
-    .join("\n");
-
-  output = replaceForbiddenLanguage(output);
-  return output;
+    .filter((line) => !/^(meta|toelichting|uitleg|opmerking)\s*:/i.test(line.trim()))
+    .join("\n")
+    .trim();
 }
 
 export function enforceHgbcoHeadings(markdown: string): string {
-  const sections = parseSections(markdown);
-  const canonical = buildCanonicalMarkdown(sections);
-  return canonical;
+  return buildCanonicalMarkdown(parseSections(markdown));
 }
 
 export function enforceAtoERatioStructure(markdown: string): string {
-  const canonical = enforceHgbcoHeadings(markdown);
-  const sections = parseSections(canonical).map((section) => ({
-    ...section,
-    body: ensureRatioStructureForSectionBody(section.body),
-  }));
-  return buildCanonicalMarkdown(sections);
+  return enforceHgbcoHeadings(markdown);
 }
 
 export function enforceUpperLowerStream(markdown: string): string {
-  const source = enforceAtoERatioStructure(markdown);
-  const sections = parseSections(source).map((section) => ({
-    ...section,
-    body: appendUpperLowerStream(section.body, section.number),
-  }));
-  return buildCanonicalMarkdown(sections);
+  return enforceHgbcoHeadings(markdown);
 }
 
 export function enforceDecisionContractHard(markdown: string): string {
-  const source = enforceUpperLowerStream(markdown);
-  const sections = parseSections(source).map((section) => {
+  const sections = parseSections(enforceHgbcoHeadings(markdown)).map((section) => {
     if (section.number !== 9) return section;
-    return {
-      ...section,
-      body: ensureDecisionContractBlock(section.body),
-    };
+    return { ...section, body: ensureDecisionContractBlock(section.body) };
   });
   return buildCanonicalMarkdown(sections);
 }
 
 export function enforceAtoERatioStructurePresence(markdown: string): boolean {
-  const sections = parseSections(markdown);
-  if (sections.length !== 9) return false;
-  return sections.every((section) =>
-    ["A", "B", "C", "D", "E"].every((letter) =>
-      new RegExp(`^\\s*#{0,6}\\s*${letter}\\.`, "im").test(section.body)
-    )
-  );
+  return parseSections(markdown).length === 9;
 }
 
 export function hasForbiddenLanguage(markdown: string): boolean {
@@ -382,13 +208,10 @@ export function hasDecisionContractCommitBlock(markdown: string): boolean {
   const sectionNine = parseSections(markdown).find((section) => section.number === 9);
   if (!sectionNine) return false;
   const body = sectionNine.body;
-  const hasCanonicalPrefix = /^De Raad van Bestuur committeert zich aan:/im.test(body);
-  const hasLegacyPrefix = /^DE RAAD COMMITTEERT:/im.test(body);
-  const hasPrefix = hasCanonicalPrefix || hasLegacyPrefix;
-
-  const hasCanonicalLabels = [
+  return [
+    /^Het bestuur committeert zich aan het volgende besluit:/im,
     /^Keuze:/im,
-    /^Accepted loss:/im,
+    /^Expliciet verlies:/im,
     /^Besluitrecht ligt bij:/im,
     /^Stoppen per direct:/im,
     /^Niet meer escaleren:/im,
@@ -396,20 +219,8 @@ export function hasDecisionContractCommitBlock(markdown: string): boolean {
     /^Failure trigger:/im,
     /^Point of no return:/im,
     /^Herijkingsmoment:/im,
+    /^Dit betekent dat het bestuur nu moet kiezen voor /im,
   ].every((guard) => guard.test(body));
-
-  const hasLegacyLabels = [
-    /^Keuze:/im,
-    /^Accepted loss:/im,
-    /^Besluitrecht ligt bij:/im,
-    /^Stop per direct:/im,
-    /^Niet meer escaleren:/im,
-    /^Maandelijkse KPI:/im,
-    /^Failure trigger:/im,
-    /^Herijking:/im,
-  ].every((guard) => guard.test(body));
-
-  return hasPrefix && (hasCanonicalLabels || hasLegacyLabels);
 }
 
 export function enforceNoMetaNoTemplateRuntime(markdown: string): string {

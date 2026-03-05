@@ -24,12 +24,12 @@ export const aureliusPdfStyles = StyleSheet.create({
   /* ================= PAGE BASE ================= */
 
   page: {
-    paddingTop: 72,
-    paddingBottom: 96,
-    paddingHorizontal: 64,
+    paddingTop: 32,
+    paddingBottom: 32,
+    paddingHorizontal: 32,
     fontFamily: "Helvetica",
-    fontSize: 11.5,
-    lineHeight: 1.55,
+    fontSize: 18,
+    lineHeight: 1.6,
     color: DARK,
     backgroundColor: "#FFFFFF",
   },
@@ -58,8 +58,8 @@ export const aureliusPdfStyles = StyleSheet.create({
   header: {
     position: "absolute",
     top: 32,
-    left: 64,
-    right: 64,
+    left: 32,
+    right: 32,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -87,7 +87,7 @@ export const aureliusPdfStyles = StyleSheet.create({
   },
 
   title: {
-    fontSize: 28,
+    fontSize: 48,
     fontWeight: "bold",
     letterSpacing: -0.5,
     marginBottom: 10,
@@ -127,7 +127,7 @@ export const aureliusPdfStyles = StyleSheet.create({
   },
 
   sectionTitle: {
-    fontSize: 15,
+    fontSize: 28,
     fontWeight: "bold",
     letterSpacing: 0.4,
     marginBottom: 18,
@@ -149,6 +149,7 @@ export const aureliusPdfStyles = StyleSheet.create({
     fontSize: 12.3,
     lineHeight: 1.55,
     color: DARK,
+    maxWidth: 420,
   },
 
   /* ================= B — BLOCKERS ================= */
@@ -165,6 +166,7 @@ export const aureliusPdfStyles = StyleSheet.create({
     lineHeight: 1.55,
     color: BLOCKER,
     fontStyle: "italic",
+    maxWidth: 420,
   },
 
   /* ================= C — CLOSURE PLAN ================= */
@@ -180,6 +182,7 @@ export const aureliusPdfStyles = StyleSheet.create({
     fontSize: 11.5,
     lineHeight: 1.55,
     color: CLOSURE,
+    maxWidth: 420,
   },
 
   /* ================= O — OUTCOME ================= */
@@ -196,6 +199,7 @@ export const aureliusPdfStyles = StyleSheet.create({
     lineHeight: 1.6,
     color: OUTCOME,
     fontWeight: "bold",
+    maxWidth: 420,
   },
 
   /* ============================================================
@@ -214,6 +218,7 @@ export const aureliusPdfStyles = StyleSheet.create({
     fontStyle: "italic",
     lineHeight: 1.65,
     color: "#111827",
+    maxWidth: 420,
   },
 
   /* ============================================================
@@ -238,6 +243,7 @@ export const aureliusPdfStyles = StyleSheet.create({
     fontSize: 10,
     color: MUTED,
     lineHeight: 1.4,
+    maxWidth: 420,
   },
 
   /* ================= INSIGHTS ================= */
@@ -261,6 +267,7 @@ export const aureliusPdfStyles = StyleSheet.create({
     flex: 1,
     fontSize: 11.6,
     lineHeight: 1.55,
+    maxWidth: 420,
   },
 
   /* ================= RISKS ================= */
@@ -276,6 +283,7 @@ export const aureliusPdfStyles = StyleSheet.create({
     fontSize: 11.3,
     lineHeight: 1.55,
     color: BLOCKER,
+    maxWidth: 420,
   },
 
   /* ================= OPPORTUNITIES ================= */
@@ -295,6 +303,7 @@ export const aureliusPdfStyles = StyleSheet.create({
     flex: 1,
     fontSize: 11.6,
     lineHeight: 1.55,
+    maxWidth: 420,
   },
 
   /* ================= FOOTER ================= */

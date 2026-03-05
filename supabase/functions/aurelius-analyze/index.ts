@@ -108,7 +108,7 @@ Regels:
 
 const ANALYSIS_ROLE_PROMPTS: Record<string, string> = {
   strategy:
-    "Je maakt een STRATEGISCHE analyse. Focus op keuzes, trade-offs, stop-besluiten en governance-spanning.",
+    "Je maakt een STRATEGISCHE analyse. Focus op keuzes, keuzeconflicten, stop-besluiten en governance-spanning.",
   finance:
     "Je maakt een FINANCIËLE analyse. Focus op geldstromen, runway, value leakage, risico's en harde keuzes.",
   leadership:

@@ -16,117 +16,111 @@ export default function CyntraAnalysisLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen w-full bg-[#05060a] text-[#EDEDED] overflow-hidden font-sans">
+    <div className="cyntra-shell w-full overflow-hidden font-sans">
 
       {/* ================= TOP BAR ================= */}
-      <div className="h-14 flex items-center px-8 border-b border-white/5 bg-[#07080d]/95 backdrop-blur">
-        <div className="text-[10px] tracking-cockpitWide uppercase text-gold font-medium">
+      <div className="h-14 flex items-center px-8 border-b divider-cyntra bg-cyntra-surface/90 backdrop-blur">
+        <div className="text-[10px] tracking-cockpitWide uppercase text-cyntra-gold font-semibold">
           CYNTRA · AURELIUS
         </div>
-        <div className="ml-auto text-[9px] tracking-cockpit text-white/40">
-          EXECUTIVE · CONFIDENTIAL
+        <div className="ml-auto text-[10px] tracking-cockpit text-cyntra-secondary font-semibold">
+          Bestuurlijk · Vertrouwelijk
         </div>
       </div>
 
       {/* ================= MAIN GRID ================= */}
-      <div className="grid grid-cols-[300px_1fr_340px] min-h-[calc(100vh-56px)]">
+      <div className="grid grid-cols-1 xl:grid-cols-[260px_1fr_280px] min-h-[calc(100vh-56px)]">
 
         {/* ========== LEFT — CONTEXT ========== */}
-        <aside className="border-r border-white/5 bg-[#07080d] px-6 py-8">
-          <div className="text-[9px] tracking-cockpit uppercase text-white/30 mb-8">
-            CONTEXT
+        <aside className="border-b xl:border-b-0 xl:border-r divider-cyntra bg-cyntra-surface px-6 py-8">
+          <div className="text-[10px] tracking-cockpit uppercase text-cyntra-secondary mb-8 font-semibold">
+            Context
           </div>
 
           <div className="space-y-6 text-sm">
             <div>
-              <div className="text-[9px] tracking-cockpit uppercase text-white/40 mb-1">
-                MODULE
+              <div className="text-[10px] tracking-cockpit uppercase text-cyntra-secondary mb-1 font-semibold">
+                Analyse
               </div>
-              <div className="text-gold font-medium text-base">
+              <div className="text-cyntra-primary font-semibold text-base">
                 {title}
               </div>
             </div>
 
             {subtitle && (
               <div>
-                <div className="text-[9px] tracking-cockpit uppercase text-white/40 mb-1">
-                  OBJECTIVE
+                <div className="text-[10px] tracking-cockpit uppercase text-cyntra-secondary mb-1 font-semibold">
+                  Doel
                 </div>
-                <div className="text-white/60 leading-relaxed text-sm">
+                <div className="text-cyntra-secondary leading-relaxed text-sm">
                   {subtitle}
                 </div>
               </div>
             )}
 
             <div>
-              <div className="text-[9px] tracking-cockpit uppercase text-white/40 mb-1">
-                STATUS
+              <div className="text-[10px] tracking-cockpit uppercase text-cyntra-secondary mb-1 font-semibold">
+                Status
               </div>
-              <div className="flex items-center gap-2 text-[#4ade80] text-xs font-medium">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#4ade80]" />
-                ONLINE
+              <div className="flex items-center gap-2 text-cyntra-gold text-xs font-semibold">
+                <span className="h-1.5 w-1.5 rounded-full bg-cyntra-gold" />
+                Actief
               </div>
             </div>
           </div>
         </aside>
 
         {/* ========== CENTER — ANALYSIS ========== */}
-        <main className="relative overflow-y-auto px-16 py-14 bg-[#0b0d14]">
-
-          {/* Ambient light */}
-          <div className="pointer-events-none absolute inset-0">
-            <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[800px] h-[800px] bg-gold/5 blur-[280px]" />
-          </div>
-
+        <main className="relative overflow-y-auto px-6 md:px-12 py-12 bg-cyntra-primary">
           <div className="relative z-10 max-w-6xl mx-auto">
             <header className="mb-14">
-              <h1 className="text-2xl font-semibold tracking-wide text-gold uppercase">
+              <h1 className="text-3xl font-semibold tracking-tight text-cyntra-gold normal-case">
                 {title}
               </h1>
               {subtitle && (
-                <p className="mt-2 text-sm text-white/50 max-w-2xl leading-relaxed">
+                <p className="mt-2 text-sm text-cyntra-secondary max-w-2xl leading-relaxed">
                   {subtitle}
                 </p>
               )}
             </header>
 
-            <div className="font-mono text-[14px] leading-relaxed tracking-wide">
+            <div className="text-[15px] leading-relaxed tracking-normal text-cyntra-primary">
               {children}
             </div>
           </div>
         </main>
 
         {/* ========== RIGHT — DECISION ========== */}
-        <aside className="border-l border-white/5 bg-[#07080d] px-6 py-8">
-          <div className="text-[9px] tracking-cockpit uppercase text-white/30 mb-8">
-            DECISION
+        <aside className="border-t xl:border-t-0 xl:border-l divider-cyntra bg-cyntra-surface px-6 py-8">
+          <div className="text-[10px] tracking-cockpit uppercase text-cyntra-secondary mb-8 font-semibold">
+            Besluitbeeld
           </div>
 
           <div className="space-y-8 text-sm">
             <div>
-              <div className="text-[9px] tracking-cockpit uppercase text-white/40 mb-1">
-                CONFIDENCE
+              <div className="text-[10px] tracking-cockpit uppercase text-cyntra-secondary mb-1 font-semibold">
+                Vertrouwen
               </div>
-              <div className="text-4xl font-semibold text-gold">
+              <div className="text-4xl font-semibold text-cyntra-gold">
                 HIGH
               </div>
             </div>
 
             <div>
-              <div className="text-[9px] tracking-cockpit uppercase text-white/40 mb-1">
-                RISK
+              <div className="text-[10px] tracking-cockpit uppercase text-cyntra-secondary mb-1 font-semibold">
+                Risiconiveau
               </div>
-              <div className="text-white/60">
+              <div className="text-cyntra-primary">
                 MODERATE
               </div>
             </div>
 
             <div>
-              <div className="text-[9px] tracking-cockpit uppercase text-white/40 mb-1">
-                MODE
+              <div className="text-[10px] tracking-cockpit uppercase text-cyntra-secondary mb-1 font-semibold">
+                Sturingsmodus
               </div>
-              <div className="text-white/60">
-                STRATEGIC ALIGNMENT
+              <div className="text-cyntra-primary">
+                Bestuurlijke afstemming
               </div>
             </div>
           </div>

@@ -61,6 +61,7 @@ export default defineConfig(({ mode }) => {
       "import.meta.env.VITE_SUPABASE_ANON_KEY": JSON.stringify(supabaseAnonKey),
     },
     server: {
+      host: "127.0.0.1",
       port: 5173,
       strictPort: true,
     },

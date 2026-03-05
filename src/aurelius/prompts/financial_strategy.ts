@@ -24,7 +24,7 @@ Beantwoord expliciet en zonder diplomatie deze vier vragen:
 Wees direct, onsentimenteel en concreet.
 Denk en schrijf als een eigenaar die over 10 jaar nog steeds meer waard wil zijn — niet als een controller of consultant.
 Geen generieke financiële adviezen. Geen jargon zonder betekenis.
-Alleen harde, strategische oordelen en trade-offs die ertoe doen.
+Alleen harde, strategische oordelen en keuzeconflicten die ertoe doen.
 
 Output moet glashelder zijn voor een bestuurder die geen tijd heeft voor ruis.
 
@@ -40,8 +40,8 @@ Return VALID JSON ONLY using this exact structure:
     "q4_do_not_scale": "Concreet: wat mag niet opgeschaald worden en waarom (breekpunt + schade-mechanisme)."
   },
   "structural_tradeoffs": [
-    "Trade-off die niet te optimaliseren is (bijv. groei vs cash, marge vs volume, productcomplexiteit vs unit economics).",
-    "Trade-off die governance/mandaat raakt (wie beslist, wie betaalt de downside)."
+    "Keuzeconflict die niet te optimaliseren is (bijv. groei vs cash, marge vs volume, productcomplexiteit vs unit economics).",
+    "Keuzeconflict die governance/mandaat raakt (wie beslist, wie betaalt de downside)."
   ],
   "irreversibility_points": [
     {
@@ -58,6 +58,6 @@ Return VALID JSON ONLY using this exact structure:
 
 Rules:
 - Geen adviezen, geen roadmap, geen 'levers'
-- Alleen oordelen, trade-offs, breekpunten, irreversibility
+- Alleen oordelen, keuzeconflicten, breekpunten, irreversibility
 - Nooit non-JSON tekst output
 `;

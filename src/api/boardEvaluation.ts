@@ -53,6 +53,74 @@ function mapBoardEvaluationRow(row: RawBoardEvaluationRow): BoardEvaluationRow {
   };
 }
 
+function isMissingBoardEvaluationRelationError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const maybe = error as {
+    code?: string;
+    status?: number;
+    message?: string;
+    details?: string;
+  };
+  const text = `${maybe.message ?? ""} ${maybe.details ?? ""}`.toLowerCase();
+  return (
+    maybe.code === "PGRST205" ||
+    maybe.status === 404 ||
+    text.includes("board_evaluation_results") ||
+    text.includes("relation") && text.includes("does not exist")
+  );
+}
+
+async function parseApiError(response: Response): Promise<Error> {
+  try {
+    const body = await response.json();
+    return new Error(
+      typeof body?.error === "string" && body.error.length
+        ? body.error
+        : `API request failed (${response.status})`
+    );
+  } catch {
+    return new Error(`API request failed (${response.status})`);
+  }
+}
+
+async function fetchBoardEvaluationsFallbackViaApi(
+  organisationId: string,
+  limit: number
+): Promise<BoardEvaluationRow[]> {
+  const response = await fetch(
+    `/api/board-evaluations?organisationId=${encodeURIComponent(organisationId)}&limit=${limit}`,
+    { method: "GET", headers: { Accept: "application/json" } }
+  );
+  if (!response.ok) {
+    throw await parseApiError(response);
+  }
+  const payload = (await response.json()) as { rows?: RawBoardEvaluationRow[] };
+  return (payload.rows || []).map(mapBoardEvaluationRow);
+}
+
+async function submitBoardEvaluationFallbackViaApi(
+  payload: BoardEvaluationInsert
+): Promise<BoardEvaluationRow> {
+  const response = await fetch("/api/board-evaluations", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw await parseApiError(response);
+  }
+
+  const result = (await response.json()) as { evaluation?: RawBoardEvaluationRow };
+  if (!result.evaluation) {
+    throw new Error("Board-evaluatie response mist evaluatie-object.");
+  }
+  return mapBoardEvaluationRow(result.evaluation);
+}
+
 export async function resolveActiveOrganisationId(
   userId: string
 ): Promise<string> {
@@ -109,6 +177,12 @@ export async function submitBoardEvaluation(
     .single<RawBoardEvaluationRow>();
 
   if (error || !data) {
+    if (isMissingBoardEvaluationRelationError(error)) {
+      return submitBoardEvaluationFallbackViaApi({
+        ...payload,
+        ...normalized,
+      });
+    }
     throw error ?? new Error("Board-evaluatie opslaan mislukt.");
   }
 
@@ -141,6 +215,9 @@ export async function fetchBoardEvaluations(
     .returns<RawBoardEvaluationRow[]>();
 
   if (error) {
+    if (isMissingBoardEvaluationRelationError(error)) {
+      return fetchBoardEvaluationsFallbackViaApi(organisationId, limit);
+    }
     throw error;
   }
 

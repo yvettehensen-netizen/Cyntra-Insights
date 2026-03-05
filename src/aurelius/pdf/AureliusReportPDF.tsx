@@ -14,6 +14,7 @@ import {
   WhiteLabelConfig,
   defaultWhiteLabel,
 } from "./whiteLabelConfig";
+import { applyBoardEditorialPolicy } from "@/aurelius/utils/boardOutputSanitizer";
 
 /* ================= TYPES ================= */
 
@@ -53,6 +54,15 @@ export type ReportResult = {
     owner?: string;
     irreversibility_deadline?: string;
   }>;
+  contactPerson?: string;
+  contactpersoon?: string;
+  contact_person?: string;
+  primaryContact?: string;
+  primary_contact?: string;
+  requestedBy?: string;
+  requested_by?: string;
+  aanvrager?: string;
+  owner?: string;
 };
 
 export type AureliusReportPDFProps = {
@@ -60,6 +70,7 @@ export type AureliusReportPDFProps = {
   company: string;
   date: string;
   result: ReportResult;
+  contactPerson?: string;
   whiteLabel?: WhiteLabelConfig;
 };
 
@@ -70,6 +81,7 @@ export function AureliusReportPDF({
   company,
   date,
   result,
+  contactPerson,
   whiteLabel = defaultWhiteLabel,
 }: AureliusReportPDFProps) {
   const accent = whiteLabel.primaryAccentColor;
@@ -87,6 +99,21 @@ export function AureliusReportPDF({
   const interventions = Array.isArray(result.interventions)
     ? result.interventions
     : [];
+  const resolvedContactPerson =
+    [
+      contactPerson,
+      result.contactPerson,
+      result.contactpersoon,
+      result.contact_person,
+      result.primaryContact,
+      result.primary_contact,
+      result.requestedBy,
+      result.requested_by,
+      result.aanvrager,
+      result.owner,
+    ].find((value) => typeof value === "string" && value.trim()) ?? "Nog niet opgegeven";
+  const sanitize = (value: string, title: string) =>
+    applyBoardEditorialPolicy(String(value ?? ""), title);
 
   /* ============================================================
      ✅ HGBCO PAGE 1 — DECISION CARD
@@ -120,6 +147,14 @@ export function AureliusReportPDF({
               <Text style={s.metaText}>{title}</Text>
               <Text style={s.metaText}>{date}</Text>
             </View>
+            <View style={s.metaRow}>
+              <Text style={s.metaText}>
+                Organisatie: {sanitize(company || "Onbenoemd", "Organisatie")}
+              </Text>
+              <Text style={s.metaText}>
+                Contactpersoon: {sanitize(String(resolvedContactPerson), "Contactpersoon")}
+              </Text>
+            </View>
             <View style={[s.divider, { backgroundColor: accent }]} />
           </View>
 
@@ -129,14 +164,14 @@ export function AureliusReportPDF({
             {/* H */}
             <View style={s.hgbcoBlock}>
               <Text style={s.hgbcoText}>
-                H — {result.hgbco?.H}
+                H — {sanitize(result.hgbco?.H ?? "", "H")}
               </Text>
             </View>
 
             {/* G */}
             <View style={s.hgbcoBlock}>
               <Text style={s.hgbcoText}>
-                G — {result.hgbco?.G}
+                G — {sanitize(result.hgbco?.G ?? "", "G")}
               </Text>
             </View>
 
@@ -145,7 +180,7 @@ export function AureliusReportPDF({
               <Text style={s.blockerText}>B — Belemmeringen</Text>
               {(result.hgbco?.B ?? []).slice(0, 5).map((b, i) => (
                 <Text key={i} style={s.insightText}>
-                  • {b}
+                  • {sanitize(b, "Belemmeringen")}
                 </Text>
               ))}
             </View>
@@ -155,7 +190,7 @@ export function AureliusReportPDF({
               <Text style={s.closureText}>C — Closure Plan</Text>
               {(result.hgbco?.C ?? []).slice(0, 5).map((c, i) => (
                 <Text key={i} style={s.insightText}>
-                  • {c}
+                  • {sanitize(c, "Closure Plan")}
                 </Text>
               ))}
             </View>
@@ -163,7 +198,7 @@ export function AureliusReportPDF({
             {/* O */}
             <View style={s.outcomeBlock}>
               <Text style={s.outcomeText}>
-                O — {result.hgbco?.O}
+                O — {sanitize(result.hgbco?.O ?? "", "Outcome")}
               </Text>
             </View>
           </View>
@@ -195,6 +230,14 @@ export function AureliusReportPDF({
             <Text style={s.metaText}>{company}</Text>
             <Text style={s.metaText}>{date}</Text>
           </View>
+          <View style={s.metaRow}>
+            <Text style={s.metaText}>
+              Organisatie: {sanitize(company || "Onbenoemd", "Organisatie")}
+            </Text>
+            <Text style={s.metaText}>
+              Contactpersoon: {sanitize(String(resolvedContactPerson), "Contactpersoon")}
+            </Text>
+          </View>
           <View style={[s.divider, { backgroundColor: accent }]} />
         </View>
 
@@ -205,7 +248,7 @@ export function AureliusReportPDF({
 
             <View style={s.verdictBlock}>
               <Text style={s.verdictText}>
-                {result.executive_summary}
+                {sanitize(result.executive_summary, "Executive Verdict")}
               </Text>
             </View>
           </View>
@@ -221,11 +264,11 @@ export function AureliusReportPDF({
             {interventions.slice(0, 6).map((x, i) => (
               <View key={i} style={s.interventionBlock}>
                 <Text style={s.interventionTitle}>
-                  #{x.priority} — {x.title}
+                  #{x.priority} — {sanitize(x.title, "Interventie")}
                 </Text>
 
                 <Text style={s.interventionMeta}>
-                  Owner: {x.owner} • Deliverable: {x.deliverable}
+                  Owner: {sanitize(x.owner, "Owner")} • Deliverable: {sanitize(x.deliverable, "Deliverable")}
                 </Text>
               </View>
             ))}
@@ -256,7 +299,7 @@ export function AureliusReportPDF({
                   <Text style={s.insightNumber}>
                     {String(i + 1).padStart(2, "0")}
                   </Text>
-                  <Text style={s.insightText}>{x}</Text>
+                  <Text style={s.insightText}>{sanitize(x, "Kerninzichten")}</Text>
                 </View>
               ))}
             </View>
@@ -269,7 +312,7 @@ export function AureliusReportPDF({
 
               {risks.slice(0, 6).map((x, i) => (
                 <View key={i} style={s.riskBlock}>
-                  <Text style={s.riskText}>{x}</Text>
+                  <Text style={s.riskText}>{sanitize(x, "Risico bij uitstel")}</Text>
                 </View>
               ))}
             </View>
@@ -282,7 +325,7 @@ export function AureliusReportPDF({
 
               {opportunities.slice(0, 6).map((x, i) => (
                 <Text key={i} style={s.opportunityText}>
-                  • {x}
+                  • {sanitize(x, "Strategische kansen")}
                 </Text>
               ))}
             </View>

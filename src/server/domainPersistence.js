@@ -6,8 +6,13 @@ const router = Router();
 const supabase = supabaseService;
 
 const BOARD_TYPES = ["board_evaluation_result", "board_evaluation"];
+const BOARD_INDEX_TYPES = ["board_index_snapshot"];
 const PERFORMANCE_BASELINE_TYPES = ["performance_baseline"];
 const PERFORMANCE_SNAPSHOT_TYPES = ["performance_snapshot"];
+const REPORT_STORAGE_TYPES = ["stored_report"];
+
+const memoryBoardIndexSnapshots = new Map();
+const memoryStoredReports = new Map();
 
 function errorMessage(error) {
   if (!error) return "unknown";
@@ -57,6 +62,51 @@ function extractAnalysisPayload(row) {
     return row.input_payload;
   }
   return {};
+}
+
+function readObjectOrEmpty(value) {
+  return value && typeof value === "object" ? value : {};
+}
+
+function normalizeBoardIndexSnapshot(input) {
+  const payload = readObjectOrEmpty(input);
+  const analysisId = String(payload.analysisId || "").trim();
+  if (!analysisId) return null;
+  return {
+    ...payload,
+    analysisId,
+    createdAt: String(payload.createdAt || new Date().toISOString()),
+    organisationId:
+      payload.organisationId == null
+        ? undefined
+        : String(payload.organisationId || "").trim() || undefined,
+  };
+}
+
+function normalizeStoredReport(input) {
+  const payload = readObjectOrEmpty(input);
+  const id = String(payload.id || payload.analysisId || "").trim();
+  const analysisId = String(payload.analysisId || id).trim();
+  if (!id || !analysisId) return null;
+  return {
+    id,
+    analysisId,
+    title: String(payload.title || "Ongetiteld rapport"),
+    date: String(payload.date || new Date().toISOString()),
+    baliScore: round(clamp(toNumber(payload.baliScore), 0, 10), 2),
+    betrouwbaarheid: round(clamp(toNumber(payload.betrouwbaarheid), 0, 100), 2),
+    interventionStatus: String(payload.interventionStatus || "onbekend"),
+    pdfUrl: payload.pdfUrl ? String(payload.pdfUrl) : undefined,
+    analysisRoute: payload.analysisRoute ? String(payload.analysisRoute) : undefined,
+  };
+}
+
+function sortReportsByDateDesc(rows) {
+  return [...rows].sort((a, b) => {
+    const at = new Date(a?.date || 0).getTime();
+    const bt = new Date(b?.date || 0).getTime();
+    return bt - at;
+  });
 }
 
 async function insertAnalysisFallbackRecord(type, payload) {
@@ -590,6 +640,149 @@ router.get("/performance/benchmark", async (_req, res) => {
 
     const benchmark = await computeBenchmarkFallback();
     return res.json({ benchmark, persistence: "analyses_fallback" });
+  } catch (error) {
+    return res.status(500).json({ error: errorMessage(error) });
+  }
+});
+
+router.post("/board-index", async (req, res) => {
+  try {
+    const snapshot = normalizeBoardIndexSnapshot(req.body || {});
+    if (!snapshot) {
+      return res.status(400).json({ error: "analysisId is verplicht" });
+    }
+
+    memoryBoardIndexSnapshots.set(snapshot.analysisId, snapshot);
+
+    if (supabase) {
+      try {
+        await insertAnalysisFallbackRecord(BOARD_INDEX_TYPES[0], snapshot);
+      } catch {
+        // Memory persistence remains the primary dev fallback.
+      }
+    }
+
+    return res.status(201).json(snapshot);
+  } catch (error) {
+    return res.status(500).json({ error: errorMessage(error) });
+  }
+});
+
+router.get("/board-index/:analysisId", async (req, res) => {
+  try {
+    const analysisId = String(req.params.analysisId || "").trim();
+    if (!analysisId) {
+      return res.status(400).json({ error: "analysisId ontbreekt" });
+    }
+
+    const inMemory = memoryBoardIndexSnapshots.get(analysisId);
+    if (inMemory) {
+      return res.json(inMemory);
+    }
+
+    if (supabase) {
+      try {
+        const fallbackRows = await fetchAnalysisFallbackRows(BOARD_INDEX_TYPES, 3000);
+        const match = fallbackRows.find((row) => {
+          const payload = normalizeBoardIndexSnapshot(row.payload);
+          return payload?.analysisId === analysisId;
+        });
+        if (match) {
+          const payload = normalizeBoardIndexSnapshot(match.payload);
+          if (payload) {
+            memoryBoardIndexSnapshots.set(payload.analysisId, payload);
+            return res.json(payload);
+          }
+        }
+      } catch {
+        // Return 404 below when fallback load is unavailable.
+      }
+    }
+
+    return res.json(null);
+  } catch (error) {
+    return res.status(500).json({ error: errorMessage(error) });
+  }
+});
+
+router.post("/reports-storage", async (req, res) => {
+  try {
+    const report = normalizeStoredReport(req.body || {});
+    if (!report) {
+      return res.status(400).json({ error: "id en analysisId zijn verplicht" });
+    }
+
+    memoryStoredReports.set(report.id, report);
+
+    if (supabase) {
+      try {
+        await insertAnalysisFallbackRecord(REPORT_STORAGE_TYPES[0], report);
+      } catch {
+        // Memory persistence remains the primary dev fallback.
+      }
+    }
+
+    return res.status(201).json(report);
+  } catch (error) {
+    return res.status(500).json({ error: errorMessage(error) });
+  }
+});
+
+router.get("/reports-storage", async (_req, res) => {
+  try {
+    const combined = new Map(memoryStoredReports);
+
+    if (supabase) {
+      try {
+        const fallbackRows = await fetchAnalysisFallbackRows(REPORT_STORAGE_TYPES, 5000);
+        for (const row of fallbackRows) {
+          const report = normalizeStoredReport(row.payload);
+          if (!report) continue;
+          if (!combined.has(report.id)) combined.set(report.id, report);
+        }
+      } catch {
+        // Serve in-memory rows if fallback read fails.
+      }
+    }
+
+    return res.json({ reports: sortReportsByDateDesc(Array.from(combined.values())) });
+  } catch (error) {
+    return res.status(500).json({ error: errorMessage(error) });
+  }
+});
+
+router.get("/reports-storage/:id", async (req, res) => {
+  try {
+    const id = String(req.params.id || "").trim();
+    if (!id) {
+      return res.status(400).json({ error: "id ontbreekt" });
+    }
+
+    const inMemory = memoryStoredReports.get(id);
+    if (inMemory) {
+      return res.json(inMemory);
+    }
+
+    if (supabase) {
+      try {
+        const fallbackRows = await fetchAnalysisFallbackRows(REPORT_STORAGE_TYPES, 5000);
+        const match = fallbackRows.find((row) => {
+          const report = normalizeStoredReport(row.payload);
+          return report?.id === id;
+        });
+        if (match) {
+          const report = normalizeStoredReport(match.payload);
+          if (report) {
+            memoryStoredReports.set(report.id, report);
+            return res.json(report);
+          }
+        }
+      } catch {
+        // Return 404 below when fallback load is unavailable.
+      }
+    }
+
+    return res.json(null);
   } catch (error) {
     return res.status(500).json({ error: errorMessage(error) });
   }

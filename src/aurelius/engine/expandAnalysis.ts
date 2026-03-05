@@ -42,7 +42,7 @@ ze bepalen welke opties überhaupt nog realistisch zijn.
       decisions: [
         "Is dit een bewuste keuze of ontstaan patroon?",
         "Wat moet expliciet beëindigd worden?",
-        "Welke trade-off accepteert het bestuur?"
+        "Welke keuzeconflict accepteert het bestuur?"
       ],
     };
   });

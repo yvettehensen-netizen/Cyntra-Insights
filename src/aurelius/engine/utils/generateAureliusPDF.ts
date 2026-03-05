@@ -12,11 +12,23 @@
 // - HGBCO verdieping (Porter / PESTEL / 7S / GROW samenvatting)
 // - Governance-readiness signal
 // - Impliciete integratie van BCG Matrix, Ansoff Matrix, VRIO, SWOT, OKR — voed HGBCO-verdieping, secties en interventies zonder expliciete vermelding (portfolio-optimalisatie, groeipad-evaluatie, resource-beoordeling, interne/externe balans, doelstellingen met meetbare resultaten).
-// - Versterkte besluitdruk in layout: trade-offs, eigenaarschap, deadlines visueel benadrukt.
+// - Versterkte besluitdruk in layout: keerzijde van de keuze, eigenaarschap, deadlines visueel benadrukt.
 // - Geavanceerde HGBCO-uitbreiding: impliciete framework-voeding voor diepere analyse in tabel.
 // ============================================================
 
 import jsPDF from "jspdf";
+import {
+  applyBoardEditorialPolicy,
+  dedupeSectionHeadings,
+  sanitizeBoardOutput,
+} from "@/aurelius/utils/boardOutputSanitizer";
+import {
+  assertSentenceIntegrity,
+  assertBoardOutputStandard,
+  runBoardOutputGuard,
+} from "@/aurelius/synthesis/boardOutputGuard";
+import { assertOutputIntegrity } from "@/aurelius/synthesis/outputIntegrity";
+import { getBoardroomFileName } from "@/utils/download";
 
 /* ================= TYPES ================= */
 
@@ -78,7 +90,7 @@ export interface AnalysisResult {
     owner: string;
     deliverable: string;
     deadline_days: number;
-    trade_off?: string; // ADD ONLY: Impliciete trade-off benadrukking.
+    trade_off?: string; // ADD ONLY: Impliciete keuzeconflict benadrukking.
     measurable_result?: string; // ADD ONLY: Impliciet OKR voor executie.
   }> | Record<string, string[]>;
 }
@@ -87,6 +99,7 @@ export interface CyntraCoverMeta {
   confidence?: number;
   industry?: string;
   snapshot?: string;
+  contactPerson?: string;
 }
 
 /* ================= CONSTANTS ================= */
@@ -102,22 +115,23 @@ const LINE = 5.8;
 
 /* ================= THEME ================= */
 
-const COVER_BG: RGB = [247, 250, 255];
-const COVER_GRID: RGB = [214, 226, 241];
-const INNER_BG: RGB = [255, 255, 255];
-const GOLD: RGB = [168, 132, 46];
+// Website-aligned Cyntra palette: #0b0e14 / #111624 / #c4a465 / #e4cc8c
+const COVER_BG: RGB = [11, 14, 20];
+const INNER_BG: RGB = [251, 249, 244];
+const BLUE: RGB = [11, 14, 20];
+const GOLD: RGB = [196, 164, 101];
+const ANTHRACITE: RGB = [30, 35, 50];
+const LIGHT_GRAY: RGB = [244, 239, 229];
 const WHITE: RGB = [255, 255, 255];
-const EXECUTIVE_TITLE: RGB = [19, 52, 88];
-const EXECUTIVE_TEXT: RGB = [28, 40, 58];
-const EXECUTIVE_MUTED: RGB = [102, 118, 138];
-const EXECUTIVE_CARD: RGB = [255, 255, 255];
-const EXECUTIVE_CARD_BORDER: RGB = [221, 229, 239];
-const SECTION_DIVIDER: RGB = [205, 217, 233];
-const LOSS_TEXT_RED: RGB = [175, 39, 39];
-const DECISION_CONTRACT_BG: RGB = [252, 248, 236];
-const DECISION_CONTRACT_BORDER: RGB = [168, 132, 46];
+const EXECUTIVE_TITLE: RGB = BLUE;
+const EXECUTIVE_TEXT: RGB = ANTHRACITE;
+const EXECUTIVE_MUTED: RGB = [89, 96, 116];
+const EXECUTIVE_CARD: RGB = [255, 254, 251];
+const EXECUTIVE_CARD_BORDER: RGB = [228, 204, 140];
+const SECTION_DIVIDER: RGB = GOLD;
+const DECISION_CONTRACT_BG: RGB = LIGHT_GRAY;
+const DECISION_CONTRACT_BORDER: RGB = GOLD;
 const DECISION_CONTRACT_BORDER_WIDTH_MM = 0.8;
-const COVER_GLOBE_RADIUS = 84;
 const FALLBACK_WARNING_MARKERS = [
   /\[CYNTRA_FALLBACK_WARNING\]/gi,
   /SIGNATURE LAYER WAARSCHUWING:[^\n]*\n?/gi,
@@ -134,47 +148,47 @@ const FALLBACK_WARNING_MARKERS = [
 const EXECUTIVE_SECTION_CATALOG = [
   {
     key: "dominante_bestuurlijke_these",
-    title: "Dominante Bestuurlijke These",
+    title: "Dominante These",
     aliases: ["bestuurlijke_these", "waar_staan_we_nu_echt"],
   },
   {
     key: "kernconflict",
-    title: "Kernconflict",
+    title: "Structurele Kernspanning",
     aliases: ["het_kernconflict", "wat_hier_fundamenteel_schuurt"],
   },
   {
     key: "expliciete_tradeoffs",
-    title: "Expliciete Trade-offs",
+    title: "Keerzijde van de keuze",
     aliases: ["de_keuzes_die_nu_voorliggen", "tradeoffs"],
   },
   {
     key: "opportunity_cost",
-    title: "Opportunity Cost (30 / 90 / 365 dagen)",
+    title: "De Prijs van Uitstel",
     aliases: ["wat_er_gebeurt_als_er_niets_verandert"],
   },
   {
     key: "governance_impact",
-    title: "Governance Impact",
+    title: "Mandaat & Besluitrecht",
     aliases: ["wat_dit_vraagt_van_bestuur_en_organisatie"],
   },
   {
     key: "machtsdynamiek_onderstroom",
-    title: "Machtsdynamiek & Onderstroom",
+    title: "Onderstroom & Informele Macht",
     aliases: ["machtsdynamiek__onderstroom"],
   },
   {
     key: "executierisico",
-    title: "Executierisico",
+    title: "Faalmechanisme",
     aliases: [],
   },
   {
     key: "interventieplan_90dagen",
-    title: "90-Dagen Interventieplan",
+    title: "90-Dagen Interventieontwerp",
     aliases: ["90dagen_interventieplan", "90_dagen_actieplan"],
   },
   {
     key: "decision_contract",
-    title: "Decision Contract",
+    title: "Besluitkader",
     aliases: ["het_besluit_dat_nu_nodig_is"],
   },
 ] as const;
@@ -188,7 +202,7 @@ const EXECUTIVE_SECTION_DEFAULTS: Record<
   kernconflict:
     "Het kernconflict is bestuurlijk pijnlijk: stabiliseren met expliciet verlies of doorgaan met schijnharmonie en oplopende uitvoeringsschade.",
   expliciete_tradeoffs:
-    "Expliciete trade-offs ontbreken in de bronoutput. Leg per keuze vast wat wordt gewonnen, wat wordt verloren en wie mandaat inlevert.",
+    "De keerzijde van de keuze ontbreekt in de bronoutput. Leg per keuze vast wat wordt gewonnen, wat wordt verloren en wie mandaat inlevert.",
   opportunity_cost:
     "30 dagen: direct tempoverlies en eerste financiële erosie. 90 dagen: zichtbare machtsverschuiving en structurele frictie. 365 dagen: systeemverschuiving en verlies van strategische keuzevrijheid. Absolute €-bedragen alleen met berekening en bron; anders expliciet niet onderbouwd.",
   governance_impact:
@@ -200,7 +214,7 @@ const EXECUTIVE_SECTION_DEFAULTS: Record<
   interventieplan_90dagen:
     "Week 1-2: bindend consolidatiebesluit, stop-doinglijst en eigenaarschap per prioriteit. Week 3-6: herverdeling van capaciteit en besluitrechten naar een vaste regiecadans met beslislog. Week 7-12: verankering van gedrag met aantoonbare adoptie en KPI-impact. Dag 30: eerste executiebewijs. Dag 60: stabiel ritme. Dag 90: meetbare verbetering op kern-KPI's.",
   decision_contract:
-    "Decision Contract ontbreekt in de bronoutput. Leg keuze, eigenaarschap, tijdshorizon, expliciet verlies en niet-onderhandelbare stopregels vast.",
+    "Besluitkader ontbreekt in de bronoutput. Leg keuze, eigenaarschap, tijdshorizon, expliciet verlies en niet-onderhandelbare stopregels vast.",
 };
 
 /* ================= HELPERS ================= */
@@ -212,7 +226,7 @@ const resetBodyFont = (doc: jsPDF) => {
 };
 
 function sanitizeReportText(value: string): string {
-  let cleaned = String(value ?? "");
+  let cleaned = sanitizeBoardOutput(String(value ?? ""));
   for (const marker of FALLBACK_WARNING_MARKERS) {
     cleaned = cleaned.replace(marker, "");
   }
@@ -226,6 +240,59 @@ function sanitizeReportText(value: string): string {
     .replace(/\n{3,}/g, "\n\n")
     .trim();
   return cleaned;
+}
+
+const CANONICAL_TITLES = [
+  "Dominante These",
+  "Structurele Kernspanning",
+  "Keerzijde van de keuze",
+  "De Prijs van Uitstel",
+  "Mandaat & Besluitrecht",
+  "Onderstroom & Informele Macht",
+  "Faalmechanisme",
+  "90-Dagen Interventieontwerp",
+  "Besluitkader",
+] as const;
+
+function hasCanonicalHeadings(text: string): boolean {
+  return (String(text ?? "").match(/^\s*(?:###\s*)?[1-9]\.\s+[^\n]+$/gm) ?? []).length >= 9;
+}
+
+function sectionContentToText(value: unknown): string {
+  if (typeof value === "string") return sanitizeReportText(value);
+  if (Array.isArray(value)) return value.map((entry) => String(entry ?? "").trim()).filter(Boolean).join("\n");
+  if (value && typeof value === "object") {
+    try {
+      return sanitizeReportText(JSON.stringify(value));
+    } catch {
+      return "";
+    }
+  }
+  return "";
+}
+
+function buildCanonicalValidationText(report: AnalysisResult): string {
+  const raw = sanitizeReportText(String(report.raw_markdown ?? ""));
+  if (hasCanonicalHeadings(raw)) return raw;
+
+  const sections = report.sections ?? {};
+  const entries = Object.values(sections)
+    .map((entry) => ({
+      title: sanitizeReportText(String(entry?.title ?? "")),
+      content: sectionContentToText(entry?.content),
+    }))
+    .filter((entry) => entry.content.length > 0);
+
+  if (!entries.length) return sanitizeReportText(String(report.executive_summary ?? ""));
+
+  return CANONICAL_TITLES.map((title, index) => {
+    const found =
+      entries.find((entry) => entry.title.toLowerCase() === title.toLowerCase()) ??
+      entries.find((entry) => entry.title.toLowerCase().includes(title.toLowerCase()));
+    return `${index + 1}. ${title}\n\n${found?.content ?? ""}`.trim();
+  })
+    .join("\n\n")
+    .trim();
 }
 
 const normalize = (v: unknown): string => {
@@ -399,15 +466,6 @@ function buildPdfNarrativeBlocks(
   });
 }
 
-function measurePdfNarrativeBlocks(blocks: PdfNarrativeBlock[]): number {
-  if (!blocks.length) return 0;
-  return blocks.reduce((height, block, index) => {
-    const blockHeight = block.lines.length * block.lineHeight;
-    const gap = index < blocks.length - 1 ? block.gapAfter : 0;
-    return height + blockHeight + gap;
-  }, 0);
-}
-
 function splitOpportunityWindows(text: string): Array<{ label: string; content: string }> {
   const lines = text
     .split("\n")
@@ -442,7 +500,7 @@ function splitOpportunityWindows(text: string): Array<{ label: string; content: 
     .map((part) => part.trim())
     .filter(Boolean);
 
-  return [
+  const windows = [
     {
       label: "30 dagen",
       content: segments["30 dagen"].join(" ").trim() || fallback[0] || "Niet gespecificeerd.",
@@ -456,12 +514,57 @@ function splitOpportunityWindows(text: string): Array<{ label: string; content: 
       content: segments["365 dagen"].join(" ").trim() || fallback[2] || fallback[1] || fallback[0] || "Niet gespecificeerd.",
     },
   ];
+
+  const deduped = new Set<string>();
+  return windows.filter((window) => {
+    const key = `${window.label}:${window.content}`.toLowerCase().trim();
+    if (!key) return false;
+    if (deduped.has(key)) return false;
+    deduped.add(key);
+    return true;
+  });
 }
 
 function hasExplicitLossLanguage(text: string): boolean {
   return /\b(verlies|verliest|verliespost|inleveren|machtverlies|afbouw|stopzetten|opheffen|afstoten|be[eë]indig)\b/i.test(
     text
   );
+}
+
+function firstNonEmptyString(...values: unknown[]): string {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+function resolveCoverContact(report: AnalysisResult, meta?: CyntraCoverMeta): string {
+  const record = report as Record<string, unknown>;
+  return (
+    firstNonEmptyString(
+      meta?.contactPerson,
+      record.contactPerson,
+      record.contactpersoon,
+      record.contact_person,
+      record.primaryContact,
+      record.primary_contact,
+      record.clientContact,
+      record.client_contact,
+      record.requestedBy,
+      record.requested_by,
+      record.aanvrager,
+      record.owner
+    ) || "Nog niet opgegeven"
+  );
+}
+
+function trimToWordBudget(text: string, maxWords: number): string {
+  const words = sanitizeReportText(String(text ?? ""))
+    .split(/\s+/)
+    .map((word) => word.trim())
+    .filter(Boolean);
+  if (words.length <= maxWords) return words.join(" ");
+  return `${words.slice(0, maxWords).join(" ")}…`;
 }
 
 function normalizeHeading(value: string): string {
@@ -510,11 +613,34 @@ export function generateAureliusPDF(
   company: string = "—",
   meta?: CyntraCoverMeta
 ) {
+  const sourceText = buildCanonicalValidationText(report);
+  const fullExportText = runBoardOutputGuard(sourceText, { fullDocument: true });
+
+  const isDecisionDocument = /Besluitdocument Raad van Bestuur/i.test(String(title || ""));
+  const reportType = isDecisionDocument ? "decision" : "analysis";
+  try {
+    assertBoardOutputStandard(fullExportText, {
+      documentType: reportType,
+      sourceText,
+    });
+    assertOutputIntegrity(fullExportText);
+    assertSentenceIntegrity(fullExportText);
+  } catch (error) {
+    const message = String((error as Error)?.message ?? error ?? "");
+    throw new Error(
+      message ||
+        "Board-output v1.3: integriteitscontrole faalt (duplicatie of afgeknotte zin)."
+    );
+  }
   const doc = new jsPDF("p", "mm", "a4");
   const generatedAt = new Date();
   const dateLabel = formatReportDate(generatedAt);
   const organizationName =
     sanitizeReportText(company || report.organisation || "Onbenoemd") || "Onbenoemd";
+  const contactName = sanitizeReportText(resolveCoverContact(report, meta));
+  const downloadFileName = getBoardroomFileName(reportType, organizationName);
+
+  doc.setProperties({ title: downloadFileName });
 
   let y = HEADER_H + M.y;
   let page = 0;
@@ -525,33 +651,9 @@ export function generateAureliusPDF(
     doc.rect(0, 0, PAGE.w, PAGE.h, "F");
   };
 
-  const drawCoverGrid = () => {
-    const centerX = PAGE.w / 2;
-    const centerY = PAGE.h / 2 - 32;
-
-    doc.setDrawColor(...COVER_GRID);
-    doc.setLineWidth(0.26);
-    doc.ellipse(centerX, centerY, COVER_GLOBE_RADIUS, COVER_GLOBE_RADIUS * 0.72);
-
-    for (let i = 1; i <= 4; i++) {
-      const ratio = 1 - i * 0.16;
-      doc.ellipse(
-        centerX,
-        centerY,
-        COVER_GLOBE_RADIUS * ratio,
-        COVER_GLOBE_RADIUS * 0.72 * ratio
-      );
-    }
-
-    for (let i = -4; i <= 4; i++) {
-      const radiusX = Math.max(8, Math.abs(i) * 7 + 6);
-      doc.ellipse(centerX, centerY, radiusX, COVER_GLOBE_RADIUS * 0.72);
-    }
-  };
-
   const header = () => {
-    doc.setDrawColor(...SECTION_DIVIDER);
-    doc.setLineWidth(0.4);
+    doc.setDrawColor(...GOLD);
+    doc.setLineWidth(0.3);
     doc.line(M.x, 12, PAGE.w - M.x, 12);
 
     doc.setFont("helvetica", "bold");
@@ -561,20 +663,25 @@ export function generateAureliusPDF(
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8.1);
-    doc.setTextColor(...EXECUTIVE_MUTED);
-    doc.text("Strategisch Besluitrapport", PAGE.w - M.x, 9.2, { align: "right" });
+    doc.setTextColor(...BLUE);
+    doc.text(
+      isDecisionDocument ? "Besluitdocument Raad van Bestuur" : "Bestuurlijke Analyse & Interventie",
+      PAGE.w - M.x,
+      9.2,
+      { align: "right" }
+    );
   };
 
   const footer = () => {
     const footerY = PAGE.h - 6.4;
-    doc.setDrawColor(...SECTION_DIVIDER);
-    doc.setLineWidth(0.35);
+    doc.setDrawColor(...GOLD);
+    doc.setLineWidth(0.3);
     doc.line(M.x, PAGE.h - FOOTER_H + 2.8, PAGE.w - M.x, PAGE.h - FOOTER_H + 2.8);
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7.9);
-    doc.setTextColor(...EXECUTIVE_MUTED);
-    doc.text("Cyntra Insights – Executive Operating System", M.x, footerY);
+    doc.setTextColor(...ANTHRACITE);
+    doc.text("Cyntra Insights", M.x, footerY);
     doc.text("Vertrouwelijk", PAGE.w / 2, footerY, { align: "center" });
     doc.text(`${page}`, PAGE.w - M.x, footerY, { align: "right" });
 
@@ -595,53 +702,65 @@ export function generateAureliusPDF(
   };
 
   const drawSectionHeading = (index: number, heading: string) => {
-    doc.setDrawColor(...SECTION_DIVIDER);
-    doc.setLineWidth(0.45);
+    doc.setDrawColor(...GOLD);
+    doc.setLineWidth(0.3);
     doc.line(M.x, y - 3.2, PAGE.w - M.x, y - 3.2);
 
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(13.6);
-    doc.setTextColor(...EXECUTIVE_TITLE);
-    doc.text(`${index}. ${heading}`, M.x, y + 1.2);
+    doc.setFontSize(isDecisionDocument ? 14 : 18);
+    doc.setTextColor(...GOLD);
+    doc.text(`${index}.`, M.x, y + 2.2);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(isDecisionDocument ? 12.5 : 14);
+    doc.setTextColor(...BLUE);
+    doc.text(heading, M.x + 14, y + 2.2);
   };
 
   /* ================= COVER ================= */
 
-  doc.setFillColor(...COVER_BG);
-  doc.rect(0, 0, PAGE.w, PAGE.h, "F");
-  doc.setFillColor(...EXECUTIVE_TITLE);
-  doc.rect(0, 0, PAGE.w, 26, "F");
-  drawCoverGrid();
-
   const coverCenterX = PAGE.w / 2;
-  doc.setDrawColor(...GOLD);
-  doc.setFillColor(...COVER_BG);
-  doc.setLineWidth(1.1);
-  doc.circle(coverCenterX, 98, 16, "S");
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(25);
-  doc.setTextColor(...GOLD);
-  doc.text("C", coverCenterX, 101, { align: "center" });
+  if (isDecisionDocument) {
+    doc.setFillColor(...INNER_BG);
+    doc.rect(0, 0, PAGE.w, PAGE.h, "F");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(24);
+    doc.setTextColor(...BLUE);
+    doc.text("Besluitdocument Raad van Bestuur", coverCenterX, 122, { align: "center" });
+    doc.setDrawColor(...GOLD);
+    doc.setLineWidth(0.4);
+    doc.line(M.x + 28, 130, PAGE.w - (M.x + 28), 130);
+  } else {
+    doc.setFillColor(...COVER_BG);
+    doc.rect(0, 0, PAGE.w, PAGE.h, "F");
+    doc.setFillColor(17, 22, 36);
+    doc.rect(0, 0, PAGE.w, 38, "F");
+    doc.setFillColor(...GOLD);
+    doc.rect(M.x, 44, PAGE.w - M.x * 2, 0.9, "F");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(25);
+    doc.setTextColor(...GOLD);
+    doc.text("Bestuurlijke Analyse & Interventie", coverCenterX, 140, { align: "center" });
+  }
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(43);
-  doc.setTextColor(...EXECUTIVE_TITLE);
-  doc.text("CYNTRA", coverCenterX, 124, { align: "center" });
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
-  doc.setTextColor(...GOLD);
-  doc.text("INSIGHTS", coverCenterX, 133, { align: "center" });
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(16.8);
-  doc.setTextColor(...EXECUTIVE_TITLE);
-  doc.text("STRATEGISCH BESLUITRAPPORT", coverCenterX, 165, { align: "center" });
-
-  doc.setFont("helvetica", "normal");
   doc.setFontSize(11.2);
-  doc.setTextColor(...EXECUTIVE_TEXT);
-  doc.text(`${organizationName} – ${dateLabel}`, coverCenterX, 176, {
+  doc.setTextColor(...(isDecisionDocument ? ANTHRACITE : WHITE));
+  doc.text(`Organisatie: ${organizationName}`, coverCenterX, 155, {
+    align: "center",
+    maxWidth: PAGE.w - M.x * 2,
+  });
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10.8);
+  doc.text(`Contactpersoon: ${contactName}`, coverCenterX, 163, {
+    align: "center",
+    maxWidth: PAGE.w - M.x * 2,
+  });
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10.2);
+  doc.text(`Datum: ${dateLabel}`, coverCenterX, 171, {
     align: "center",
     maxWidth: PAGE.w - M.x * 2,
   });
@@ -649,7 +768,7 @@ export function generateAureliusPDF(
   if (meta?.confidence !== undefined) {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9.6);
-    doc.setTextColor(...EXECUTIVE_MUTED);
+    doc.setTextColor(...(isDecisionDocument ? ANTHRACITE : WHITE));
     doc.text(
       `Besluitbetrouwbaarheid: ${(meta.confidence * 100).toFixed(0)}%`,
       coverCenterX,
@@ -659,8 +778,8 @@ export function generateAureliusPDF(
   }
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.8);
-  doc.setTextColor(...EXECUTIVE_MUTED);
+  doc.setFontSize(9.6);
+  doc.setTextColor(...(isDecisionDocument ? ANTHRACITE : WHITE));
   doc.text("Vertrouwelijk – Raad van Bestuur", coverCenterX, PAGE.h - 22, {
     align: "center",
   });
@@ -679,7 +798,7 @@ export function generateAureliusPDF(
       ""
   );
 
-  const resolvedSections = EXECUTIVE_SECTION_CATALOG.map((entry) => {
+  const resolvedSectionsRaw = EXECUTIVE_SECTION_CATALOG.map((entry) => {
     const direct = sections[entry.key];
     let text = direct ? normalize(direct.content).trim() : "";
 
@@ -706,45 +825,63 @@ export function generateAureliusPDF(
     return {
       key: entry.key,
       title: entry.title,
-      text: sanitizeReportText(text),
+      text: applyBoardEditorialPolicy(sanitizeReportText(text), entry.title),
     };
   });
 
-  const decisionSection = resolvedSections.find(
-    (entry) => entry.key === "decision_contract"
-  );
-  const regularSections = resolvedSections.filter(
-    (entry) => entry.key !== "decision_contract"
-  );
+  const resolvedSections = dedupeSectionHeadings(resolvedSectionsRaw);
 
-  for (const section of regularSections) {
+  // Subtle brand bridge from cover to content for a more cohesive visual flow.
+  doc.setDrawColor(...GOLD);
+  doc.setLineWidth(0.5);
+  doc.line(M.x, HEADER_H + 7.5, PAGE.w - M.x, HEADER_H + 7.5);
+
+  for (const section of resolvedSections) {
     sectionIndex++;
+    const isDecisionSection = section.key === "decision_contract";
+    const sectionTitle = section.title;
+    const sectionText = trimToWordBudget(
+      section.text,
+      isDecisionSection ? 260 : 190
+    );
+
+    const drawHeadingWithFlow = (continued = false) => {
+      ensure(18);
+      drawSectionHeading(
+        sectionIndex,
+        continued ? `${sectionTitle} (vervolg)` : sectionTitle
+      );
+      y += 8;
+    };
 
     if (section.key === "opportunity_cost") {
-      const windows = splitOpportunityWindows(section.text).map((item) => {
-        const paragraphs = splitIntoReadableParagraphs(item.content, 2, 180);
+      const windows = splitOpportunityWindows(sectionText).map((item) => {
+        const paragraphs = splitIntoReadableParagraphs(item.content, 2, 170);
         const lineSets = paragraphs.map((paragraph) =>
           doc.splitTextToSize(paragraph, PAGE.w - M.x * 2 - 16)
         );
         const lineCount = lineSets.reduce((count, lines) => count + lines.length, 0);
         const blockHeight = Math.max(
-          30,
-          12 + lineCount * LINE + Math.max(0, paragraphs.length - 1) * 2.4
+          28,
+          11 + lineCount * LINE + Math.max(0, paragraphs.length - 1) * 2.1
         );
         return { label: item.label, lineSets, blockHeight };
       });
 
-      const totalBlocksHeight =
-        windows.reduce((sum, item) => sum + item.blockHeight, 0) +
-        Math.max(0, windows.length - 1) * 7;
-      const totalHeight = 12 + totalBlocksHeight + 10;
-      ensure(totalHeight + 18);
+      let headingDrawn = false;
+      for (let index = 0; index < windows.length; index += 1) {
+        const window = windows[index];
+        if (!headingDrawn) {
+          drawHeadingWithFlow(false);
+          headingDrawn = true;
+        }
+        ensure(window.blockHeight + 12);
+        if (y + window.blockHeight + 12 > PAGE.h - FOOTER_H - 10) {
+          newPage();
+          drawHeadingWithFlow(true);
+        }
 
-      drawSectionHeading(sectionIndex, section.title);
-      y += 8;
-
-      let blockY = y + 2;
-      windows.forEach((window, index) => {
+        const blockY = y + 2;
         doc.setFillColor(...EXECUTIVE_CARD);
         doc.setDrawColor(...EXECUTIVE_CARD_BORDER);
         doc.setLineWidth(0.3);
@@ -765,133 +902,136 @@ export function generateAureliusPDF(
 
         let lineY = blockY + 14;
         doc.setFont("helvetica", "normal");
-        doc.setFontSize(10.2);
+        doc.setFontSize(10.9);
         window.lineSets.forEach((lines, paragraphIndex) => {
           lines.forEach((line) => {
-            doc.setTextColor(
-              ...(hasExplicitLossLanguage(line) ? LOSS_TEXT_RED : EXECUTIVE_TEXT)
-            );
+            const pressureLine = /structurele druk/i.test(line);
+            doc.setTextColor(...(pressureLine ? GOLD : EXECUTIVE_TEXT));
             doc.text(line, M.x + 6, lineY);
             lineY += LINE;
           });
-          if (paragraphIndex < window.lineSets.length - 1) {
-            lineY += 2.1;
-          }
+          if (paragraphIndex < window.lineSets.length - 1) lineY += 1.8;
         });
 
-        blockY += window.blockHeight + (index < windows.length - 1 ? 7 : 0);
-      });
-
-      y = blockY + 10;
+        y = blockY + window.blockHeight + 8;
+      }
+      y += 2;
       continue;
     }
 
     const renderBlocks = buildPdfNarrativeBlocks(
       doc,
-      section.text,
-      PAGE.w - M.x * 2 - 16
-    );
-    const textHeight = measurePdfNarrativeBlocks(renderBlocks);
-    const cardHeight = Math.max(38, 12 + textHeight);
-    ensure(cardHeight + 20);
-
-    drawSectionHeading(sectionIndex, section.title);
-    y += 8;
-
-    doc.setFillColor(...EXECUTIVE_CARD);
-    doc.setDrawColor(...EXECUTIVE_CARD_BORDER);
-    doc.setLineWidth(0.3);
-    doc.roundedRect(
-      M.x,
-      y + 2,
-      PAGE.w - M.x * 2,
-      cardHeight,
-      2.8,
-      2.8,
-      "FD"
+      sectionText,
+      PAGE.w - M.x * 2 - (isDecisionSection ? 14 : 16)
     );
 
-    let cursorY = y + 10;
+    const lineItems: Array<
+      | { type: "line"; text: string; kind: NarrativeBlockKind; lineHeight: number; fontSize: number }
+      | { type: "gap"; height: number }
+    > = [];
+
     renderBlocks.forEach((block, blockIndex) => {
-      doc.setFont("helvetica", block.kind === "paragraph" ? "normal" : "bold");
-      doc.setFontSize(block.fontSize);
       block.lines.forEach((line) => {
-        const isHeading = block.kind !== "paragraph";
-        const color = isHeading
-          ? EXECUTIVE_TITLE
-          : hasExplicitLossLanguage(line)
-          ? LOSS_TEXT_RED
-          : EXECUTIVE_TEXT;
-        doc.setTextColor(...color);
-        doc.text(line, M.x + 6, cursorY);
-        cursorY += block.lineHeight;
+        lineItems.push({
+          type: "line",
+          text: line,
+          kind: block.kind,
+          lineHeight: block.lineHeight,
+          fontSize: Math.max(10.8, block.fontSize),
+        });
       });
       if (blockIndex < renderBlocks.length - 1) {
-        cursorY += block.gapAfter;
+        lineItems.push({ type: "gap", height: block.gapAfter });
       }
     });
-    resetBodyFont(doc);
 
-    y += cardHeight + 13;
-  }
+    let cursor = 0;
+    let continued = false;
+    while (cursor < lineItems.length) {
+      drawHeadingWithFlow(continued);
 
-  if (decisionSection) {
-    newPage();
-    sectionIndex++;
+      const cardTop = y + 2;
+      const availableBottom = PAGE.h - FOOTER_H - 10;
+      const availableContentHeight = Math.max(24, availableBottom - (cardTop + 8));
+      let usedHeight = 0;
+      let takeUntil = cursor;
 
-    const frameX = M.x - 2;
-    const frameY = HEADER_H + 8;
-    const frameW = PAGE.w - frameX * 2;
-    const frameH = PAGE.h - frameY - FOOTER_H - 6;
-    const framePaddingX = M.x + 4;
-    const frameInnerWidth = frameW - 12;
+      while (takeUntil < lineItems.length) {
+        const item = lineItems[takeUntil];
+        const itemHeight = item.type === "gap" ? item.height : item.lineHeight;
+        if (usedHeight + itemHeight > availableContentHeight && takeUntil > cursor) break;
+        usedHeight += itemHeight;
+        takeUntil += 1;
+      }
 
-    doc.setFillColor(...DECISION_CONTRACT_BG);
-    doc.roundedRect(frameX, frameY, frameW, frameH, 3.2, 3.2, "F");
-    doc.setDrawColor(...DECISION_CONTRACT_BORDER);
-    doc.setLineWidth(DECISION_CONTRACT_BORDER_WIDTH_MM);
-    doc.roundedRect(frameX, frameY, frameW, frameH, 3.2, 3.2, "S");
+      const chunk = lineItems.slice(cursor, takeUntil);
+      const cardHeight = Math.max(24, 10 + usedHeight);
 
-    doc.setDrawColor(...SECTION_DIVIDER);
-    doc.setLineWidth(0.35);
-    doc.line(framePaddingX, frameY + 8.5, PAGE.w - framePaddingX, frameY + 8.5);
+      doc.setFillColor(...(isDecisionSection ? DECISION_CONTRACT_BG : EXECUTIVE_CARD));
+      doc.setDrawColor(...(isDecisionSection ? DECISION_CONTRACT_BORDER : EXECUTIVE_CARD_BORDER));
+      doc.setLineWidth(isDecisionSection ? DECISION_CONTRACT_BORDER_WIDTH_MM : 0.3);
+      doc.roundedRect(
+        M.x,
+        cardTop,
+        PAGE.w - M.x * 2,
+        cardHeight,
+        2.8,
+        2.8,
+        "FD"
+      );
 
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(14.2);
-    doc.setTextColor(...EXECUTIVE_TITLE);
-    doc.text(`${sectionIndex}. ${decisionSection.title}`, framePaddingX, frameY + 6.2);
-
-    const decisionBlocks = buildPdfNarrativeBlocks(
-      doc,
-      decisionSection.text,
-      frameInnerWidth - 2
-    );
-
-    let decisionY = frameY + 15;
-    for (let i = 0; i < decisionBlocks.length; i += 1) {
-      const block = decisionBlocks[i];
-      doc.setFont("helvetica", block.kind === "paragraph" ? "normal" : "bold");
-      doc.setFontSize(block.fontSize);
-      for (const line of block.lines) {
-        if (decisionY > frameY + frameH - 8) break;
-        const isHeading = block.kind !== "paragraph";
+      let cursorY = y + 10;
+      chunk.forEach((item) => {
+        if (item.type === "gap") {
+          cursorY += item.height;
+          return;
+        }
+        const isHeading = item.kind !== "paragraph";
+        const monthLine = /^maand\s+\d+/i.test(item.text);
+        const interventionLine = /^\d+\.\s*actie:/i.test(item.text);
+        const escalationLine = /^escalatiepad:/i.test(item.text);
+        const consequenceLine = /^gevolg\b|^gevolg bij missen\b/i.test(item.text);
+        const choiceLine = /^de keuze vandaag\b|^voorkeursoptie\b/i.test(item.text);
+        const pressureLine = /structurele druk/i.test(item.text);
         const color = isHeading
           ? EXECUTIVE_TITLE
-          : hasExplicitLossLanguage(line)
-          ? LOSS_TEXT_RED
+          : monthLine
+          ? BLUE
+          : interventionLine
+          ? ANTHRACITE
+          : escalationLine
+          ? ANTHRACITE
+          : pressureLine
+          ? GOLD
+          : consequenceLine
+          ? EXECUTIVE_TEXT
+          : choiceLine
+          ? BLUE
+          : hasExplicitLossLanguage(item.text)
+          ? EXECUTIVE_TEXT
           : EXECUTIVE_TEXT;
+        doc.setFont("helvetica", isHeading ? "bold" : "normal");
+        doc.setFontSize(item.fontSize);
         doc.setTextColor(...color);
-        doc.text(line, framePaddingX, decisionY);
-        decisionY += block.lineHeight;
-      }
+        if (escalationLine) {
+          doc.setDrawColor(...GOLD);
+          doc.setLineWidth(0.3);
+          doc.line(M.x + 6, cursorY - 3.2, PAGE.w - M.x - 6, cursorY - 3.2);
+        }
+        doc.text(item.text, M.x + 6, cursorY);
+        cursorY += item.lineHeight;
+      });
+      resetBodyFont(doc);
 
-      if (decisionY > frameY + frameH - 8) break;
-      if (i < decisionBlocks.length - 1) {
-        decisionY += block.gapAfter;
+      y = cardTop + cardHeight + 8;
+      cursor = takeUntil;
+      if (cursor < lineItems.length) {
+        newPage();
+        continued = true;
       }
     }
-    resetBodyFont(doc);
+    y += 1;
   }
 
-  doc.save(`${company.replace(/[^\w]+/g, "_")}_Aurelius_Report.pdf`);
+  doc.save(downloadFileName);
 }

@@ -92,7 +92,7 @@ function buildSystemPrompt(args: CallLLMArgs): string {
   const phase =
     args.phase
       ? `Huidige fase: ${args.phase.toUpperCase()}. Werk deze fase volledig uit.`
-      : "Volg strikt: diagnose → spanning → opties → trade-offs → besluit.";
+      : "Volg strikt: diagnose → spanning → opties → keuzeconflicten → besluit.";
 
   const agency =
     "Neem expliciete positie. Adviseer alsof jij eindverantwoordelijk bent.";

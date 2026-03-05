@@ -64,7 +64,7 @@ Return VALID JSON ONLY in this exact structure:
     }
   ],
   "structural_tensions": [
-    "Non-optimizable growth trade-off"
+    "Non-optimizable growth keuzeconflict"
   ],
   "missing_signals": [
     "Exact data required to increase diagnostic fidelity"

@@ -3,6 +3,11 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { normalizeAnalysisRow, normalizeReportRow } from "@/lib/types";
 import { upsertReportFromAnalysis } from "@/lib/run-analysis";
 import { renderPdfFromHtml } from "@/lib/pdf";
+import {
+  buildMemoryPdf,
+  getReportByAnalysisIdInMemory,
+  isMemoryBackendEnabled,
+} from "@/lib/dev-memory-backend";
 
 export const runtime = "nodejs";
 
@@ -12,6 +17,22 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     if (!analysisId) {
       return NextResponse.json({ error: "analysisId query param is required" }, { status: 400 });
+    }
+
+    if (isMemoryBackendEnabled()) {
+      const report = getReportByAnalysisIdInMemory(analysisId);
+      if (!report) {
+        return NextResponse.json({ error: "Report not found" }, { status: 404 });
+      }
+      const pdfBytes = buildMemoryPdf(analysisId);
+      return new NextResponse(Buffer.from(pdfBytes), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `attachment; filename="executive-report-${analysisId}.pdf"`,
+          "Cache-Control": "no-store",
+        },
+      });
     }
 
     const supabase = getSupabaseAdmin();

@@ -4,7 +4,7 @@
 // ADD ONLY • NO DOWNGRADES • FULLY TYPE-SAFE
 // ============================================================
 
-import type { ModelResult } from "../types";
+import type { ModelResult } from "@/aurelius/engine/types";
 
 /* ============================================================
    SAFE INTERNAL SHAPES (ADD ONLY)

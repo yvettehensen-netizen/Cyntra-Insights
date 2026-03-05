@@ -5,12 +5,12 @@ import Footer from "@/layouts/Footer";
 
 export default function PublicLayout() {
   return (
-    <>
+    <div className="public-theme">
       <PublicNavbar />
-      <main className="pt-20">
+      <main className="pt-20 bg-cyntra-primary text-cyntra-primary">
         <Outlet />
       </main>
       <Footer />
-    </>
+    </div>
   );
 }

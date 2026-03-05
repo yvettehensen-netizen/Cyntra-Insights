@@ -5,6 +5,11 @@ import {
   resolveUploadsById,
   saveUploadToSupabase,
 } from "@/lib/uploads";
+import {
+  isMemoryBackendEnabled,
+  resolveUploadsForQueryInMemory,
+  saveUploadInMemory,
+} from "@/lib/dev-memory-backend";
 
 export const runtime = "nodejs";
 
@@ -58,6 +63,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const organizationIdRaw = formData.get("organizationId");
     const organizationRaw = formData.get("organization");
 
+    if (isMemoryBackendEnabled()) {
+      const upload = await saveUploadInMemory({
+        organizationId:
+          typeof organizationIdRaw === "string" && organizationIdRaw.trim().length
+            ? organizationIdRaw
+            : undefined,
+        organization:
+          typeof organizationRaw === "string" && organizationRaw.trim().length
+            ? organizationRaw
+            : undefined,
+        file: fileValue,
+      });
+      return NextResponse.json({ upload }, { status: 201 });
+    }
+
     const organizationId = await resolveOrganizationId({
       organizationId:
         typeof organizationIdRaw === "string" && organizationIdRaw.trim().length
@@ -83,6 +103,26 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const analysisId = request.nextUrl.searchParams.get("analysisId");
     const organizationId = request.nextUrl.searchParams.get("organizationId");
     const uploadIdsRaw = request.nextUrl.searchParams.get("uploadIds");
+
+    if (isMemoryBackendEnabled()) {
+      const uploads = resolveUploadsForQueryInMemory({
+        analysisId: analysisId ?? undefined,
+        organizationId: organizationId ?? undefined,
+        uploadIds: uploadIdsRaw
+          ? uploadIdsRaw
+              .split(",")
+              .map((item) => item.trim())
+              .filter(Boolean)
+          : undefined,
+      });
+      if (analysisId || (organizationId && uploadIdsRaw)) {
+        return NextResponse.json({ uploads }, { status: 200 });
+      }
+      return NextResponse.json(
+        { error: "Gebruik analysisId of organizationId + uploadIds query params" },
+        { status: 400 }
+      );
+    }
 
     if (analysisId) {
       const uploads = await getUploadsForAnalysis({ analysisId });

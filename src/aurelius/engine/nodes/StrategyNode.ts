@@ -8,7 +8,7 @@
 // ✅ GEEN WORKAROUNDS
 // ✅ VOLLEDIG COMPATIBEL MET JOUW ENGINE
 
-import type { AnalysisContext, ModelResult } from "../../types";
+import type { AnalysisContext, ModelResult } from "@/aurelius/engine/types";
 
 /* ============================================================
    CONTEXT EXTRACTION (STRICT & SAFE)
@@ -64,9 +64,9 @@ const STRATEGY_SIGNALS_2026: StrategySignal[] = [
     weight: 4.3,
   },
   {
-    keywords: ["keuze", "keuzes", "trade-off", "tradeoff", "prioriteit"],
+    keywords: ["keuze", "keuzes", "keuzeconflict", "tradeoff", "prioriteit"],
     insight:
-      "⚖️ STRATEGISCHE KEUZES: Trade-offs worden expliciet benoemd.",
+      "⚖️ STRATEGISCHE KEUZES: Keuzeconflicten worden expliciet benoemd.",
     risk:
       "Zonder stop-doing lijst blijft strategie lek en ambigu.",
     opportunity:
@@ -122,7 +122,7 @@ const STRATEGY_SIGNALS_2026: StrategySignal[] = [
 ============================================================ */
 const STRATEGY_FRAMEWORKS_2026 = [
   "Playing to Win (Where to play / How to win)",
-  "Explicit Trade-offs & Stop-Doing Lists",
+  "Explicit Keuzeconflicten & Stop-Doing Lists",
   "Strategic Focus as Constraint",
   "Phased Growth Logic (Validate → Scale → Defend)",
   "Moat-Centric Strategy Design",

@@ -5,7 +5,7 @@ const PREFIX = "De Raad van Bestuur committeert zich aan:";
 
 const REQUIRED_LABELS = [
   "Keuze:",
-  "Accepted loss:",
+  "Expliciet verlies:",
   "Besluitrecht ligt bij:",
   "Stoppen per direct:",
   "Niet meer escaleren:",

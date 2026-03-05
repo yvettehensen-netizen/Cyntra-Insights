@@ -1,6 +1,7 @@
 // src/aurelius/engine/nodes/AureliusSyntheseNode.ts
 
 import type { AnalysisContext } from "../types";
+import { buildDualLayerOutput } from "../../synthesis/dualLayer";
 
 /* =========================
    Core contracts
@@ -26,6 +27,7 @@ export interface NodeResult {
     active_nodes?: number;
     risk_density?: number;
     opportunity_density?: number;
+    dual_layer?: ReturnType<typeof buildDualLayerOutput>;
   };
 }
 
@@ -132,6 +134,17 @@ export class AureliusSyntheseNode implements ExpertNode {
     /* ---------- Partial input handling ---------- */
 
     if (activeNodes < this.minActiveNodes) {
+      const dualLayer = buildDualLayerOutput({
+        dominante_these: insights.join(" "),
+        structurele_kernspanning: risks.join(" "),
+        onvermijdelijke_keuzes: recommendations.join(" "),
+        prijs_van_uitstel: risks.join(" "),
+        mandaat_besluitrecht: recommendations.join(" "),
+        onderstroom_informele_macht: insights.join(" "),
+        faalmechanisme: risks.join(" "),
+        interventieplan_90_dagen: recommendations.join(" "),
+        decision_contract: recommendations.join(" "),
+      });
       risks.push(
         `⚠️ Onvolledig strategisch beeld: slechts ${activeNodes} actieve analyses.`
       );
@@ -152,11 +165,13 @@ export class AureliusSyntheseNode implements ExpertNode {
         content: {
           strategic_posture: "adaptive_balance",
           active_nodes: activeNodes,
+          dual_layer: dualLayer,
         },
         metadata: {
           synthesis_quality: "partial",
           active_nodes: activeNodes,
           input_nodes: activeNodeNames,
+          dual_layer: dualLayer,
           upgrade_policy: "only",
           version: "ultimate-2026-v3",
         },
@@ -256,6 +271,18 @@ export class AureliusSyntheseNode implements ExpertNode {
       "4. Maandelijkse harde review: besluiten > discussie."
     );
 
+    const dualLayer = buildDualLayerOutput({
+      dominante_these: insights.join(" "),
+      structurele_kernspanning: risks.join(" "),
+      onvermijdelijke_keuzes: recommendations.join(" "),
+      prijs_van_uitstel: risks.join(" "),
+      mandaat_besluitrecht: recommendations.join(" "),
+      onderstroom_informele_macht: insights.join(" "),
+      faalmechanisme: risks.join(" "),
+      interventieplan_90_dagen: recommendations.join(" "),
+      decision_contract: recommendations.join(" "),
+    });
+
     /* ---------- Confidence synthesis ---------- */
 
     const avgInputConfidence =
@@ -283,11 +310,13 @@ export class AureliusSyntheseNode implements ExpertNode {
         active_nodes: activeNodes,
         risk_density: riskDensity,
         opportunity_density: opportunityDensity,
+        dual_layer: dualLayer,
       },
       metadata: {
         synthesis_quality: "high",
         active_nodes: activeNodes,
         input_nodes: activeNodeNames,
+        dual_layer: dualLayer,
         densities: {
           risk: riskDensity,
           opportunity: opportunityDensity,

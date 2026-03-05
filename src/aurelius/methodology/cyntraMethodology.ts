@@ -67,7 +67,7 @@ export const CYNTRA_METHOD = {
       mandate:
         "Formaliseren van bestuurlijke verantwoordelijkheid.",
       description:
-        "Het expliciete besluit inclusief trade-offs, stop-keuzes en persoonlijke aansprakelijkheid.",
+        "Het expliciete besluit inclusief keuzeconflicten, stop-keuzes en persoonlijke aansprakelijkheid.",
       output:
         "Een besluit dat niet kan worden teruggedraaid zonder reputatie- of machtsverlies.",
     },

@@ -1,6 +1,6 @@
 // src/aurelius/engine/nodes/strategy/StrategySynthesisNode.ts
 
-import type { AnalysisContext, ModelResult } from "../../../types";
+import type { AnalysisContext, ModelResult } from "@/aurelius/engine/types";
 
 /* =========================
    HARD SAFETY HELPERS

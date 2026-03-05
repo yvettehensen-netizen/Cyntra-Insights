@@ -1,153 +1,138 @@
 /* src/styles/print.css */
-/* Import dit bestand in je root layout of App.tsx voor perfecte PDF/print-output */
+
+section.print-report-section p {
+  margin-bottom: 0.8rem;
+  line-height: 1.45;
+  max-width: 75ch;
+}
+
+section.print-report-section h1,
+section.print-report-section h2,
+section.print-report-section h3 {
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+}
 
 @page {
   size: A4;
-  margin: 1.5cm 2cm;
-  @top-center {
-    content: "Cyntra Insights — Vertrouwelijk Rapport";
-    font-family: system-ui, sans-serif;
-    font-size: 10pt;
-    color: #333;
-  }
-  @bottom-center {
-    content: "Pagina " counter(page);
-    font-size: 9pt;
-    color: #666;
-  }
+  margin: 1.5cm 1.8cm;
 }
 
 @media print {
-  /* === Basis reset voor schone print === */
-  body {
-    background: white !important;
-    color: #000 !important;
-    font-family: Georgia, serif;
-    font-size: 11pt;
-    line-height: 1.6;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+  :root {
+    --cyntra-blue: #0E1A2B;
+    --cyntra-gold: #C6A94F;
+    --cyntra-anthracite: #2A2A2A;
+    --cyntra-lightgray: #F5F5F5;
   }
 
-  /* === Verberg alle UI-elementen die niet in print horen === */
+  html,
+  body {
+    background: #FFFFFF !important;
+    color: var(--cyntra-anthracite) !important;
+    font-size: 11.5pt !important;
+    line-height: 1.5 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
   nav,
   aside,
-  header > div:first-child, /* navbar */
+  header > div:first-child,
   button,
-  a[href]:empty,
   .no-print,
-  [class*="hover:"],
-  [class*="transition"],
-  footer .trust-footer {
-    display: none !important;
-  }
-
-  /* === Layout aanpassingen === */
-  .max-w-7xl,
-  .max-w-5xl,
-  .max-w-4xl {
-    max-width: none !important;
-    width: 100% !important;
-    padding: 0 !important;
-    margin: 0 auto !important;
-  }
-
-  /* === Typografie optimaliseren === */
-  h1 {
-    font-size: 24pt !important;
-    margin: 40pt 0 20pt 0 !important;
-    page-break-after: avoid;
-    color: #1a1a1a !important;
-  }
-
-  h2 {
-    font-size: 18pt !important;
-    margin: 30pt 0 15pt 0 !important;
-    page-break-after: avoid;
-    color: #333 !important;
-    border-bottom: 1pt solid #D4AF37;
-    padding-bottom: 8pt;
-  }
-
-  h3 {
-    font-size: 14pt !important;
-    margin: 20pt 0 10pt 0 !important;
-    page-break-after: avoid;
-  }
-
-  p, li {
-    orphans: 3;
-    widows: 3;
-    margin: 0 0 12pt 0 !important;
-  }
-
-  ul, ol {
-    padding-left: 20pt !important;
-    margin: 12pt 0 !important;
-  }
-
-  li {
-    margin-bottom: 8pt !important;
-  }
-
-  /* === Secties & cards schoonmaken === */
-  section,
-  div[class*="bg-black"],
-  div[class*="border"],
-  div[class*="rounded"],
-  div[class*="p-"],
-  div[class*="shadow"] {
-    background: none !important;
-    border: none !important;
-    border-top: 1pt solid #eee !important;
-    padding: 20pt 0 !important;
-    margin: 0 !important;
-    box-shadow: none !important;
-    page-break-inside: avoid;
-  }
-
-  /* === Specifieke Cyntra elementen === */
-  /* Goudaccenten subtiel in zwart-wit */
-  [class*="text-[#D4AF37]"],
-  [class*="text-amber"] {
-    color: #000 !important;
-    font-weight: bold !important;
-  }
-
-  /* Rode urgentie behouden (wordt grijs in print, maar blijft zichtbaar) */
-  [class*="text-red"] {
-    color: #000 !important;
-    font-weight: bold !important;
-  }
-
-  /* Icons verwijderen */
   svg {
     display: none !important;
   }
 
-  /* === Pagina breaks slim plaatsen === */
-  h1, h2 {
-    page-break-after: avoid;
+  .max-w-7xl,
+  .max-w-5xl,
+  .max-w-4xl,
+  .max-w-\[760px\] {
+    max-width: 75ch !important;
+    width: 100% !important;
+    margin: 0 auto !important;
   }
 
-  section {
-    page-break-inside: avoid;
+  h1,
+  h2,
+  h3 {
+    color: var(--cyntra-blue) !important;
+    page-break-after: avoid !important;
   }
 
-  /* Forceer nieuwe pagina na executive verdict als nodig */
-  .executive-verdict {
-    page-break-before: always;
+  h1 {
+    font-size: 23pt !important;
+    margin: 24pt 0 16pt 0 !important;
   }
 
-  /* === Footer trust statement behouden */
-  .trust-footer,
-  p:contains("Volledig vertrouwelijk") {
-    display: block !important;
-    text-align: center;
-    font-size: 9pt;
-    color: #666;
-    margin-top: 40pt;
-    border-top: 1pt solid #ddd;
-    padding-top: 10pt;
+  h2 {
+    font-size: 16pt !important;
+    margin: 22pt 0 10pt 0 !important;
+    border-bottom: 1px solid var(--cyntra-gold) !important;
+    padding-bottom: 6pt !important;
+  }
+
+  h3 {
+    font-size: 13.5pt !important;
+    margin: 18pt 0 8pt 0 !important;
+  }
+
+  p,
+  li {
+    color: var(--cyntra-anthracite) !important;
+    margin: 0 0 10pt 0 !important;
+    max-width: 65ch !important;
+    overflow-wrap: break-word !important;
+    word-break: break-word !important;
+    hyphens: auto !important;
+    white-space: normal !important;
+    orphans: 3;
+    widows: 3;
+  }
+
+  section.print-report-section {
+    page-break-before: always !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid-page !important;
+    margin-bottom: 1.5rem !important;
+    border-top: 1px solid var(--cyntra-gold) !important;
+    padding-top: 18pt !important;
+    background: #FFFFFF !important;
+    box-shadow: none !important;
+  }
+
+  .print-financial-block {
+    background: var(--cyntra-lightgray) !important;
+    border: 1px solid var(--cyntra-gold) !important;
+    padding: 12pt !important;
+  }
+
+  .print-financial-pressure {
+    color: var(--cyntra-gold) !important;
+    font-weight: 700 !important;
+  }
+
+  .print-escalation {
+    border-top: 1px solid var(--cyntra-gold) !important;
+    padding-top: 6pt !important;
+    color: var(--cyntra-anthracite) !important;
+    font-weight: 400 !important;
+  }
+
+  .print-keerzijde {
+    background: var(--cyntra-lightgray) !important;
+    border: 1px solid var(--cyntra-gold) !important;
+    padding: 10pt !important;
+  }
+
+  .print-keerzijde h3,
+  .print-keerzijde h4 {
+    color: var(--cyntra-gold) !important;
+  }
+
+  .print-day-number {
+    color: var(--cyntra-gold) !important;
+    font-weight: 700 !important;
   }
 }

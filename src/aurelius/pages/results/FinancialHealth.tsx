@@ -105,7 +105,7 @@ export default function FinancialHealth() {
         <ul className="space-y-3 text-gray-300">
           <li>• Margin pressure risk when scaling operations</li>
           <li>• Limited downside scenario buffers beyond 12 months</li>
-          <li>• Capital allocation trade-offs between growth and resilience</li>
+          <li>• Capital allocation keuzeconflicten between growth and resilience</li>
         </ul>
       </section>
     </ResultTemplate>

@@ -2,6 +2,7 @@ import { AlertTriangle } from "lucide-react";
 import type { GovernanceResponse, SriResponse } from "@/dashboard/executive/api/types";
 import type { PerformanceSurfaceModel } from "@/cyntra/performance-engine";
 import type { AggregatedSignals } from "@/cyntra/intelligence/types";
+import type { BoardIndexResult } from "@/aurelius/governance/BoardLegitimacyEngine";
 import DriftMatrix from "./DriftMatrix";
 import ExecutiveDecisionCard from "./ExecutiveDecisionCard";
 import GovernanceStatePanel from "./GovernanceStatePanel";
@@ -17,6 +18,10 @@ interface UnifiedSurfaceProps {
   performance: PerformanceSurfaceModel;
   freezeMode: boolean;
   pulse: boolean;
+  momentum?: number;
+  confidence?: number;
+  crisisMode?: boolean;
+  boardIndexOverride?: BoardIndexResult | null;
 }
 
 export default function UnifiedSurface({
@@ -26,6 +31,7 @@ export default function UnifiedSurface({
   performance,
   freezeMode,
   pulse,
+  boardIndexOverride,
 }: UnifiedSurfaceProps) {
   return (
     <div className="mx-auto max-w-[1380px] space-y-4 px-4 pb-10 md:px-8">
@@ -51,6 +57,7 @@ export default function UnifiedSurface({
           sri={sri}
           health={signals.strategic_health}
           decision={signals.decision_intelligence}
+          boardIndexOverride={boardIndexOverride}
         />
         <DriftMatrix drift={signals.drift} pattern={signals.pattern_learning} />
         <RiskTrajectory trajectory={signals.risk} evolution={signals.risk_evolution} />

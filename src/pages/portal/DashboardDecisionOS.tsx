@@ -12,6 +12,7 @@ import { useNavigate } from "react-router-dom";
 
 import { supabase } from "@/lib/supabaseClient";
 import { ANALYSES } from "@/aurelius/config/analyses.config";
+import { usePlatformApiBridge } from "./saas/usePlatformApiBridge";
 
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -55,13 +56,19 @@ function mapAnalysisTypeToSlug(analysisType: string): string | null {
   return match ? match[0] : null; // ✅ slug = object key
 }
 
+function fallbackId(prefix: string): string {
+  const stamp = Date.now().toString(36).toUpperCase();
+  const rand = Math.random().toString(36).slice(2, 8).toUpperCase();
+  return `${prefix}-${stamp}-${rand}`;
+}
+
 /* ============================================================================
    LOCAL LOADING SKELETON (NO shadcn dependency)
 ============================================================================ */
 
 function LoadingCard() {
   return (
-    <div className="rounded-2xl bg-white/5 border border-white/10 overflow-hidden">
+    <div className="rounded-2xl bg-cyntra-card overflow-hidden shadow-md">
       <div className="p-10 space-y-6">
         <div className="h-6 w-10 bg-white/10 rounded animate-pulse" />
         <div className="h-5 w-3/4 bg-white/10 rounded animate-pulse" />
@@ -79,6 +86,7 @@ function LoadingCard() {
 
 export default function DashboardDecisionOS() {
   const navigate = useNavigate();
+  const api = usePlatformApiBridge();
 
   const [decisions, setDecisions] = useState<DecisionBriefRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -86,30 +94,86 @@ export default function DashboardDecisionOS() {
   /* ================= FETCH ================= */
 
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-
-      const { data } = await supabase
-        .from("decision_briefs")
-        .select(
-          `
-          id,
-          analysis_type,
-          executive_thesis,
-          central_tension,
-          confidence_level,
-          irreversibility_deadline,
-          created_at
-        `
-        )
-        .order("created_at", { ascending: false })
-        .limit(6);
-
-      setDecisions(data ?? []);
-      setLoading(false);
+    const confidenceFromSession = (session: any): number | null => {
+      const predictions = Array.isArray(session?.intervention_predictions)
+        ? session.intervention_predictions
+        : [];
+      if (!predictions.length) return null;
+      const toScore = (value: string) => {
+        if (value === "hoog") return 0.85;
+        if (value === "laag") return 0.45;
+        return 0.65;
+      };
+      const total = predictions.reduce(
+        (sum: number, row: any) => sum + toScore(String(row?.confidence || "middel")),
+        0
+      );
+      return total / predictions.length;
     };
 
-    load();
+    const thesisFromSession = (session: any): string => {
+      const summary = String(session?.executive_summary || "").trim();
+      if (summary) return summary;
+      const firstLine = String(session?.board_report || "")
+        .split("\n")
+        .map((line) => line.trim())
+        .find(Boolean);
+      return firstLine || "Analyse voltooid";
+    };
+
+    const load = async () => {
+      setLoading(true);
+      try {
+        const { data } = await supabase
+          .from("decision_briefs")
+          .select(
+            `
+            id,
+            analysis_type,
+            executive_thesis,
+            central_tension,
+            confidence_level,
+            irreversibility_deadline,
+            created_at
+          `
+          )
+          .order("created_at", { ascending: false })
+          .limit(6);
+
+        if (Array.isArray(data) && data.length > 0) {
+          setDecisions(data);
+          return;
+        }
+      } catch {
+        // Fallback below
+      } finally {
+        try {
+          const sessions = await api.listSessions();
+          const mapped = (sessions || [])
+            .filter((row: any) => row?.status === "voltooid")
+            .slice(0, 6)
+            .map((row: any) => ({
+              id: String(row.session_id || row.id || fallbackId("sess")),
+              analysis_type: String(row.analysis_type || "Strategische analyse"),
+              executive_thesis: thesisFromSession(row),
+              central_tension: String(
+                row?.strategic_metadata?.probleemtype ||
+                  "Bestuurlijke spanning vereist prioritering."
+              ),
+              confidence_level: confidenceFromSession(row),
+              irreversibility_deadline: null,
+              created_at: String(row.analyse_datum || row.updated_at || new Date().toISOString()),
+            }));
+          setDecisions(mapped);
+          setLoading(false);
+        } catch {
+          setDecisions([]);
+          setLoading(false);
+        }
+      }
+    };
+
+    void load();
   }, []);
 
   /* ================= PRIORITY SLUG (NO .slug FIELD) ================= */
@@ -125,37 +189,39 @@ export default function DashboardDecisionOS() {
     return bestSlug; // ✅ slug = object key
   }, []);
 
+  const startPriorityAnalysis = () => {
+    navigate(`/portal/analyse/${prioritySlug || "strategy"}`);
+  };
+
   /* ============================================================================
      RENDER
   ============================================================================ */
 
   return (
-    <div className="min-h-screen w-full bg-gradient-to-br from-black via-[#07080d] to-[#111318] text-white px-6 md:px-14 py-14 space-y-16">
+    <div className="cyntra-shell w-full px-6 md:px-14 py-14 space-y-16">
       {/* ================= HEADER ================= */}
       <header className="space-y-6 max-w-5xl">
-        <p className="uppercase tracking-[0.45em] text-xs text-white/30">
+        <p className="uppercase tracking-[0.45em] text-xs text-cyntra-secondary">
           Cyntra · Decision OS
         </p>
 
-        <h1 className="text-4xl md:text-6xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-[#d4af37] via-[#ffd700] to-[#d4af37]">
+        <h1 className="text-4xl md:text-6xl font-semibold text-cyntra-gold tracking-[0.02em]">
           Bestuurlijke Besluiten
         </h1>
 
-        <p className="text-white/50 max-w-2xl leading-relaxed">
+        <p className="text-cyntra-secondary max-w-2xl leading-relaxed">
           Dit overzicht toont waar het bestuur nu móét kiezen. Elk besluit leidt
           direct naar de onderliggende analyse — geen ruis, geen omwegen.
         </p>
 
         {/* PRIMARY CTA — ALTIJD AANWEZIG */}
-        {prioritySlug && (
-          <button
-            onClick={() => navigate(`/portal/analyse/${prioritySlug}`)}
-            className="inline-flex items-center gap-3 rounded-xl bg-gradient-to-r from-[#d4af37] via-[#ffd700] to-[#d4af37] px-6 py-3 text-xs uppercase tracking-widest text-black hover:shadow-2xl transition-all"
-          >
-            <PlayCircle className="h-5 w-5" />
-            Start nieuwe analyse
-          </button>
-        )}
+        <button
+          onClick={startPriorityAnalysis}
+          className="btn-cyntra-primary text-xs uppercase tracking-widest"
+        >
+          <PlayCircle className="h-5 w-5" />
+          Start nieuwe analyse
+        </button>
       </header>
 
       {/* ================= LOADING ================= */}
@@ -169,26 +235,24 @@ export default function DashboardDecisionOS() {
 
       {/* ================= EMPTY STATE ================= */}
       {!loading && decisions.length === 0 && (
-        <section className="border border-[#d4af37]/30 rounded-2xl bg-black/70 p-12 space-y-6 max-w-3xl">
-          <AlertTriangle className="h-8 w-8 text-[#d4af37]" />
-          <h2 className="text-xl font-semibold text-[#d4af37]">
+        <section className="cyntra-panel max-w-3xl p-8 space-y-6">
+          <AlertTriangle className="h-8 w-8 text-cyntra-gold" />
+          <h2 className="text-xl font-semibold text-cyntra-gold">
             Geen actieve besluiten
           </h2>
-          <p className="text-white/50 leading-relaxed">
+          <p className="text-cyntra-secondary leading-relaxed">
             Er zijn nog geen bestuurlijke besluiten vastgelegd. Start een
             analyse om besluitvorming te activeren.
           </p>
 
-          {prioritySlug && (
-            <button
-              onClick={() => navigate(`/portal/analyse/${prioritySlug}`)}
-              className="inline-flex items-center gap-3 rounded-xl bg-gradient-to-r from-[#d4af37] via-[#ffd700] to-[#d4af37] px-6 py-3 text-xs uppercase tracking-widest text-black hover:shadow-2xl transition-all"
-            >
-              <PlayCircle className="h-5 w-5" />
-              Start analyse
-              <ArrowRight className="h-4 w-4" />
-            </button>
-          )}
+          <button
+            onClick={startPriorityAnalysis}
+            className="btn-cyntra-primary text-xs uppercase tracking-widest"
+          >
+            <PlayCircle className="h-5 w-5" />
+            Start analyse
+            <ArrowRight className="h-4 w-4" />
+          </button>
         </section>
       )}
 
@@ -202,31 +266,31 @@ export default function DashboardDecisionOS() {
             return (
               <div
                 key={d.id}
-                className="bg-gradient-to-r from-[#d4af37]/40 to-[#ffd700]/40 p-[1px] rounded-2xl"
+                className="cyntra-panel rounded-2xl shadow-md"
                 style={{ animationDelay: `${index * 80}ms` }}
               >
-                <Card className="bg-[#07080d] rounded-2xl h-full">
+                <Card className="bg-cyntra-card rounded-2xl h-full border-none">
                   <CardContent className="p-10 space-y-8">
                     {/* TOP */}
                     <div className="flex items-center justify-between">
-                      <Crown className="h-6 w-6 text-[#d4af37]" />
-                      <span className="text-[10px] uppercase tracking-widest text-white/40">
+                      <Crown className="h-6 w-6 text-cyntra-gold" />
+                      <span className="text-[10px] uppercase tracking-widest text-cyntra-secondary">
                         {d.analysis_type}
                       </span>
                     </div>
 
                     {/* CONTENT */}
                     <div className="space-y-4">
-                      <p className="text-lg font-semibold text-[#d4af37] leading-snug">
+                      <p className="text-lg font-semibold text-cyntra-gold leading-snug">
                         {d.executive_thesis}
                       </p>
-                      <p className="text-sm text-white/40 italic leading-relaxed">
+                      <p className="text-sm text-cyntra-secondary italic leading-relaxed">
                         {d.central_tension}
                       </p>
                     </div>
 
                     {/* META */}
-                    <div className="pt-4 border-t border-white/10 space-y-2 text-xs text-white/40">
+                    <div className="pt-4 border-t divider-cyntra space-y-2 text-xs text-cyntra-secondary">
                       <div className="flex items-center gap-2">
                         <Clock className="h-4 w-4" />
                         {new Date(d.created_at).toLocaleDateString("nl-NL")}
@@ -240,7 +304,7 @@ export default function DashboardDecisionOS() {
                       )}
 
                       {typeof d.confidence_level === "number" && (
-                        <div className="text-[#d4af37]">
+                        <div className="text-cyntra-gold">
                           Confidence: {(d.confidence_level * 100).toFixed(0)}%
                         </div>
                       )}
@@ -250,13 +314,13 @@ export default function DashboardDecisionOS() {
                     {slug ? (
                       <button
                         onClick={() => navigate(`/portal/analyse/${slug}`)}
-                        className="mt-4 w-full inline-flex items-center justify-center gap-3 rounded-xl bg-gradient-to-r from-[#d4af37] via-[#ffd700] to-[#d4af37] px-5 py-3 text-xs uppercase tracking-widest text-black hover:shadow-xl transition"
+                        className="btn-cyntra-primary mt-4 w-full text-xs uppercase tracking-widest"
                       >
                         Bekijk analyse
                         <ArrowRight className="h-4 w-4" />
                       </button>
                     ) : (
-                      <div className="mt-4 w-full rounded-xl border border-white/10 px-5 py-3 text-xs text-white/45">
+                      <div className="mt-4 w-full rounded-xl border divider-cyntra px-5 py-3 text-xs text-cyntra-secondary">
                         Geen route gevonden voor analysis_type:{" "}
                         <span className="text-white/70">{d.analysis_type}</span>
                       </div>
@@ -270,14 +334,14 @@ export default function DashboardDecisionOS() {
       )}
 
       {/* ================= UNDERSTREAM ================= */}
-      <section className="border border-[#d4af37]/30 rounded-2xl bg-black/80 p-12 max-w-4xl space-y-4">
+      <section className="cyntra-panel max-w-4xl p-8 space-y-4">
         <div className="flex items-center gap-3">
-          <Eye className="h-5 w-5 text-[#d4af37]" />
-          <h2 className="uppercase tracking-widest text-sm text-white/40">
+          <Eye className="h-5 w-5 text-cyntra-gold" />
+          <h2 className="uppercase tracking-widest text-sm text-cyntra-secondary">
             Onderstroom
           </h2>
         </div>
-        <p className="text-white/50 leading-relaxed">
+        <p className="text-cyntra-secondary leading-relaxed">
           Besluitvorming wordt vaak vertraagd door impliciete spanningen,
           onduidelijk eigenaarschap en uitstel dat zich vermomt als
           zorgvuldigheid. Cyntra maakt deze patronen expliciet vóórdat ze

@@ -5,6 +5,7 @@ export type CyntraInsightsPDFInput = {
   title: string;
   company: string;
   date: string;
+  contactPerson?: string;
   result: {
     executive_summary?: string;
     insights?: string[];
@@ -21,6 +22,7 @@ export async function generateCyntraInsightsPDF(
       title={input.title}
       company={input.company}
       date={input.date}
+      contactPerson={input.contactPerson}
       result={input.result}
     />
   ).toBlob();

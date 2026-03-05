@@ -7,7 +7,7 @@ const ROOT = process.cwd();
 
 const REQUIRED_FORBIDDEN_TOKENS = [
   "moet expliciet worden",
-  "trade-offs moeten",
+  "keuzeconflicten moeten",
   "nog niet voldoende",
   "zou kunnen",
   "lijkt erop dat",

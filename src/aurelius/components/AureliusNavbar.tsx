@@ -27,10 +27,10 @@ export default function AureliusNavbar() {
   }, [location.pathname]);
 
   const navClass = ({ isActive }: { isActive: boolean }) =>
-    `flex items-center gap-2 px-4 py-2 rounded-lg transition ${
+    `flex items-center gap-2 px-4 py-2 rounded-lg border transition ${
       isActive
-        ? "bg-[#D4AF37]/15 text-[#D4AF37]"
-        : "text-gray-300 hover:text-white hover:bg-white/5"
+        ? "text-cyntra-gold border-[#C4A762] bg-[#1a1f2a]"
+        : "text-cyntra-secondary border-white/5 hover:text-cyntra-primary hover:bg-[#181d27]"
     }`;
 
   async function handleLogout() {
@@ -47,15 +47,15 @@ export default function AureliusNavbar() {
   }
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-[9999] border-b border-white/10 bg-[#0A0A0A]/95 backdrop-blur-xl">
+    <header className="fixed top-0 left-0 right-0 z-[9999] border-b divider-cyntra bg-[#0f131b]/80 backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
         <NavLink to="/aurelius/control-surface" className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-[#8B1538] via-[#D4AF37] to-[#8B1538] font-bold text-black">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-[#d7bf84] to-[#b9924b] font-bold text-[#0F1114]">
             C
           </div>
           <div className="leading-tight">
-            <div className="text-sm font-bold text-white">CYNTRA</div>
-            <div className="text-[11px] text-[#D4AF37]">Bestuurlijke intelligentiecontrolelaag</div>
+            <div className="text-sm font-bold text-cyntra-primary">CYNTRA</div>
+            <div className="text-[11px] text-cyntra-gold">Bestuurlijke intelligentiecontrolelaag</div>
           </div>
         </NavLink>
 
@@ -65,7 +65,7 @@ export default function AureliusNavbar() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Zoek rapporten..."
-              className="w-full rounded-lg border border-white/10 bg-[#0F0F0F] px-4 py-2 text-white"
+            className="w-full rounded-lg border divider-cyntra bg-[#151b27] px-4 py-2 text-cyntra-primary"
             />
             <button className="absolute right-3 top-1/2 -translate-y-1/2" aria-label="Zoeken">
               <Search size={16} />
@@ -80,9 +80,9 @@ export default function AureliusNavbar() {
           </NavLink>
 
           {ENABLE_UNIFIED_SURFACE ? (
-            <NavLink to="/aurelius/board-test" className={navClass}>
+            <NavLink to="/aurelius/gebruikersinvoer" className={navClass}>
               <ClipboardList size={16} />
-              Bestuurlijke Adoptietest
+              Gebruikersinvoer
             </NavLink>
           ) : null}
 
@@ -106,7 +106,7 @@ export default function AureliusNavbar() {
           <button
             type="button"
             onClick={() => navigate("/aurelius/control-surface")}
-            className="inline-flex items-center gap-2 rounded-lg border border-[#D4AF37]/50 bg-[#D4AF37]/20 px-4 py-2 text-[#F1D98C] transition hover:bg-[#D4AF37]/30"
+            className="inline-flex items-center gap-2 rounded-lg border border-[#C4A762] bg-gradient-to-r from-[#c4a762] to-[#dcc587] px-4 py-2 text-[#0F1114] transition hover:brightness-110"
           >
             <PlayCircle size={16} />
             Start Bestuurlijke Intelligentie
@@ -114,20 +114,20 @@ export default function AureliusNavbar() {
 
           <button
             onClick={handleLogout}
-            className="flex items-center gap-2 rounded-lg px-4 py-2 text-red-400 transition hover:bg-red-500/10"
+            className="flex items-center gap-2 rounded-lg px-4 py-2 text-[#8B2E2E] transition hover:bg-[#8B2E2E]/10"
           >
             <LogOut size={16} />
             Uitloggen
           </button>
         </nav>
 
-        <button onClick={() => setMobileOpen(true)} className="text-gray-300 lg:hidden" aria-label="Menu openen">
+        <button onClick={() => setMobileOpen(true)} className="text-cyntra-secondary lg:hidden" aria-label="Menu openen">
           <Menu size={24} />
         </button>
       </div>
 
       {mobileOpen && (
-        <div className="fixed inset-0 z-50 bg-black/95 p-6 lg:hidden">
+        <div className="fixed inset-0 z-50 bg-[#0f131b] p-6 lg:hidden">
           <div className="mb-6 flex justify-between">
             <span className="font-semibold">Menu</span>
             <button onClick={() => setMobileOpen(false)} aria-label="Menu sluiten">
@@ -141,8 +141,8 @@ export default function AureliusNavbar() {
             </NavLink>
 
             {ENABLE_UNIFIED_SURFACE ? (
-              <NavLink to="/aurelius/board-test" className={navClass}>
-                Bestuurlijke Adoptietest
+              <NavLink to="/aurelius/gebruikersinvoer" className={navClass}>
+                Gebruikersinvoer
               </NavLink>
             ) : null}
 
@@ -155,7 +155,7 @@ export default function AureliusNavbar() {
             <button
               type="button"
               onClick={() => navigate("/aurelius/control-surface")}
-              className="flex w-full items-center gap-2 rounded-lg border border-[#D4AF37]/50 bg-[#D4AF37]/20 px-4 py-3 text-sm font-semibold text-[#F1D98C]"
+              className="flex w-full items-center gap-2 rounded-lg border border-[#C4A762] bg-[#C4A762] px-4 py-3 text-sm font-semibold text-[#0F1114]"
             >
               <PlayCircle size={18} />
               Start Bestuurlijke Intelligentie
@@ -171,7 +171,7 @@ export default function AureliusNavbar() {
 
             <button
               onClick={handleLogout}
-              className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-red-400 hover:bg-red-500/10"
+              className="flex w-full items-center gap-3 rounded-lg px-4 py-3 text-[#8B2E2E] hover:bg-[#8B2E2E]/10"
             >
               <LogOut size={18} />
               Uitloggen

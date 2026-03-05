@@ -3,15 +3,15 @@
 // AI BESLISSER — NEDERLANDS • BOARDROOM • EXECUTIVE KERNEL
 // ============================================================
 
-import { callAI } from "@/aurelius/engine/utils/callAI";
-import type { AureliusAnalysisResult } from "@/aurelius/engine/types/AureliusAnalysisResult";
+import { callAI } from "../engine/utils/callAI";
+import type { AureliusAnalysisResult } from "../engine/types/AureliusAnalysisResult";
 import type { BoardroomBrief } from "./types";
 import {
   CONCRETE_REPROMPT_DIRECTIVE,
   CYNTRA_SIGNATURE_LAYER_VIOLATION,
   enforceConcreteOutputMap,
   enforceConcreteString,
-} from "@/aurelius/narrative/guards/enforceConcreteOutput";
+} from "../narrative/guards/enforceConcreteOutput";
 import {
   HGBCO_MCKINSEY_SYSTEM_INJECT,
   HGBCO_MCKINSEY_USER_INJECT,
@@ -22,11 +22,12 @@ import {
   enforceUpperLowerStream,
   hasDecisionContractCommitBlock,
   hasForbiddenLanguage,
-} from "@/aurelius/narrative/guards/hgbcoMcKinseySpec";
+} from "../narrative/guards/hgbcoMcKinseySpec";
+import { formatHumanExecutiveText } from "./humanExecutiveFormatter";
+import { DECISION_CODEX_PROMPT } from "@/aurelius/prompts/decisionCodex.prompt";
 
 const SIGNATURE_LAYER_ERROR_TEXT = CYNTRA_SIGNATURE_LAYER_VIOLATION;
-const EXECUTIVE_PROMPT_INJECT =
-  "Genereer een strategische bestuursbriefing uitsluitend op basis van broncontext uit de aangeleverde analyse. Schrijf in natuurlijk Nederlands met concrete bovenstroom en onderstroom.";
+const EXECUTIVE_PROMPT_INJECT = DECISION_CODEX_PROMPT;
 const MANDATORY_GGZ_CASE_FACTS_BLOCK = `
 BRONDISCIPLINE:
 - Gebruik uitsluitend aantoonbare feiten uit de inputanalyse.
@@ -225,29 +226,13 @@ function extractOpportunityWindow(section: string, label: "30" | "90" | "365"): 
   return String(match[1] || "").trim();
 }
 
-function hasNineHgbcoSections(markdown: string): boolean {
+function hasEightCyntraSections(markdown: string): boolean {
   const matches = String(markdown ?? "").match(/^###\s*\d+\.\s+/gm) ?? [];
-  return matches.length === 9;
-}
-
-function hasAtoERatioForAllSections(markdown: string): boolean {
-  const sections = String(markdown ?? "")
-    .split(/\n(?=###\s*\d+\.\s+)/g)
-    .map((section) => section.trim())
-    .filter(Boolean);
-  if (sections.length !== 9) return false;
-  return sections.every((section) =>
-    ["A", "B", "C", "D", "E"].every((letter) =>
-      new RegExp(`^\\s*#{0,6}\\s*${letter}\\.`, "im").test(section)
-    )
-  );
+  return matches.length === 8;
 }
 
 function validateMcKinseyNarrativeRuntime(markdown: string) {
-  if (!hasNineHgbcoSections(markdown)) {
-    throw new Error(SIGNATURE_LAYER_ERROR_TEXT);
-  }
-  if (!hasAtoERatioForAllSections(markdown)) {
+  if (!hasEightCyntraSections(markdown)) {
     throw new Error(SIGNATURE_LAYER_ERROR_TEXT);
   }
   if (!hasDecisionContractCommitBlock(markdown)) {
@@ -279,27 +264,26 @@ function buildBriefHgbcoMarkdown(brief: BoardroomBrief): string {
     ? `Week 1-2: ${summary.intervention_plan_90d.week_1_2}\n\nWeek 3-6: ${summary.intervention_plan_90d.week_3_6}\n\nWeek 7-12: ${summary.intervention_plan_90d.week_7_12}`
     : "";
   const contract = summary?.decision_contract
-    ? `De Raad van Bestuur committeert zich aan:\n\nKeuze: ${summary.decision_contract.choice}\n\nMeasurable result: ${summary.decision_contract.measurable_result}\n\nTime horizon: ${summary.decision_contract.time_horizon}\n\nAccepted loss: ${summary.decision_contract.accepted_loss}`
-    : "De Raad van Bestuur committeert zich aan:";
+    ? `Het bestuur committeert zich aan het volgende besluit:\n\nKeuze: ${summary.decision_contract.choice}\n\nGeaccepteerd verlies: ${summary.decision_contract.accepted_loss}\n\nBesluitrecht ligt bij: ${summary.decision_contract.time_horizon}\n\nMaandelijkse KPI: ${summary.decision_contract.measurable_result}\n\nFailure trigger: Niet onderbouwd in geüploade documenten of vrije tekst.\n\nPoint of no return: Niet onderbouwd in geüploade documenten of vrije tekst.\n\nHerijkingsmoment: Niet onderbouwd in geüploade documenten of vrije tekst.\n\nDit betekent dat het bestuur nu moet kiezen voor ...`
+    : "Het bestuur committeert zich aan het volgende besluit:";
 
   return [
-    "### 1. DOMINANTE BESTUURLIJKE THESE",
+    "### 1. BESTUURLIJKE REALITEIT",
     dominant,
-    "### 2. HET KERNCONFLICT",
+    "### 2. HET ONVERMIJDELIJKE CONFLICT",
     conflict,
-    "### 3. EXPLICIETE TRADE-OFFS",
+    "### 3. WAT HIER WERKELIJK BOTST (MACHT & BELANG)",
     tradeoffs,
-    "### 4. OPPORTUNITY COST",
+    "### 4. DE PRIJS VAN UITSTEL",
     opportunity,
-    "### 5. GOVERNANCE IMPACT",
+    "### 5. HET PUNT WAAR HET ONOMKEERBAAR WORDT",
     governance,
-    "### 6. MACHTSDYNAMIEK & ONDERSTROOM",
+    "### 6. WAT DIT VAN MENSEN VRAAGT",
     power,
-    "### 7. EXECUTIERISICO",
+    "### 7. HET 90-DAGEN BESLUITPLAN",
     execution,
-    "### 8. 90-DAGEN INTERVENTIEPLAN",
+    "### 8. HET BESTUURLIJK CONTRACT",
     plan,
-    "### 9. DECISION CONTRACT",
     contract,
   ]
     .map((entry) => String(entry || "").trim())
@@ -330,7 +314,6 @@ function enforceMcKinseyBriefFields(
   const section6 = extractMarkdownSectionByNumber(markdown, 6);
   const section7 = extractMarkdownSectionByNumber(markdown, 7);
   const section8 = extractMarkdownSectionByNumber(markdown, 8);
-  const section9 = extractMarkdownSectionByNumber(markdown, 9);
 
   const anchors = collectCaseAnchorsFromAnalysis(analysis);
 
@@ -342,15 +325,15 @@ function enforceMcKinseyBriefFields(
   );
 
   summary.dominant_thesis = ensureMinimumCaseAnchors(
-    section1 || summary.dominant_thesis,
+    section1 || summary.dominant_thesis || "",
     anchors
   );
   summary.core_conflict = ensureMinimumCaseAnchors(
-    section2 || summary.core_conflict,
+    section2 || summary.core_conflict || "",
     anchors
   );
   summary.tradeoff_statement = ensureMinimumCaseAnchors(
-    section3 || summary.tradeoff_statement,
+    section3 || summary.tradeoff_statement || "",
     anchors
   );
   summary.opportunity_cost.days_30 =
@@ -365,36 +348,36 @@ function enforceMcKinseyBriefFields(
     extractOpportunityWindow(section4, "365") || summary.opportunity_cost.days_365;
 
   summary.governance_impact.decision_power = ensureMinimumCaseAnchors(
-    section5 || summary.governance_impact.decision_power,
+    section5 || summary.governance_impact.decision_power || "",
     anchors
   );
   summary.power_dynamics.who_loses_power = ensureMinimumCaseAnchors(
-    section6 || summary.power_dynamics.who_loses_power,
+    section6 || summary.power_dynamics.who_loses_power || "",
     anchors
   );
   summary.execution_risk.failure_point = ensureMinimumCaseAnchors(
-    section7 || summary.execution_risk.failure_point,
+    section7 || summary.execution_risk.failure_point || "",
     anchors
   );
 
-  const planW12 = section8.match(/Week\s*1\s*[-–]\s*2\s*:\s*([^\n]+)/i)?.[1] ?? "";
-  const planW36 = section8.match(/Week\s*3\s*[-–]\s*6\s*:\s*([^\n]+)/i)?.[1] ?? "";
-  const planW712 = section8.match(/Week\s*7\s*[-–]\s*12\s*:\s*([^\n]+)/i)?.[1] ?? "";
+  const planW12 = section7.match(/Week\s*1\s*[-–]\s*2\s*:\s*([^\n]+)/i)?.[1] ?? "";
+  const planW36 = section7.match(/Week\s*3\s*[-–]\s*6\s*:\s*([^\n]+)/i)?.[1] ?? "";
+  const planW712 = section7.match(/Week\s*7\s*[-–]\s*12\s*:\s*([^\n]+)/i)?.[1] ?? "";
   summary.intervention_plan_90d.week_1_2 = ensureMinimumCaseAnchors(
-    planW12 || summary.intervention_plan_90d.week_1_2,
+    planW12 || summary.intervention_plan_90d.week_1_2 || "",
     anchors
   );
   summary.intervention_plan_90d.week_3_6 = ensureMinimumCaseAnchors(
-    planW36 || summary.intervention_plan_90d.week_3_6,
+    planW36 || summary.intervention_plan_90d.week_3_6 || "",
     anchors
   );
   summary.intervention_plan_90d.week_7_12 = ensureMinimumCaseAnchors(
-    planW712 || summary.intervention_plan_90d.week_7_12,
+    planW712 || summary.intervention_plan_90d.week_7_12 || "",
     anchors
   );
 
-  const contractSection = section9 || "";
-  summary.decision_contract.opening_line = "De Raad van Bestuur committeert zich aan:";
+  const contractSection = section8 || "";
+  summary.decision_contract.opening_line = "Het bestuur committeert zich aan het volgende besluit:";
   summary.decision_contract.choice =
     contractSection.match(/^Keuze:\s*(.+)$/im)?.[1]?.trim() ||
     summary.decision_contract.choice;
@@ -402,9 +385,10 @@ function enforceMcKinseyBriefFields(
     contractSection.match(/^Maandelijkse KPI:\s*(.+)$/im)?.[1]?.trim() ||
     summary.decision_contract.measurable_result;
   summary.decision_contract.time_horizon =
-    contractSection.match(/^Herijking:\s*(.+)$/im)?.[1]?.trim() ||
+    contractSection.match(/^Herijkingsmoment:\s*(.+)$/im)?.[1]?.trim() ||
     summary.decision_contract.time_horizon;
   summary.decision_contract.accepted_loss =
+    contractSection.match(/^Geaccepteerd verlies:\s*(.+)$/im)?.[1]?.trim() ||
     contractSection.match(/^Accepted loss:\s*(.+)$/im)?.[1]?.trim() ||
     summary.decision_contract.accepted_loss;
 
@@ -443,7 +427,9 @@ function scrubForbiddenLanguage(text: string): string {
     [/\bsabotagepatronen\b/gi, "sabotagetechnieken"],
     [/\bcontext is schaars\b/gi, "context vraagt scherpe aannames"],
     [/\bwerk uit\b/gi, "maak concreet"],
-    [/\bmogelijk\b/gi, "waarschijnlijk"],
+    [/\bmogelijk\b/gi, "aannemelijk"],
+    [/\bwaarschijnlijk\b/gi, "aannemelijk"],
+    [/\bhet lijkt\b/gi, "dit toont"],
     [/\blijkt erop dat\b/gi, "toont"],
     [/\bzou kunnen\b/gi, "leidt tot"],
     [/\bmen zou\b/gi, "de top moet"],
@@ -522,7 +508,7 @@ function assertSignatureLayerCompliance(brief: BoardroomBrief) {
   }
 
   if (
-    contract.opening_line !== "De Raad van Bestuur committeert zich aan:" ||
+    contract.opening_line !== "Het bestuur committeert zich aan het volgende besluit:" ||
     !hasNonEmptyString(contract.choice) ||
     !hasNonEmptyString(contract.measurable_result) ||
     !hasNonEmptyString(contract.time_horizon) ||
@@ -706,6 +692,32 @@ function deepSanitizeResidualBrief<T>(value: T): T {
   return value;
 }
 
+function deepFormatHumanExecutiveBrief<T>(value: T, path = ""): T {
+  if (typeof value === "string") {
+    if (
+      path.endsWith("executive_summary_block.decision_contract.opening_line") ||
+      path.endsWith("executive_summary_block.signature_layer.adaptive_hardness_mode")
+    ) {
+      return value as T;
+    }
+    return formatHumanExecutiveText(value) as T;
+  }
+  if (Array.isArray(value)) {
+    return value.map((entry, index) =>
+      deepFormatHumanExecutiveBrief(entry, `${path}[${index}]`)
+    ) as T;
+  }
+  if (value && typeof value === "object") {
+    const output: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+      const nextPath = path ? `${path}.${key}` : key;
+      output[key] = deepFormatHumanExecutiveBrief(entry, nextPath);
+    }
+    return output as T;
+  }
+  return value;
+}
+
 function assertNoForbiddenLanguageInBrief(brief: BoardroomBrief) {
   const payload = JSON.stringify(brief);
   if (hasForbiddenGenericLanguage(payload)) {
@@ -717,6 +729,21 @@ function assertNoForbiddenLanguageInRawPayload(payload: unknown) {
   if (hasForbiddenGenericLanguage(JSON.stringify(payload))) {
     throw new Error(SIGNATURE_LAYER_ERROR_TEXT);
   }
+}
+
+function dedupeOpportunityWindows(parts: string[]): string[] {
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const part of parts) {
+    const normalized = String(part ?? "").trim().toLowerCase();
+    if (!normalized) continue;
+    const windowMatch = normalized.match(/\b(30|90|365)\s*dagen\b/);
+    const key = windowMatch ? windowMatch[0] : normalized;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(String(part).trim());
+  }
+  return unique;
 }
 
 function assertGGZSpecificDepthInBrief(
@@ -753,9 +780,9 @@ function enforceConcreteBrief(brief: BoardroomBrief): BoardroomBrief {
     const summary = brief.executive_summary_block;
     const sanitized = enforceConcreteOutputMap(
       {
-        dominantThesis: summary.dominant_thesis,
-        coreConflict: summary.core_conflict,
-        tradeoffs: summary.tradeoff_statement,
+        dominantThesis: summary.dominant_thesis || "",
+        coreConflict: summary.core_conflict || "",
+        tradeoffs: summary.tradeoff_statement || "",
         opportunityCost:
           `${summary.opportunity_cost.days_30 || summary.opportunity_cost.days_0}\n${summary.opportunity_cost.days_90}\n${summary.opportunity_cost.days_365}`,
         governanceImpact:
@@ -776,10 +803,12 @@ function enforceConcreteBrief(brief: BoardroomBrief): BoardroomBrief {
     summary.core_conflict = sanitized.coreConflict;
     summary.tradeoff_statement = sanitized.tradeoffs;
 
-    const [day30, day90, day365] = sanitized.opportunityCost
+    const [day30, day90, day365] = dedupeOpportunityWindows(
+      sanitized.opportunityCost
       .split("\n")
       .map((part) => part.trim())
-      .filter(Boolean);
+      .filter(Boolean)
+    );
     summary.opportunity_cost.days_30 =
       day30 || summary.opportunity_cost.days_30 || summary.opportunity_cost.days_0;
     summary.opportunity_cost.days_0 =
@@ -915,6 +944,7 @@ Produceer één bestuurlijke briefing die direct als basis dient voor een beslui
 
 INHOUDSEISEN:
 - Eén dominante these (maximaal 10 zinnen)
+- Vertaal capaciteit expliciet naar menselijk effect: behandelcontinuiteit, wachtlijst, behandeluitkomst en verwijzersvertrouwen
 - Eén niet-optimaliseerbaar kernconflict
 - Minimaal twee expliciete verliezen met tijdshorizon; EUR/% alleen indien brononderbouwd
 - Expliciete toets: versterkt of ondermijnt dit de besluitkracht van de top
@@ -929,10 +959,13 @@ INHOUDSEISEN:
 - Executierisico met concreet faalpunt, blocker en onderstroom
 - 90-dagen interventieplan met exact: week 1-2, week 3-6, week 7-12, inclusief owner, deliverable, KPI en escalatiepad per blok
 - 90-dagen interventieplan bevat dag-30, dag-60 en dag-90 beslisgates met meetbaar resultaat
-- Hard decision contract met exacte openingszin: De Raad van Bestuur committeert zich aan:
+- Hard decision contract met exacte openingszin: Het bestuur committeert zich aan het volgende besluit:
 - Contract bevat keuze + KPI + tijdshorizon + geaccepteerd verlies
 - Contract bevat expliciet: formeel machtsverlies, informeel machtsverlies, beslismonopolie, per-direct stop, niet-escalatie en verliesimpact
 - Contract bevat expliciet actor-impact (rolgevolg; €/% alleen met brononderbouwing)
+- Neem in governance-causaliteit letterlijk op: "Dan is het escalatiemoment geen marktrisico meer, maar een bestuurlijke keuze."
+- Neem in het contract letterlijk op: "Na dag 90 zonder volledige margekaart vervalt het mandaat om nieuwe initiatieven te starten automatisch, tenzij RvT schriftelijk herbevestigt."
+- Neem in de dominante these voor zorgcontext letterlijk op: "De combinatie van vaste tarieven, stijgende loonkosten en plafondcontracten maakt autonome groei rekenkundig onmogelijk zonder margeherstel."
 - Strategic narrative is doorlopend, menselijk en zonder copy-paste tussen secties
 
 REGELS:
@@ -993,7 +1026,7 @@ OUTPUT — STRICT JSON (VOLG EXACT):
       "week_7_12": string
     },
     "decision_contract": {
-      "opening_line": "De Raad van Bestuur committeert zich aan:",
+      "opening_line": "Het bestuur committeert zich aan het volgende besluit:",
       "choice": string,
       "measurable_result": string,
       "time_horizon": string,
@@ -1044,17 +1077,18 @@ OUTPUT — STRICT JSON (VOLG EXACT):
   const parseAndValidate = (raw: string): BoardroomBrief => {
     const rawParsed = JSON.parse(raw) as BoardroomBrief;
     assertNoForbiddenLanguageInRawPayload(rawParsed);
-    const parsed = deepSanitizeResidualBrief(
+    const validated = deepSanitizeResidualBrief(
       enforceMcKinseyBriefFields(
         sanitizeBriefLanguage(enforceConcreteBrief(rawParsed)),
         analysis
       )
     );
-    assertSignatureLayerCompliance(parsed);
-    assertExecutiveHardRequirements(parsed);
-    assertGGZSpecificDepthInBrief(parsed, enforceGGZDepth);
-    assertNoForbiddenLanguageInBrief(parsed);
-    return parsed;
+    assertSignatureLayerCompliance(validated);
+    assertExecutiveHardRequirements(validated);
+    assertGGZSpecificDepthInBrief(validated, enforceGGZDepth);
+    assertNoForbiddenLanguageInBrief(validated);
+    const formatted = deepFormatHumanExecutiveBrief(validated);
+    return formatted;
   };
 
   const raw = await callAI("gpt-4o", [

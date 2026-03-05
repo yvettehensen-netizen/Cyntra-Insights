@@ -1,176 +1,77 @@
-// ============================================================
-// CYNTRA ZORGSCAN™ — PUBLIC ENTRY (MARKETING TEASER)
-// Route: /zorgscan
-// Purpose: Trigger → Trust → Portal Unlock
-// ============================================================
-
-import { ArrowRight, Lock, ShieldAlert } from "lucide-react";
 import { Link } from "react-router-dom";
 
-export default function ZorgScanPreviewPage() {
+const cardClass =
+  "border border-[#D9D2C6] bg-white p-7 transition-all duration-300 hover:shadow-[0_18px_40px_-24px_rgba(31,35,40,0.45)] hover:-translate-y-0.5";
+
+function StickyRail() {
   return (
-    <div className="min-h-screen bg-black text-white px-8 py-24">
-      <div className="mx-auto max-w-6xl space-y-24">
-
-        {/* ================= HERO ================= */}
-        <header className="space-y-8 text-center">
-          <p className="text-[11px] uppercase tracking-[0.45em] text-white/25">
-            Cyntra ZorgScan™ — Boardroom Diagnostic
-          </p>
-
-          <h1 className="text-6xl font-bold leading-tight text-[#d4af37]">
-            Besluiten verdwijnen niet door gebrek aan advies.
-            <br />
-            Ze verdwijnen door structuur.
-          </h1>
-
-          <p className="text-lg text-white/50 max-w-3xl mx-auto leading-relaxed">
-            Cyntra toont exact waar governance besluitvorming laat verdampen —
-            voordat het cultuur wordt.
-          </p>
-
-          {/* CTA */}
-          <div className="flex justify-center pt-6">
-            <Link
-              to="/aurelius/login" // ✅ ADD ONLY (instead of /portal/zorg-scan)
-              state={{ from: "/portal/zorg-scan" }} // ✅ ADD ONLY (return target)
-              className="
-                inline-flex items-center gap-3
-                px-10 py-5 rounded-full
-                bg-[#d4af37] text-black font-semibold
-                hover:bg-[#e5c44c]
-                transition
-              "
-            >
-              Start ZorgScan™
-              <ArrowRight className="h-5 w-5" />
-            </Link>
-          </div>
-
-          <p className="flex items-center justify-center gap-2 text-xs text-white/30 pt-3">
-            <Lock className="h-4 w-4" />
-            Alleen beschikbaar in de besloten omgeving
-          </p>
-
-          {/* ======================================================
-              ✅ ADD ONLY — TRUST MARKERS (OPTIONAL FUTURE)
-          ====================================================== */}
-          {/*
-          <div className="flex justify-center gap-6 pt-6 text-xs text-white/20 uppercase tracking-widest">
-            <span>Governance-grade</span>
-            <span>Boardroom-only</span>
-            <span>No dashboards</span>
-          </div>
-          */}
-        </header>
-
-        {/* ================= VALUE BLOCK ================= */}
-        <section className="grid md:grid-cols-2 gap-10">
-
-          {/* Besluitvormingskaart */}
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-10 space-y-6 shadow-xl">
-            <ShieldAlert className="h-10 w-10 text-[#d4af37]" />
-
-            <h2 className="text-2xl font-semibold text-[#d4af37]">
-              Zorg Besluitvormingskaart™
-            </h2>
-
-            <p className="text-white/55 leading-relaxed">
-              Brengt de exacte fases in kaart waarin besluiten verdwijnen
-              tussen MT, bestuur en uitvoering.
-            </p>
-
-            <div className="border border-white/10 rounded-2xl p-5 bg-black/40 text-sm text-white/40">
-              → Trigger ontstaat  
-              → MT herhaalt  
-              → Ownership verdampt  
-              → Closure ontbreekt  
-              → Cyclus herstart
-            </div>
-          </div>
-
-          {/* Spanningskaart */}
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-10 space-y-6 shadow-xl">
-            <ShieldAlert className="h-10 w-10 text-[#d4af37]" />
-
-            <h2 className="text-2xl font-semibold text-[#d4af37]">
-              Zorg Spanningskaart™
-            </h2>
-
-            <p className="text-white/55 leading-relaxed">
-              Toont de structurele governance-spanningen die beslissingen blokkeren:
-              kwaliteit vs kosten, menselijkheid vs protocol.
-            </p>
-
-            <div className="border border-white/10 rounded-2xl p-5 bg-black/40 text-sm text-white/40">
-              ↔ Autonomie vs Hiërarchie  
-              ↔ Protocol vs Realiteit  
-              ↔ Strategie vs Incident  
-              ↔ Accountability vs Verdamping
-            </div>
-
-            {/* ======================================================
-                ✅ ADD ONLY — FUTURE CTA DIRECT TO SPANNINGSCAN
-            ====================================================== */}
-            {/*
-            <div className="pt-6">
-              <Link
-                to="/portal/zorg-spanning"
-                className="inline-flex items-center gap-2 text-xs text-[#d4af37] hover:underline"
-              >
-                Start Spanningskaart →
-              </Link>
-            </div>
-            */}
-          </div>
-        </section>
-
-        {/* ================= FINAL PUSH ================= */}
-        <section className="text-center space-y-8">
-          <h2 className="text-4xl font-bold">
-            Governance is geen cultuurprobleem.
-            <br />
-            Het is een besluitstructuurprobleem.
-          </h2>
-
-          <p className="text-white/45 max-w-3xl mx-auto leading-relaxed">
-            Cyntra geeft geen dashboards.  
-            Cyntra geeft geen managementtaal.  
-            Cyntra geeft één ding: structurele waarheid.
-          </p>
-
-          <Link
-            to="/portal"
-            className="
-              inline-flex items-center gap-3
-              px-12 py-6 rounded-full
-              border border-[#d4af37]/40
-              text-[#d4af37]
-              hover:bg-[#d4af37] hover:text-black
-              transition
-            "
-          >
-            Unlock Portal Entry
-            <ArrowRight className="h-5 w-5" />
-          </Link>
-
-          {/* ======================================================
-              ✅ ADD ONLY — FUTURE PRICING CONVERSION HOOK
-          ====================================================== */}
-          {/*
-          <p className="text-xs text-white/25 pt-4">
-            Bekijk toegang via <Link to="/prijzen" className="underline">Prijzen</Link>
-          </p>
-          */}
-        </section>
-
-        {/* FOOTNOTE */}
-        <footer className="text-center text-xs text-white/20 pt-10 border-t border-white/10">
-          Cyntra ZorgScan™ is diagnostic — geen advies.  
-          Alleen structurele boardroom-frictie.
-        </footer>
+    <aside className="lg:sticky lg:top-24 space-y-6">
+      <div className="border border-[#7A5C3E]/35 bg-white p-6">
+        <p className="text-xs uppercase tracking-[0.14em] text-[#7A5C3E] mb-3">Beslisgates</p>
+        <div className="space-y-3 text-sm text-[#3D4650]">
+          <p><strong>30 dagen</strong> — expliciete keuze</p>
+          <p><strong>60 dagen</strong> — mandaatverschuiving</p>
+          <p><strong>90 dagen</strong> — onomkeerbaarheid</p>
+        </div>
       </div>
-    </div>
+
+      <div className="border border-[#7A5C3E]/45 bg-[#FAF8F3] p-6">
+        <h3 className="text-xl font-semibold tracking-tight mb-2">Besloten omgeving</h3>
+        <p className="text-sm text-[#3D4650] mb-5">Toegang voor bestuur en adviseurs met mandaat.</p>
+        <div className="space-y-3">
+          <Link to="/contact" className="w-full inline-flex items-center justify-center px-4 py-3 rounded-md border border-[#D9D2C6] bg-white text-[#1F2328] text-sm font-medium hover:bg-[#F0ECE4] transition-colors">Plan een Bestuurlijke Intake</Link>
+          <Link to="/portal" className="w-full inline-flex items-center justify-center px-4 py-3 rounded-md bg-[#7A5C3E] text-white text-sm font-medium hover:bg-[#6A4F35] transition-colors">Ga naar Portal</Link>
+          <Link to="/aurelius/login" className="w-full inline-flex items-center justify-center px-4 py-3 rounded-md border border-[#7A5C3E] text-[#7A5C3E] text-sm font-medium hover:bg-[#7A5C3E] hover:text-white transition-colors">Login</Link>
+        </div>
+      </div>
+    </aside>
   );
 }
 
+export default function ZorgScanPreviewPage() {
+  return (
+    <div className="marketing-readable bg-[#F5F3EE] text-[#1F2328] min-h-screen">
+      <section className="max-w-7xl mx-auto px-6 pt-24 pb-16">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16">
+          <div>
+            <p className="text-sm uppercase tracking-[0.16em] text-[#7A5C3E] mb-8">Zorg</p>
+            <h1 className="text-4xl md:text-5xl font-semibold tracking-tight leading-[1.05] mb-6">
+              ZorgScan
+              <br />
+              Besluitdiscipline bij structurele zorgspanning
+            </h1>
+            <p className="text-xl text-[#3D4650] max-w-3xl leading-relaxed">
+              Parallelle agenda’s, capaciteitsdruk en diffuus besluitrecht worden bestuurlijk expliciet gemaakt.
+            </p>
+          </div>
+          <div className="hidden lg:block">
+            <StickyRail />
+          </div>
+        </div>
+      </section>
+
+      <section className="max-w-7xl mx-auto px-6 pb-24">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16">
+          <div className="space-y-6">
+            <article className={cardClass}>
+              <h2 className="text-3xl font-semibold tracking-tight">Structuur</h2>
+              <div className="mt-5 space-y-2 text-lg text-[#3D4650]">
+                <p>1. Spanning</p>
+                <p>2. Diagnose</p>
+                <p>3. Onvermijdelijke keuze</p>
+                <p>4. Interventiediscipline</p>
+                <p>5. Besloten omgeving</p>
+                <p>6. Decision Contract</p>
+                <p>7. Voor wie / Niet geschikt voor</p>
+                <p>8. Call to action</p>
+              </div>
+            </article>
+          </div>
+          <div className="lg:hidden">
+            <StickyRail />
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}

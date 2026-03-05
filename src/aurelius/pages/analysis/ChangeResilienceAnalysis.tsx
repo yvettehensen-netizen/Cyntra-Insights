@@ -177,7 +177,7 @@ export default function ChangeResilienceAnalysis() {
               type="file"
               accept=".pdf,.txt,.docx"
               onChange={handleFileChange}
-              className="hidden"
+              className="block w-full text-sm text-gray-200 file:mr-3 file:rounded-md file:border-0 file:bg-[#D4AF37] file:px-3 file:py-2 file:text-sm file:font-semibold file:text-black"
             />
 
             <Button

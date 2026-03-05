@@ -6,7 +6,7 @@
 // ✅ UPGRADE-ONLY
 // ✅ GEEN CASTS / GEEN WORKAROUNDS
 
-import type { AnalysisContext, ModelResult } from "../../types";
+import type { AnalysisContext, ModelResult } from "@/aurelius/engine/types";
 
 /* ============================================================
    CONTEXT EXTRACTION (STRICT & SAFE)

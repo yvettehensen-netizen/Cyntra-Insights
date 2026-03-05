@@ -4,9 +4,10 @@
 // ONLY /aurelius-analyze
 // ============================================================
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useCallback } from "react";
 import type { AnalysisType } from "@/aurelius/types";
 import type { Sector } from "@/aurelius/sector/types";
+import type { CyntraDualLayerOutput } from "@/aurelius/synthesis/dualLayer";
 
 /* ============================================================
    INPUT
@@ -29,6 +30,8 @@ export type RunCyntraResult = {
   report?: string;
   confidence?: "high" | "medium" | "low";
   created_at?: string;
+  intelligence_layer?: CyntraDualLayerOutput["intelligence_layer"];
+  decision_layer?: CyntraDualLayerOutput["decision_layer"];
 };
 
 /* ============================================================
@@ -40,13 +43,8 @@ export function useCyntraAnalysis() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<RunCyntraResult | null>(null);
 
-  const abortRef = useRef<AbortController | null>(null);
-
   const runCyntraAnalysis = useCallback(
     async (input: RunCyntraInput): Promise<RunCyntraResult> => {
-      abortRef.current?.abort();
-      abortRef.current = new AbortController();
-
       setLoading(true);
       setError(null);
       setResult(null);
@@ -59,22 +57,47 @@ export function useCyntraAnalysis() {
           throw new Error("Supabase env vars ontbreken");
         }
 
-        const res = await fetch(
-          `${baseUrl}/aurelius-analyze`,
-          {
+        const payload = JSON.stringify(input);
+
+        const res = await fetch(`${baseUrl}/aurelius-analyze`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${anonKey}`,
+            apikey: anonKey,
+          },
+          body: payload,
+        });
+
+        if (!res.ok) {
+          // Fallback for local API path when edge function rejects payload/auth.
+          const localRes = await fetch("/api/analyze", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              Authorization: `Bearer ${anonKey}`,
             },
-            body: JSON.stringify(input),
-            signal: abortRef.current.signal,
-          }
-        );
+            body: payload,
+          });
 
-        if (!res.ok) {
-          const txt = await res.text();
-          throw new Error(`Analyse faalde (${res.status}): ${txt}`);
+          if (!localRes.ok) {
+            const txt = await res.text();
+            throw new Error(`Analyse faalde (${res.status}): ${txt}`);
+          }
+
+          const localJson = await localRes.json();
+          if (localJson.success === false) {
+            throw new Error(localJson.error || "Analyse mislukt");
+          }
+
+          const localResult: RunCyntraResult = {
+            report: localJson.report,
+            confidence: localJson.confidence ?? "high",
+            created_at: localJson.created_at,
+            intelligence_layer: localJson.intelligence_layer,
+            decision_layer: localJson.decision_layer,
+          };
+          setResult(localResult);
+          return localResult;
         }
 
         const json = await res.json();
@@ -87,6 +110,8 @@ export function useCyntraAnalysis() {
           report: json.report,
           confidence: json.confidence ?? "high",
           created_at: json.created_at,
+          intelligence_layer: json.intelligence_layer,
+          decision_layer: json.decision_layer,
         };
 
         setResult(finalResult);
@@ -98,15 +123,12 @@ export function useCyntraAnalysis() {
         throw e;
       } finally {
         setLoading(false);
-        abortRef.current = null;
       }
     },
     []
   );
 
   const reset = useCallback(() => {
-    abortRef.current?.abort();
-    abortRef.current = null;
     setLoading(false);
     setError(null);
     setResult(null);

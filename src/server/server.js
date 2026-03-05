@@ -8,8 +8,10 @@ import sendReportRouter from "./sendReport.js";
 import aiRouter from "./ai.js";
 import intelligenceRouter from "./intelligence.js";
 import analysesRouter from "./analyses.js";
+import analyseJobsRouter from "./analyseJobs.js";
 import domainPersistenceRouter from "./domainPersistence.js";
 import sectorSignalsRouter from "./sector/signalsRoute.js";
+import platformRouter from "./platform.js";
 
 dotenv.config();
 
@@ -21,8 +23,10 @@ function attachApiRoutes(app) {
   app.use("/", sendReportRouter);
   app.use("/", aiRouter);
   app.use("/", analysesRouter);
+  app.use("/", analyseJobsRouter);
   app.use("/", domainPersistenceRouter);
   app.use("/", sectorSignalsRouter);
+  app.use("/", platformRouter);
   app.use("/intelligence", intelligenceRouter);
 }
 

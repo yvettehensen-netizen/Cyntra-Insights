@@ -48,6 +48,60 @@ export interface BoardroomBrief {
   strategic_narrative: string;
 
   /* ========================================================
+     EXECUTIVE SUMMARY BLOCK (OPTIONAL LEGACY COMPAT)
+  ======================================================== */
+  executive_summary_block?: {
+    dominant_thesis?: string;
+    core_conflict?: string;
+    tradeoff_statement?: string;
+    opportunity_cost: {
+      days_30?: string;
+      days_0?: string;
+      days_90?: string;
+      days_365?: string;
+      months_12?: string;
+    };
+    governance_impact: {
+      decision_power?: string;
+      escalation?: string;
+      responsibility_diffusion?: string;
+      power_centralization?: string;
+    };
+    power_dynamics: {
+      who_loses_power?: string;
+      informal_influence?: string;
+      expected_sabotage_patterns?: string;
+    };
+    execution_risk: {
+      failure_point?: string;
+      blocker?: string;
+      hidden_understream?: string;
+    };
+    signature_layer: {
+      decision_power_axis?: string;
+      structural_tension?: string;
+      explicit_loss?: string;
+      power_shift?: string;
+      time_pressure?: string;
+      cognitive_maturity_reflection?: string;
+      historical_repetition?: string;
+      adaptive_hardness_mode?: "klinisch" | "confronterend" | "strategisch_beheerst";
+    };
+    intervention_plan_90d: {
+      week_1_2?: string;
+      week_3_6?: string;
+      week_7_12?: string;
+    };
+    decision_contract: {
+      opening_line?: string;
+      choice?: string;
+      measurable_result?: string;
+      time_horizon?: string;
+      accepted_loss?: string;
+    };
+  };
+
+  /* ========================================================
      KEY TRADE-OFFS (EXPLICITLY MADE)
      No balance, no compromise
   ======================================================== */

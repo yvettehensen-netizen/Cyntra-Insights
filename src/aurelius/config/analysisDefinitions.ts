@@ -36,7 +36,7 @@ export const AURELIUS_ANALYSES: Record<string, AureliusAnalysis> = {
     title: "Strategische Analyse",
     subtitle: "Waar moet deze organisatie écht voor kiezen?",
     placeholder:
-      "Welke strategische keuzes worden vermeden? Waar zit de echte trade-off? Wat kost het als je niets doet?",
+      "Welke strategische keuzes worden vermeden? Waar zit de echte keuzeconflict? Wat kost het als je niets doet?",
     questions: [
       "Welke keuzes durft het leiderschap expliciet niet te maken?",
       "Waar groeit de organisatie zonder focus?",
