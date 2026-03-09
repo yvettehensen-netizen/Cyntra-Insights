@@ -3805,6 +3805,28 @@ function buildCaseAnchoredFactBase(
   return merged.slice(0, 8).join("\n");
 }
 
+function buildKnowledgeOrganizationInsight(
+  inputInsights: InputInsights,
+  organizationName?: string
+): { insight: string; mechanism: string; implication: string } | null {
+  const org = String(organizationName || "de organisatie").trim() || "de organisatie";
+  const hasKnowledgeSignals =
+    (inputInsights.leverage.devTimePct || 0) >= 20 &&
+    ((inputInsights.leverage.movementOfZeroKnown ?? false) ||
+      (inputInsights.leverage.licenseMarginKnown ?? false) ||
+      inputInsights.facts.some((fact) => /(kennis|project|licentie|netwerk|modeladoptie)/i.test(fact)));
+
+  if (!hasKnowledgeSignals) return null;
+
+  return {
+    insight: `${org} is geen zorgorganisatie die kennis ontwikkelt. Het is een kennisorganisatie die zorg levert.`,
+    mechanism:
+      "Waarde ontstaat niet alleen in behandeling, maar in ontwikkeltijd, overdraagbare methodiek, netwerkpositie en modelverspreiding.",
+    implication:
+      "Schaal moet primair via modeladoptie, kennisproducten en partners verlopen, niet via lineaire groei van behandelaars.",
+  };
+}
+
 function buildDutchReport(
   output: any,
   inputInsights: InputInsights,
@@ -3825,30 +3847,23 @@ function buildDutchReport(
   }>,
   organizationName?: string
 ): string {
-  const compact = (value: string, max = 320): string => {
+  const compact = (value: string, max = 220): string => {
     const text = normalize(value);
     if (text.length <= max) return text;
     return `${text.slice(0, max - 1).trimEnd()}…`;
   };
-  const killerInsights = buildKillerInsights(output, inputInsights, caseClassification);
-  const systemTransformation = inferSystemTransformationAssessment(
-    inputInsights,
-    caseClassification
-  );
-  const systemActors = inferSystemActorMapping(inputInsights, caseClassification);
-  const economicAssessment = inferEconomicAssessment(inputInsights, caseClassification);
-  const powerStructure = inferPowerStructure(inputInsights, systemTransformation);
+  const trimWords = (value: string, maxWords = 150): string => {
+    const words = normalize(value).split(/\s+/).filter(Boolean);
+    if (words.length <= maxWords) return words.join(" ");
+    return `${words.slice(0, maxWords).join(" ")}…`;
+  };
+  const systemTransformation = inferSystemTransformationAssessment(inputInsights, caseClassification);
   const thesis = buildStrategicThesis(
     inputInsights,
     caseClassification,
     strategicMode,
     mechanisms,
     systemTransformation,
-    organizationName
-  );
-  const leveragePoints = buildStrategicLeveragePoints(
-    inputInsights,
-    caseClassification,
     organizationName
   );
   const interventionActions = buildInterventionActions(output, inputInsights, caseClassification);
@@ -3858,33 +3873,14 @@ function buildDutchReport(
       : caseClassification === "SUCCESS_MODEL" && strategicMode === "PROTECT"
         ? "A"
         : inputInsights.preferredOption || output.decision.recommended_option;
-  const options =
+  const recommendedDirection =
     caseClassification === "SUCCESS_MODEL"
-      ? [
-          "A. Gecontroleerde groei (maximaal 5 FTE per jaar)\n   Financieel effect: voorspelbaar en beheersbaar\n   Operationeel effect: cultuur en kwaliteit blijven stabiel\n   Risico: impactgroei blijft begrensd.",
-          "B. Cellenmodel (repliceer kleine autonome units)\n   Financieel effect: schaalpotentieel met hogere opstartkosten\n   Operationeel effect: behoud van autonomie per unit\n   Risico: governance-complexiteit neemt toe.",
-          "C. Netwerkstrategie (impact zonder volumegroei)\n   Financieel effect: lagere kapitaaldruk dan volumegroei\n   Operationeel effect: impact groeit via partners\n   Risico: minder directe controle op uitvoering.",
-        ].join("\n")
-      : output.decision.strategic_options
-          .map((item) => `${item.code}. ${item.description}\n   Financieel effect: ${item.financial_effect}\n   Operationeel effect: ${item.operational_effect}\n   Risico: ${item.risk_profile}`)
-          .join("\n");
-  const compacteOpties =
-    caseClassification === "SUCCESS_MODEL"
-      ? [
-          "A. Gecontroleerde groei\nImplicatie: cultuur en kwaliteit blijven stabiel, maar impactgroei blijft begrensd.",
-          "B. Cellenmodel\nImplicatie: schaal via autonome eenheden, maar governance-complexiteit neemt toe.",
-          "C. Netwerkreplicatie\nImplicatie: impact groeit via partners, maar directe kwaliteitscontrole neemt af.",
-        ].join("\n\n")
-      : output.decision.strategic_options
-          .map((item) => `${item.code}. ${item.description}\nImplicatie: ${normalize(item.operational_effect || item.risk_profile || item.financial_effect)}`)
-          .join("\n\n");
-
-  const interventions = interventionActions
-    .map(
-      (item, index) =>
-        `${index + 1}. Actie: ${item.action}\nEigenaar: ${item.owner}\nDeadline: ${item.deadline}\nSuccescriterium: ${item.success}`
-    )
-    .join("\n\n");
+      ? gekozenOptie === "C"
+        ? "C — schaal via netwerkreplicatie met harde kwaliteits- en eigenaarschapsguardrails."
+        : gekozenOptie === "B"
+          ? "B — schaal via autonome cellen met centraal governancekader."
+          : "A — houd groei bewust begrensd om het kernmechanisme te beschermen."
+      : `Optie ${gekozenOptie} — kies de richting met de hoogste bestuurlijke beheersbaarheid en laagste directe schade.`;
   const structuredInterventions = buildStructuredInterventionBlock(
     interventionActions,
     inputInsights,
@@ -3894,221 +3890,126 @@ function buildDutchReport(
   const extraActions = inputInsights.actions.length
     ? `${inputInsights.actions.map((line, idx) => `${idx + 1}. ${line}`).join("\n")}\n\n`
     : "";
-  const interventionPlanSection = ensureMinimumInterventionActions(
+  const interventions = interventionActions
+    .map(
+      (item, index) =>
+        `${index + 1}. Actie: ${item.action}\nEigenaar: ${item.owner}\nDeadline: ${item.deadline}\nSuccescriterium: ${item.success}`
+    )
+    .join("\n\n");
+  const actieplan = ensureMinimumInterventionActions(
     structuredInterventions || extraActions,
     `${extraActions}${interventions}`,
-    15
+    10
   );
-  const predicted = predictedInterventions
+  const feitenbasis = Array.from(
+    new Set(
+      buildCaseAnchoredFactBase(inputInsights, caseClassification)
+        .split("\n")
+        .map((line) => normalize(line))
+        .filter(Boolean)
+    )
+  )
+    .slice(0, 6)
+    .map((line) => `- ${line}`)
+    .join("\n");
+  const knowledgeInsight = buildKnowledgeOrganizationInsight(inputInsights, organizationName);
+  const killerInsights = [
+    knowledgeInsight,
+    {
+      insight: `${String(organizationName || "De organisatie").trim() || "De organisatie"} heeft geen capaciteitsprobleem maar een replicatieprobleem.`,
+      mechanism: compact(mechanisms.scaleMechanism, 180),
+      implication: "Schaal moet via modeladoptie en partners verlopen, niet via extra capaciteit alleen.",
+    },
+    ...buildKillerInsights(output, inputInsights, caseClassification).map((item) => ({
+      insight: compact(item.title, 180),
+      mechanism: compact(item.mechanism, 180),
+      implication: compact(item.implication, 180),
+    })),
+  ]
+    .filter((item): item is { insight: string; mechanism: string; implication: string } => Boolean(item))
+    .slice(0, 5)
+    .map(
+      (item, index) =>
+        `Inzicht ${index + 1}\nINZICHT\n${item.insight}\nMECHANISME\n${item.mechanism}\nIMPLICATIE\n${item.implication}`
+    )
+    .join("\n\n");
+  const strategischeInterventies = predictedInterventions
     .slice(0, 3)
     .map(
       (item, index) =>
-        `${index + 1}. Interventie: ${item.interventie}\nImpact: ${item.impact}\nRisico: ${item.risico}\nKPI-effect: ${item.kpi_effect}\nConfidence: ${item.confidence}`
+        `Interventie ${index + 1}\nInterventie: ${normalize(item.interventie)}\nMechanisme: ${compact(item.impact, 180)}\nKPI: ${compact(item.kpi_effect, 160)}\nRisico: ${compact(item.risico, 160)}`
     )
     .join("\n\n");
-  const compacteInterventies = predictedInterventions
-    .slice(0, 3)
-    .map(
-      (item, index) =>
-        `Interventie ${index + 1}\nActie: ${normalize(item.interventie)}\nMechanisme: ${compact(item.impact, 180)}\nKPI: ${compact(item.kpi_effect, 160)}`
-    )
+  const vroegsignalen = [
+    inputInsights.leverage.waitlistShortPathPct != null
+      ? `Indicator: Kort-trajectuitstroom\nNorm: >= 20% binnen 12 maanden\nRisico: wachtdruk blijft structureel\nActie: schaal triage op als de uitstroom twee meetperiodes onder norm blijft`
+      : "",
+    inputInsights.leverage.growthCapFte != null
+      ? `Indicator: Groei t.o.v. groeicap\nNorm: <= ${inputInsights.leverage.growthCapFte} FTE per jaar\nRisico: cultuur- en eigenaarschapserosie\nActie: leg groei boven de cap altijd voor aan het bestuur`
+      : "",
+    inputInsights.leverage.agingCostPct != null
+      ? `Indicator: Loonkostendruk\nNorm: binnen begrotingskader\nRisico: marge verslechtert sneller dan contractruimte\nActie: versnel netwerk- of licentie-inkomsten bij overschrijding`
+      : "",
+    `Indicator: Partnerkwaliteit\nNorm: boven afgesproken kwaliteitsdrempel\nRisico: kwaliteitsvariatie bij netwerkreplicatie\nActie: pauzeer nieuwe partners bij twee opeenvolgende afwijkingen`,
+  ]
+    .filter(Boolean)
+    .slice(0, 4)
     .join("\n\n");
-
-  const kpis = [
-    ...(caseClassification === "SUCCESS_MODEL"
-      ? [
-          "1. Ziekteverzuim en uitstroom (maandelijks)",
-          "2. Aandeel medewerkers met participatie/eigenaarschap",
-          "3. Mentorbelasting en kwaliteit van inwerktrajecten",
-          "4. Groei t.o.v. afgesproken FTE-cap",
-          "5. Netwerkimpact: bereik, verwijzingen en kwaliteitsscore",
-        ]
-      : [
-          "1. Cash-runway (maanden)",
-          "2. Marge-ontwikkeling per maand",
-          "3. Capaciteitsdruk en wachttijd",
-          "4. Contractplafond-benutting",
-          "5. Interventie-slaagratio",
-        ]),
-  ].join("\n");
-
-  const anchoredFactBase = buildCaseAnchoredFactBase(inputInsights, caseClassification);
-  const feitenbasis = anchoredFactBase
-    ? anchoredFactBase
-    : `${output.diagnosis.financial_pressure}. ${output.diagnosis.organizational_constraints}. ${output.diagnosis.market_constraints}.`;
-  const mechanismSection = [
-    "DOMINANT MECHANISM",
-    `Het succes van ${String(organizationName || "de organisatie").trim() || "de organisatie"} wordt primair veroorzaakt door: ${compact(mechanisms.successMechanism, 260)}`,
-    `Dit mechanisme creëert: ${compact(mechanisms.behaviorMechanism, 220)}`,
-    `Strategische implicatie: ${compact(mechanisms.scaleMechanism, 220)}`,
-  ].join("\n");
-  const misdiagnosisSection = [
-    "MISDIAGNOSIS INSIGHT",
-    `De organisatie probeert ${compact(conflict.sideA.toLowerCase(), 120)} op te lossen.`,
-    `Maar het onderliggende probleem is ${compact(mechanisms.scaleMechanism.toLowerCase(), 160)}.`,
-    "Zolang dit mechanisme niet wordt aangepast, blijft het probleem terugkeren.",
-  ].join("\n");
-  const conflictSection = [
-    "STRATEGISCH CONFLICT",
-    "CONFLICT",
-    conflict.sideA,
-    "vs",
-    conflict.sideB,
-    "",
-    `Prijs van de keuze: ${compact(conflict.explicitLoss || conflict.forcingChoice, 220)}`,
-  ].join("\n");
-  const recommendedDirection =
-    caseClassification === "SUCCESS_MODEL"
-      ? gekozenOptie === "C"
-        ? "C — schaal via netwerkreplicatie met expliciete kwaliteits- en eigenaarschapsguardrails."
-        : gekozenOptie === "B"
-          ? "B — schaal via autonome cellen met een hard governancekader."
-          : "A — houd groei bewust begrensd om het kernmechanisme te beschermen."
-      : `Optie ${gekozenOptie} — volg de richting met de laagste directe schade en hoogste bestuurlijke beheersbaarheid.`;
-  const tradeoffSection = [
-    "KEERZIJDE VAN DE KEUZE",
-    `Als we kiezen voor ${recommendedDirection.replace(/\.$/, "")}:`,
-    "",
-    `Dan accepteren we dat: ${compact(conflict.explicitLoss || "niet alle doelen tegelijk maximaal haalbaar zijn.", 220)}`,
-    "",
-    `Dit vereist: ${compact(conflict.forcingChoice || "strakke governance, discipline en expliciete stopregels.", 200)}`,
-  ].join("\n");
-  const noInterventionSection = [
-    "SCENARIO: GEEN INTERVENTIE",
-    "Als er geen strategische interventie plaatsvindt:",
-    "",
-    `Capaciteit: ${compact(output.diagnosis.organizational_constraints, 160)}`,
-    `Financiën: ${compact(output.diagnosis.financial_pressure, 160)}`,
-    `Strategische positie: ${compact(output.diagnosis.market_constraints, 160)}`,
-    "",
-    "BESTUURLIJKE CONSEQUENTIE",
-    "Uitstel vergroot het risico dat bestuurlijke regie verschuift naar operationele brandbestrijding.",
-  ].join("\n");
-  const appendixSection = [
-    "APPENDIX",
-    "",
-    "Scenario simulaties",
-    buildStrategySimulationBlock(strategySimulation),
-    "",
-    "Governance analyse",
-    `Wie beslist: ${systemTransformation.decisionPower}`,
-    `Wie betaalt: ${systemTransformation.paymentPower}`,
-    `Wie blokkeert: ${systemTransformation.blockingPower}`,
-    "",
-    "Risico- en vroegsignalen",
-    kpis,
-    "",
-    "Decision memory",
-    `Aanbevolen optie: ${gekozenOptie}`,
-    `Board vraag: ${thesis.boardQuestion}`,
-    "",
-    "Technische context",
-    `Patroon: ${formatStrategicPatternLabel(patternProfile.primary_pattern)}${patternProfile.secondary_pattern ? ` + ${formatStrategicPatternLabel(patternProfile.secondary_pattern)}` : ""}`,
-    `Rationale: ${pattern.rationale}`,
-    `Strategisch vliegwiel: ${compact(flywheel.narrative, 500)}`,
-  ].join("\n");
-
+  const executiveSamenvatting = trimWords(
+    [
+      thesis.dominantThesis,
+      caseClassification === "SUCCESS_MODEL"
+        ? "De schaaldoorbraak ligt niet in meer capaciteit, maar in modeladoptie, netwerkreplicatie en strakke governance."
+        : `De kernhypothese is dat schaal of herstel alleen werkt als het onderliggende mechanisme expliciet wordt aangepast.`,
+      `Aanbevolen richting: ${recommendedDirection}`,
+    ].join(" "),
+    150
+  );
+  const hypothese = knowledgeInsight
+    ? `De kernhypothese is dat ${String(organizationName || "de organisatie").trim() || "de organisatie"} strategisch meer lijkt op een kennisorganisatie met zorguitvoering dan op een volumegedreven zorgorganisatie.`
+    : "De kernhypothese is dat volumegroei het schaalvraagstuk niet oplost, omdat de kwaliteit wordt gedragen door eigenaarschap, cultuur en overdraagbare werkwijze.";
   return [
     "BESTUURLIJKE ANALYSE & INTERVENTIE",
     `Organisatie: ${String(organizationName || "Onbekende organisatie").trim() || "Onbekende organisatie"}`,
     "Analyse: Strategische analyse",
-    `CYNTRA EXECUTIVE DOSSIER • Bestuursversie • vertrouwelijk`,
+    "CYNTRA EXECUTIVE DOSSIER • Bestuursversie • vertrouwelijk",
     "",
-    "DOMINANTE THESE",
-    thesis.dominantThesis,
+    "EXECUTIVE SAMENVATTING",
+    executiveSamenvatting,
     "",
-    mechanismSection,
+    "BESTUURLIJKE HYPOTHESE",
+    hypothese,
     "",
-    "BOARDROOM INSIGHT",
-    thesis.killerInsight,
+    "FEITENBASIS",
+    feitenbasis,
     "",
-    misdiagnosisSection,
+    "STRATEGISCH CONFLICT",
+    "A",
+    conflict.sideA,
     "",
-    conflictSection,
+    "B",
+    conflict.sideB,
     "",
-    "BESTUURLIJKE KEUZE",
-    compacteOpties,
+    `Spanning A: ${conflict.sideA}`,
+    `Spanning B: ${conflict.sideB}`,
+    `Besluittest: ${conflict.forcingChoice}`,
     "",
-    "AANBEVOLEN RICHTING",
-    recommendedDirection,
-    "",
-    tradeoffSection,
-    "",
-    "INTERVENTIES",
-    compacteInterventies || "Interventies volgen na aanvullende data.",
-    "",
-    noInterventionSection,
-    "",
-    "WIJ BESLUITEN",
-    thesis.decisions.map((line) => `- ${line}`).join("\n") || `- Optie ${gekozenOptie} is bestuurlijke prioriteit.`,
+    `Prijs van de keuze: ${compact(conflict.explicitLoss || conflict.forcingChoice, 220)}`,
     "",
     "BESTUURLIJKE VRAAG",
     thesis.boardQuestion,
     "",
-    "SAMENVATTING",
-    `Aanbevolen optie: ${gekozenOptie}`,
-    caseClassification === "SUCCESS_MODEL"
-      ? "Reden: impact vergroten zonder het eigenaarschapsmechanisme en de cultuurkwaliteit te breken."
-      : "Reden: laagste kans op direct financieel en operationeel verlies onder huidige druk.",
+    "KILLER INSIGHTS",
+    killerInsights,
     "",
-    "1. Besluitvraag",
-    thesis.boardQuestion,
+    "STRATEGISCHE INTERVENTIES",
+    strategischeInterventies || "Interventies volgen na aanvullende data.",
     "",
-    "2. Bestuurlijke these",
-    thesis.dominantThesis,
+    "90 DAGEN ACTIEPLAN",
+    actieplan || "Actieplan volgt na aanvullende data.",
     "",
-    "3. Feitenbasis",
-    feitenbasis,
-    "",
-    "4. Strategische opties",
-    compacteOpties,
-    "",
-    "Het kernconflict",
-    conflict.conflictStatement,
-    `Spanning A: ${conflict.sideA}`,
-    `Spanning B: ${conflict.sideB}`,
-    `Forcing choice: ${conflict.forcingChoice}`,
-    `Expliciet verlies: ${conflict.explicitLoss}`,
-    "",
-    "5. Aanbevolen keuze",
-    `Aanbevolen optie: ${gekozenOptie}`,
-    recommendedDirection,
-    "",
-    "Strategische hefbomen",
-    leveragePoints
-      .map(
-        (point, idx) =>
-          `${idx + 1}. ${point.title}\nMechanisme: ${point.mechanism}\nCase datapoint: ${point.caseDatapoint}\nStrategische hefboom: ${point.leverageType}\nInterventiehefboom: ${point.intervention}\nDoel: ${point.target}\nImpact: ${point.impact}`
-      )
-      .join("\n\n"),
-    "",
-    "Killer insights",
-    killerInsights
-      .map(
-        (item, index) =>
-          `${index + 1}. ${item.title}\nMechanisme: ${item.mechanism}\nStrategische implicatie: ${item.implication}`
-      )
-      .join("\n\n"),
-    "",
-    "6. Niet-onderhandelbare besluitregels",
-    output.decision.tradeoffs.join("\n") || "Besluitregels nog niet expliciet afgeleid.",
-    "",
-    "7. 90-dagen interventieplan",
-    interventionPlanSection || "Interventieadvies volgt na aanvullende data.",
-    "",
-    "Voorspelde interventies op basis van historische patronen",
-    predicted || "Nog geen voorspellende interventies beschikbaar.",
-    "",
-    "8. KPI monitoring",
-    kpis,
-    "",
-    "9. Besluittekst",
-    `Wij besluiten de aanbevolen optie ${gekozenOptie} uit te voeren met expliciete eigenaarschap- en escalatieregels binnen 90 dagen.`,
-    "",
-    "Open vragen",
-    buildTailoredOpenQuestions(inputInsights, organizationName),
-    "",
-    appendixSection,
+    "VROEGSIGNALERING",
+    vroegsignalen,
   ].join("\n").trim();
 }
 

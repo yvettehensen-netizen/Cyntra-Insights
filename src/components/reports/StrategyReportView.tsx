@@ -30,15 +30,8 @@ export default function StrategyReportView({ model }: StrategyReportViewProps) {
       <section className="rounded-xl border border-white/10 bg-gradient-to-b from-[#131c30] to-[#0c1322] p-5">
         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#D4AF37]">Strategisch Rapport</p>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-300">
-          Deze laag bundelt de bestuurlijke onderbouwing in leesbare vorm: samenvatting, killer insights, kernconflict,
-          interventies, feitenbasis en hypothese.
+          Dit document toont de volledige bestuurlijke analyse in één lijn, zonder technische moduledumps of dubbele besluitlagen.
         </p>
-        <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4">
-          <p className="text-[11px] uppercase tracking-[0.14em] text-[#9BB0CE]">Samenvatting</p>
-          <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-[#E6EDF8]">
-            {model.executiveSummary || "Samenvatting niet beschikbaar."}
-          </p>
-        </div>
       </section>
 
       <div className="grid gap-4">

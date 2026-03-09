@@ -88,6 +88,15 @@ function parseMemoSections(value: string): MemoSection[] {
   const text = sanitizeDisplayText(value);
   if (!text) return [];
   const headings = [
+    "EXECUTIVE SAMENVATTING",
+    "BESTUURLIJKE HYPOTHESE",
+    "FEITENBASIS",
+    "KILLER INSIGHTS",
+    "STRATEGISCHE INTERVENTIES",
+    "90 DAGEN ACTIEPLAN",
+    "VROEGSIGNALERING",
+    "BESTUURLIJKE VRAAG",
+    "BESTUURLIJKE ANALYSE & INTERVENTIE",
     "DOMINANTE THESE",
     "DOMINANT MECHANISM",
     "BOARDROOM INSIGHT",
@@ -332,15 +341,14 @@ function compactNoIntervention(text: string): string {
 function buildStrategySections(reportSections: MemoSection[], memoSections: MemoSection[]): ReportSection[] {
   const source = reportSections.length ? reportSections : memoSections;
   const preferredTitles = [
-    "BOARDROOM INSIGHT",
-    "MISDIAGNOSIS INSIGHT",
-    "KEERZIJDE VAN DE KEUZE",
-    "INTERVENTIES",
-    "Bestuurlijke hypothese",
-    "Killer insights",
-    "Kernconflict (A/B keuze)",
-    "Feitenbasis",
-    "Besluitvoorstel",
+    "EXECUTIVE SAMENVATTING",
+    "BESTUURLIJKE HYPOTHESE",
+    "FEITENBASIS",
+    "STRATEGISCH CONFLICT",
+    "KILLER INSIGHTS",
+    "STRATEGISCHE INTERVENTIES",
+    "90 DAGEN ACTIEPLAN",
+    "VROEGSIGNALERING",
   ];
   return preferredTitles
     .map((title) => source.find((section) => section.title.toUpperCase() === title.toUpperCase()))
@@ -350,6 +358,13 @@ function buildStrategySections(reportSections: MemoSection[], memoSections: Memo
 
 function buildEngineSections(memoSections: MemoSection[]): ReportSection[] {
   const excluded = new Set([
+    "EXECUTIVE SAMENVATTING",
+    "BESTUURLIJKE HYPOTHESE",
+    "FEITENBASIS",
+    "KILLER INSIGHTS",
+    "STRATEGISCHE INTERVENTIES",
+    "90 DAGEN ACTIEPLAN",
+    "VROEGSIGNALERING",
     "DOMINANTE THESE",
     "DOMINANT MECHANISM",
     "BOARDROOM INSIGHT",
@@ -658,12 +673,26 @@ export default function StrategischRapportSaaSPage() {
   function buildViewModel(session: (typeof mergedReports)[number]): ReportViewModel {
     const memoSections = parseMemoSections(cleanPlaceholderText(session.boardMemo || ""));
     const reportSections = parseMemoSections(cleanPlaceholderText(session.report?.report_body || ""));
-    const dominantThesis = getMemoSectionBody(memoSections, "DOMINANTE THESE") || session.executiveSummary || "Dominante these niet beschikbaar.";
-    const conflict = getMemoSectionBody(memoSections, "STRATEGISCH CONFLICT");
-    const optionsBody = getMemoSectionBody(memoSections, "BESTUURLIJKE KEUZE");
-    const interventionsBody = getMemoSectionBody(memoSections, "INTERVENTIES");
-    const boardQuestion = getMemoSectionBody(memoSections, "BOARDROOM QUESTION");
-    const noIntervention = getMemoSectionBody(memoSections, "SCENARIO: GEEN INTERVENTIE");
+    const reportExecutive = getMemoSectionBody(reportSections, "EXECUTIVE SAMENVATTING");
+    const reportHypothesis = getMemoSectionBody(reportSections, "BESTUURLIJKE HYPOTHESE");
+    const reportConflict = getMemoSectionBody(reportSections, "STRATEGISCH CONFLICT");
+    const reportInterventions = getMemoSectionBody(reportSections, "STRATEGISCHE INTERVENTIES");
+    const dominantThesis =
+      reportHypothesis ||
+      getMemoSectionBody(memoSections, "DOMINANTE THESE") ||
+      session.executiveSummary ||
+      "Dominante these niet beschikbaar.";
+    const conflict = reportConflict || getMemoSectionBody(memoSections, "STRATEGISCH CONFLICT");
+    const optionsBody =
+      getMemoSectionBody(reportSections, "STRATEGISCH CONFLICT") ||
+      getMemoSectionBody(memoSections, "BESTUURLIJKE KEUZE");
+    const interventionsBody = reportInterventions || getMemoSectionBody(memoSections, "INTERVENTIES");
+    const boardQuestion =
+      getMemoSectionBody(reportSections, "BESTUURLIJKE VRAAG") ||
+      getMemoSectionBody(memoSections, "BOARDROOM QUESTION");
+    const noIntervention =
+      getMemoSectionBody(reportSections, "VROEGSIGNALERING") ||
+      getMemoSectionBody(memoSections, "SCENARIO: GEEN INTERVENTIE");
     const decisionMemory = getMemoSectionBody(memoSections, "DECISION MEMORY");
     const quality = evaluateBoardMemoQuality(cleanPlaceholderText(session.boardMemo || ""), String(session.report?.report_body || ""));
     const gate = splitGateFlags(Array.isArray(session.qualityFlags) ? session.qualityFlags : []);
@@ -681,10 +710,10 @@ export default function StrategischRapportSaaSPage() {
       dominantThesis: dominantThesis,
       strategicConflict: conflict,
       boardOptions,
-      recommendedDirection: extractRecommendedDirection(optionsBody, boardOptions, session.executiveSummary || ""),
+      recommendedDirection: extractRecommendedDirection(optionsBody, boardOptions, reportExecutive || session.executiveSummary || ""),
       topInterventions: extractTopInterventions(interventionsBody, session.interventions || []),
       boardQuestion: compactBoardQuestion(boardQuestion),
-      executiveSummary: session.executiveSummary || "",
+      executiveSummary: reportExecutive || session.executiveSummary || "",
       strategyAlert: extractStrategyAlert(decisionMemory || session.boardMemo || ""),
       noIntervention: compactNoIntervention(noIntervention),
       strategySections: buildStrategySections(reportSections, memoSections),
