@@ -80,6 +80,10 @@ export interface AnalysisContext {
 
   userContext?: Record<string, any>;
 
+  historicalContext?: string[];
+
+  state?: AureliusEngineState;
+
   meta?: {
     requestId?: string;
     locale?: string;
@@ -112,4 +116,21 @@ export interface ModelResult {
 
   /** Confidence score */
   confidence: number;
+}
+
+export interface CaseStructureItem {
+  theme: string;
+  description?: string;
+  signals?: string[];
+}
+
+export interface StrategicConflictState {
+  tensionA: string;
+  tensionB: string;
+  explanation: string;
+}
+
+export interface AureliusEngineState {
+  caseStructure?: CaseStructureItem[];
+  strategicConflict?: StrategicConflictState;
 }

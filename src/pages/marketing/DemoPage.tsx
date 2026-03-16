@@ -21,7 +21,7 @@ function StickyRail() {
   );
 }
 
-export default function DemoReportPage() {
+export default function DemoPage() {
   return (
     <div className="marketing-readable marketing-shell min-h-screen">
       <section className="marketing-container pt-24 pb-16">
@@ -61,7 +61,7 @@ export default function DemoReportPage() {
 
             <article className={cardClass}>
               <div className="flex flex-wrap gap-4">
-                <Link to="/demo-report" className="marketing-btn-secondary px-8 py-4">Bekijk voorbeeld</Link>
+                <Link to="/portal" className="marketing-btn-secondary px-8 py-4">Ga naar Portal</Link>
                 <Link to="/contact" className="marketing-btn-primary px-8 py-4">Plan een Bestuurlijke Intake</Link>
               </div>
             </article>

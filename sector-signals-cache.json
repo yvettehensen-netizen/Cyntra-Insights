@@ -1,0 +1,28 @@
+{
+  "gezondheidszorg": {
+    "sector": "gezondheidszorg",
+    "signals": [
+      "https://www.igj.nl/actueel/rss:  Regelgeving contract arbeidsmarkt update ",
+      "https://www.rijksoverheid.nl/onderwerpen/geestelijke-gezondheidszorg:  Regelgeving contract arbeidsmarkt update ",
+      "https://www.cbs.nl/nl-nl/nieuws:  Regelgeving contract arbeidsmarkt update "
+    ],
+    "sources": [
+      "https://www.igj.nl/actueel/rss",
+      "https://www.rijksoverheid.nl/onderwerpen/geestelijke-gezondheidszorg",
+      "https://www.cbs.nl/nl-nl/nieuws"
+    ],
+    "fetchedAt": "2026-03-16T11:22:58.580Z",
+    "cachedAtEpoch": 1773660178581,
+    "source": "live",
+    "sectorRiskIndex": 60,
+    "regulatorPressureIndex": 90,
+    "contractPowerScore": 90,
+    "arbeidsmarktdrukIndex": 90,
+    "rubric": {
+      "sectorRisk": "20 * aantal signalen (3)",
+      "regulatorPressure": "30 * regulator-items (3)",
+      "contractPower": "30 * contract-items (3)",
+      "arbeidsmarktdruk": "30 * arbeidsmarkt-items (3)"
+    }
+  }
+}

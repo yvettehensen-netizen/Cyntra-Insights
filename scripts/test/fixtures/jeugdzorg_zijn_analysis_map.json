@@ -1,0 +1,65 @@
+{
+  "organisation": "Jeugdzorg ZIJN",
+  "sector": "Jeugdzorg",
+  "analysisDate": "2026-03-12",
+  "dominantRisk": "Contractgedreven instroom, regionale triage en budgetgedreven capaciteit zetten meer druk op uitvoerbaarheid dan parallelle verbreding bestuurlijk kan dragen",
+  "strategicTension": {
+    "optionA": "Brede ambulante specialist blijven",
+    "optionB": "Selectieve specialisatie / niche kiezen"
+  },
+  "decisionOptions": [
+    "Brede ambulante specialist blijven",
+    "Selectieve specialisatie / niche kiezen",
+    "Consortiumstrategie verdiepen"
+  ],
+  "recommendedOption": "Brede ambulante specialist blijven",
+  "scenarios": [
+    {
+      "name": "Scenario A — Brede ambulante specialist blijven",
+      "mechanism": "Behoud brede ambulante positionering maar maak groei ondergeschikt aan contractdiscipline en triage-realiteit",
+      "risk": "Verbreding blijft beperkt terwijl gemeentelijke druk op volume en budget hoog blijft",
+      "governanceImplication": "Bestuur moet prioriteren op kerncapaciteit en actieve consortiumsturing"
+    },
+    {
+      "name": "Scenario B — Selectieve specialisatie / niche kiezen",
+      "mechanism": "Versmal het profiel naar een kleiner aantal zorgvormen om capaciteit en kwaliteit te concentreren",
+      "risk": "Regionale relevantie en instroombasis kunnen versmallen",
+      "governanceImplication": "Bestuur moet expliciet besluiten welk aanbod niet langer prioriteit krijgt"
+    },
+    {
+      "name": "Scenario C — Consortiumstrategie verdiepen",
+      "mechanism": "Vergroot invloed op regionale toegang, triage en samenwerking in plaats van autonome verbreding",
+      "risk": "Afhankelijkheid van partners en gemeenten neemt toe",
+      "governanceImplication": "Bestuur moet extern mandaat en interne escalatieregels expliciet vastleggen"
+    }
+  ],
+  "interventions": [
+    {
+      "action": "Standaardiseer triage en wekelijkse capaciteitssturing",
+      "reason": "Beschermt de kernroute tegen contract- en instroomschommelingen",
+      "risk": "Zonder ritme blijft wachtdruk zich verplaatsen tussen teams",
+      "stopRule": "Herzie direct bij wachttijd > 12 weken",
+      "owner": "Bestuur",
+      "deadline": "15 dagen",
+      "KPI": "Wachtdruk daalt en caseload spreidt aantoonbaar"
+    },
+    {
+      "action": "Koppel nieuwe initiatieven aan contractruimte en governancecriteria",
+      "reason": "Voorkomt dat verbreding sneller groeit dan bestuurlijke absorptiecapaciteit",
+      "risk": "Zonder poortcriteria groeit portfolio-complexiteit sneller dan stuurkracht",
+      "stopRule": "Herzie direct bij marge < 4%",
+      "owner": "Directie",
+      "deadline": "30 dagen",
+      "KPI": "Alle nieuwe initiatieven hebben businesscase, eigenaar en stopcriterium"
+    },
+    {
+      "action": "Versterk de consortiumrol in regionale triage- en contractafspraken",
+      "reason": "Sluit de strategie aan op het werkelijke instroommechanisme",
+      "risk": "Zonder invloed op toegang blijft de organisatie reageren op externe druk in plaats van sturen",
+      "stopRule": "Herzie direct bij caseload > 18 per behandelaar",
+      "owner": "Bestuur",
+      "deadline": "45 dagen",
+      "KPI": "Meer voorspelbaarheid in instroom en contractafspraken"
+    }
+  ]
+}

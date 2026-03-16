@@ -214,7 +214,7 @@ export interface Intervention {
    FINAL AURELIUS RESULT — DECISION OBJECT
 ============================================================ */
 
-export interface AureliusResult {
+export interface AureliusResult extends CoreAureliusResult {
   id: string;
 
   analysisType: AnalysisType;
@@ -224,8 +224,6 @@ export interface AureliusResult {
      PRIMARY OUTPUT — DECISION CONTRACT
   ====================================================== */
   hgbco: HGBCOCard;
-
-  executive_summary: string;
 
   /* ======================================================
      SECONDARY SIGNALS (DERIVED, NON-BINDING)
@@ -277,3 +275,4 @@ export type AureliusResponse =
         hgbco_violation?: boolean;
       };
     };
+import type { AureliusResult as CoreAureliusResult } from "./aureliusResult";

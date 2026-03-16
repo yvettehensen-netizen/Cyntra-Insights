@@ -1,0 +1,2 @@
+function o(r){const e=String(r||"");if(!e)return[];const s=t=>/(?:^\[UPLOAD_CONTEXT\]|^bestand:|^preview:|^notes?$|^bron:|^samenvatting\b|^fireflies\b|^organisatiestrategie\b|^positionering\b|^operationeel\b|^personeel\b|^cultuur\b)/i.test(t)||t.length>110,n=e.split(`
+`).map(t=>t.trim()).filter(t=>t&&!s(t)).filter(t=>/(contact|contactpersoon|e-mail|email|telefoon|mobiel|bestuurder|ceo|directeur|rvb|rvt)/i.test(t)||/@/.test(t)||/\+?\d[\d\s\-()]{7,}/.test(t));return Array.from(new Set(n)).slice(0,4)}export{o as p};

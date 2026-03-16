@@ -1,0 +1,54 @@
+[
+  {
+    "id": "jeugdzorg-zijn",
+    "organization_name": "Jeugdzorg ZIJN",
+    "sector": "Jeugdzorg",
+    "organisatie_grootte": "Middelgroot",
+    "sourcePath": "scripts/test/fixtures/jeugdzorg_zijn_source.txt",
+    "expectedOptions": [
+      "Brede ambulante specialist blijven",
+      "Selectieve specialisatie / niche kiezen",
+      "Consortiumstrategie verdiepen"
+    ],
+    "expectedKeywords": ["ambulante", "consortium", "gemeenten", "triage"]
+  },
+  {
+    "id": "ggz-voor-jou",
+    "organization_name": "GGZ Voor Jou",
+    "sector": "GGZ",
+    "organisatie_grootte": "Middelgroot",
+    "sourcePath": "scripts/test/fixtures/ggz_voor_jou_source.txt",
+    "expectedOptions": [
+      "Kern beschermen en contractmix heronderhandelen",
+      "Parallel verbreden via nieuwe labels",
+      "Partnermodel met strakke governance"
+    ],
+    "expectedKeywords": ["contract", "marge", "plafond", "capaciteit"]
+  },
+  {
+    "id": "northline-advisory",
+    "organization_name": "Northline Advisory",
+    "sector": "B2B dienstverlening",
+    "organisatie_grootte": "Middelgroot",
+    "sourcePath": "scripts/test/fixtures/b2b_dienstverlening_source.txt",
+    "expectedOptions": [
+      "Kern beschermen en delivery disciplineren",
+      "Commercieel versnellen via nieuwe proposities",
+      "Selectieve focus op rendabele accounts"
+    ],
+    "expectedKeywords": ["sales", "delivery", "concentratie", "marge"]
+  },
+  {
+    "id": "signalstack",
+    "organization_name": "SignalStack",
+    "sector": "SaaS",
+    "organisatie_grootte": "Middelgroot",
+    "sourcePath": "scripts/test/fixtures/saas_scaleup_source.txt",
+    "expectedOptions": [
+      "Retentie en unit economics eerst herstellen",
+      "Enterprise sales versnellen",
+      "Focus op selectieve verticale groei"
+    ],
+    "expectedKeywords": ["churn", "enterprise", "burn", "retentie"]
+  }
+]

@@ -3,6 +3,7 @@ import OpenAI from "openai";
 import { jsPDF } from "jspdf";
 import multer from "multer";
 import { supabaseService } from "./supabaseService.js";
+import { buildStrategicBrainReportViaCli } from "./strategicBrainService.js";
 
 const router = Router();
 const upload = multer({
@@ -193,6 +194,65 @@ function normalizeAnalysisForResponse(row) {
   };
 }
 
+function normalizeSessionForResponse(row) {
+  if (!row || typeof row !== "object") return row;
+  return {
+    ...row,
+    output:
+      row.output && typeof row.output === "object"
+        ? row.output
+        : row.result_payload && typeof row.result_payload === "object"
+          ? row.result_payload
+          : null,
+  };
+}
+
+async function upsertAnalysisSessionMaybe({ analysisId, analysisData, result, reportRecord }) {
+  if (!supabase) return null;
+
+  const inputPayload = extractInputPayloadFromAnalysisRow(analysisData);
+  const now = new Date().toISOString();
+  const row = {
+    id: String(analysisId),
+    organization_id:
+      analysisData.organization_id ||
+      analysisData.organisation_id ||
+      analysisData.company_id ||
+      null,
+    organization_name: String(inputPayload.organization_name || "Organisatie"),
+    analysis_type: String(inputPayload?.context?.analysis_type || analysisData.analysis_type || "analysis"),
+    status: "COMPLETED",
+    input_data: String(inputPayload.description || ""),
+    output: {
+      ...result,
+      report: {
+        id: reportRecord?.id || null,
+        title: reportRecord?.title || null,
+        summary: reportRecord?.summary || null,
+        html_content: reportRecord?.html_content || null,
+        metadata: reportRecord?.metadata || {},
+      },
+    },
+    executive_summary: String(result.executive_summary || ""),
+    board_memo: String(result.executive_summary || ""),
+    board_report: String(reportRecord?.summary || result.executive_summary || ""),
+    created_at: String(analysisData.created_at || now),
+    updated_at: now,
+  };
+
+  const { data, error } = await supabase
+    .from("analysis_sessions")
+    .upsert(row, { onConflict: "id" })
+    .select("*")
+    .maybeSingle();
+
+  if (error && !isSchemaMismatchError(error) && !isRlsError(error)) {
+    throw error;
+  }
+
+  return data || row;
+}
+
 function createEphemeralUpload({ organizationId, file, extractedText, storagePath = null }) {
   const id = randomId("upl");
   const row = {
@@ -234,6 +294,33 @@ function createEphemeralAnalysis({
   };
   EPHEMERAL_ANALYSES.set(analysisId, row);
   return row;
+}
+
+function toStrategicBrainPayloadFromSessionLike(row) {
+  const inputPayload = extractInputPayloadFromAnalysisRow(row);
+  const inputText = [
+    String(row?.input_data || inputPayload?.input_data || inputPayload?.description || ""),
+    String(row?.board_memo || row?.result_payload?.board_memo || ""),
+    String(row?.board_report || row?.strategic_report?.report_body || ""),
+  ]
+    .filter((value) => String(value || "").trim())
+    .join("\n\n")
+    .trim();
+
+  return {
+    inputText,
+    organizationName: String(
+      row?.organization_name ||
+      inputPayload?.organization_name ||
+      row?.organization_id ||
+      "Onbekende organisatie"
+    ),
+    sector: String(
+      row?.strategic_metadata?.sector ||
+      inputPayload?.sector ||
+      ""
+    ),
+  };
 }
 
 async function ensureUploadBucket() {
@@ -520,7 +607,13 @@ async function updateAnalysisWithFallback(analysisId, payloads) {
 
 async function insertAnalysisWithFallback({ organizationId, inputPayload }) {
   if (!supabase) {
-    throw new Error("Supabase is not configured on server.");
+    const ephemeral = createEphemeralAnalysis({
+      organizationId,
+      inputPayload,
+      status: "pending",
+      errorText: "Persisted storage unavailable. Analysis returned in continuity mode.",
+    });
+    return { analysis: ephemeral, persistence: "ephemeral", warning: "supabase_unavailable" };
   }
 
   const pendingRows = [];
@@ -615,7 +708,15 @@ async function insertAnalysisWithFallback({ organizationId, inputPayload }) {
 
 async function resolveOrganizationId({ organizationId, organization }) {
   if (!supabase) {
-    throw new Error("Supabase is not configured on server.");
+    const requestedId = String(organizationId || "").trim();
+    if (requestedId) return requestedId;
+
+    const name = String(organization || "").trim();
+    if (!name) {
+      throw new Error("organization of organizationId is verplicht");
+    }
+
+    return null;
   }
 
   const requestedId = String(organizationId || "").trim();
@@ -819,10 +920,15 @@ async function resolveUploadsById({ organizationId, uploadIds }) {
       return !rowOrg || rowOrg === organizationId;
     });
 
-  const { data, error } = await supabase
-    .from("analysis_uploads")
-    .select("*")
-    .in("id", Array.from(uploadIdSet));
+  if (!supabase) {
+    const merged = new Map();
+    for (const row of [...tokenRows, ...ephemeralRows]) {
+      merged.set(String(row.id), row);
+    }
+    return Array.from(merged.values());
+  }
+
+  const { data, error } = await supabase.from("analysis_uploads").select("*").in("id", Array.from(uploadIdSet));
 
   if (error && !isSchemaMismatchError(error) && !isRlsError(error)) {
     throw new Error(`Resolve uploads failed: ${error.message}`);
@@ -844,6 +950,18 @@ async function resolveUploadsById({ organizationId, uploadIds }) {
 
 async function linkUploadsToAnalysis({ analysisId, uploadIds }) {
   if (!Array.isArray(uploadIds) || !uploadIds.length) return;
+
+  if (!supabase) {
+    for (const uploadId of uploadIds) {
+      const existing = EPHEMERAL_UPLOADS.get(String(uploadId));
+      if (!existing) continue;
+      EPHEMERAL_UPLOADS.set(String(uploadId), {
+        ...existing,
+        analysis_id: analysisId,
+      });
+    }
+    return;
+  }
 
   const updateCandidates = [
     { analysis_id: analysisId },
@@ -939,6 +1057,12 @@ async function processAnalysisInline(analysisId) {
     });
 
     await upsertReportMaybe(reportRecord);
+    await upsertAnalysisSessionMaybe({
+      analysisId: String(analysisId),
+      analysisData,
+      result,
+      reportRecord,
+    });
 
     const doneData = await updateAnalysisWithFallback(String(analysisId), [
       {
@@ -1108,12 +1232,6 @@ router.get("/uploads", async (req, res) => {
 });
 
 router.post("/analyses", async (req, res) => {
-  if (!supabase) {
-    return res.status(500).json({
-      error: "Supabase is not configured on server.",
-    });
-  }
-
   try {
     const {
       organizationId,
@@ -1201,10 +1319,6 @@ router.post("/analyses", async (req, res) => {
 });
 
 router.get("/analyses/:id", async (req, res) => {
-  if (!supabase) {
-    return res.status(500).json({ error: "Supabase is not configured on server." });
-  }
-
   const analysisId = String(req.params.id || "");
   if (!analysisId) {
     return res.status(400).json({ error: "analysis id ontbreekt" });
@@ -1228,6 +1342,10 @@ router.get("/analyses/:id", async (req, res) => {
         })
       : null;
     return res.json({ analysis: normalized, report });
+  }
+
+  if (!supabase) {
+    return res.status(404).json({ error: "Analyse niet gevonden" });
   }
 
   const { data: analysis, error: analysisError } = await supabase
@@ -1278,10 +1396,6 @@ router.get("/analyses/:id", async (req, res) => {
 });
 
 router.get("/reports/:analysisId", async (req, res, next) => {
-  if (!supabase) {
-    return res.status(500).json({ error: "Supabase is not configured on server." });
-  }
-
   const analysisId = String(req.params.analysisId || "");
   if (analysisId.toLowerCase() === "pdf") {
     return next();
@@ -1289,6 +1403,33 @@ router.get("/reports/:analysisId", async (req, res, next) => {
 
   if (!analysisId) {
     return res.status(400).json({ error: "analysisId ontbreekt" });
+  }
+
+  if (!supabase) {
+    const ephemeral = EPHEMERAL_ANALYSES.get(analysisId);
+    if (ephemeral) {
+      const normalized = normalizeAnalysisForResponse(ephemeral);
+      const result = extractResultPayloadFromAnalysisRow(normalized);
+      if (!result) {
+        return res.status(404).json({ error: "Rapport niet gevonden" });
+      }
+
+      const report = buildReportRecord({
+        analysisId,
+        organizationId: normalized.organization_id || null,
+        organizationName: String(
+          normalized.input_payload?.organization_name || "Organisatie"
+        ),
+        result,
+        uploads: Array.isArray(normalized.input_payload?.uploads)
+          ? normalized.input_payload.uploads
+          : [],
+      });
+
+      return res.json({ report });
+    }
+
+    return res.status(404).json({ error: "Rapport niet gevonden" });
   }
 
   const { data, error } = await supabase
@@ -1356,6 +1497,112 @@ router.get("/reports/:analysisId", async (req, res, next) => {
   });
 
   return res.json({ report });
+});
+
+router.post("/strategic-brain-report", async (req, res) => {
+  const payload = {
+    inputText: String(req.body?.inputText || "").trim(),
+    organizationName: String(req.body?.organizationName || "Onbekende organisatie"),
+    sector: String(req.body?.sector || ""),
+  };
+
+  if (!payload.inputText) {
+    return res.status(400).json({ error: "inputText ontbreekt" });
+  }
+
+  try {
+    const report = await buildStrategicBrainReportViaCli(payload);
+    return res.json({ report });
+  } catch (error) {
+    return res.status(500).json({ error: sanitizeErrorForClient(errorMessage(error)) });
+  }
+});
+
+router.get("/analysis-sessions", async (_req, res) => {
+  if (!supabase) {
+    return res.json({ sessions: [] });
+  }
+
+  const { data, error } = await supabase
+    .from("analysis_sessions")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error && !isSchemaMismatchError(error) && !isRlsError(error)) {
+    return res.status(500).json({ error: sanitizeErrorForClient(error.message) });
+  }
+
+  return res.json({
+    sessions: Array.isArray(data) ? data.map(normalizeSessionForResponse) : [],
+  });
+});
+
+router.get("/analysis-sessions/:id", async (req, res) => {
+  const sessionId = String(req.params.id || "").trim();
+  if (!sessionId) {
+    return res.status(400).json({ error: "session id ontbreekt" });
+  }
+
+  if (!supabase) {
+    return res.status(404).json({ error: "Sessie niet gevonden" });
+  }
+
+  const { data, error } = await supabase
+    .from("analysis_sessions")
+    .select("*")
+    .eq("id", sessionId)
+    .maybeSingle();
+
+  if (error && !isSchemaMismatchError(error) && !isRlsError(error)) {
+    return res.status(500).json({ error: sanitizeErrorForClient(error.message) });
+  }
+
+  if (!data) {
+    return res.status(404).json({ error: "Sessie niet gevonden" });
+  }
+
+  return res.json({ session: normalizeSessionForResponse(data) });
+});
+
+router.get("/reports/:analysisId/strategic-brain", async (req, res, next) => {
+  const analysisId = String(req.params.analysisId || "").trim();
+  if (!analysisId) {
+    return res.status(400).json({ error: "analysisId ontbreekt" });
+  }
+
+  try {
+    let sessionLike = null;
+
+    if (!supabase) {
+      sessionLike = EPHEMERAL_ANALYSES.get(analysisId) || null;
+    } else {
+      const { data, error } = await supabase
+        .from("analysis_sessions")
+        .select("*")
+        .eq("id", analysisId)
+        .maybeSingle();
+
+      if (error && !isSchemaMismatchError(error) && !isRlsError(error)) {
+        return res.status(500).json({ error: sanitizeErrorForClient(error.message) });
+      }
+
+      sessionLike = data || EPHEMERAL_ANALYSES.get(analysisId) || null;
+    }
+
+    if (!sessionLike) {
+      return next();
+    }
+
+    const payload = toStrategicBrainPayloadFromSessionLike(sessionLike);
+    if (!payload.inputText) {
+      return res.status(404).json({ error: "Strategic brain brondata ontbreekt" });
+    }
+
+    const report = await buildStrategicBrainReportViaCli(payload);
+    return res.json({ report });
+  } catch (error) {
+    return res.status(500).json({ error: sanitizeErrorForClient(errorMessage(error)) });
+  }
 });
 
 router.get("/reports/pdf", async (req, res) => {

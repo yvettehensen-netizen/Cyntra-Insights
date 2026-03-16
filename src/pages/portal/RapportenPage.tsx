@@ -13,6 +13,7 @@ import {
 } from "@/aurelius/storage/ReportRepository";
 import type { StoredReport } from "@/aurelius/models/StoredReport";
 import { usePlatformApiBridge } from "./saas/usePlatformApiBridge";
+import { isSessionCompleted } from "@/platform/types";
 
 import {
   ArrowLeft,
@@ -67,7 +68,7 @@ export default function RapportenPage() {
       api.listSessions().catch(() => []),
     ]);
     setStoredReports(stored);
-    setPlatformSessions((sessions || []).filter((row: any) => row?.status === "voltooid"));
+    setPlatformSessions((sessions || []).filter((row: any) => isSessionCompleted(row?.status)));
 
     if (id) {
       const { data } = await supabase.from("analyses").select("*").eq("id", id).single();

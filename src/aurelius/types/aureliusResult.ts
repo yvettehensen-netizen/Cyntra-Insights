@@ -1,85 +1,107 @@
-// src/cie/normalizer.ts
-
-/**
- * Definitieve, productie-klare normalizer voor Aurelius LLM output.
- * - Deterministisch
- * - Audit-proof
- * - Robuust tegen malformed, incomplete of hallucinated output
- */
-
-/**
- * Genormaliseerde, definitieve output van een Aurelius analyse.
- * Dit is de enige toegestane structuur voor downstream verwerking (synthese, board reports, PDF, etc.).
- */
 export interface AureliusResult {
-  /** Korte, board-ready samenvatting */
   executive_summary: string;
-
-  /** Belangrijkste inzichten */
-  insights: string[];
-
-  /** Strategische risico’s */
-  risks: string[];
-
-  /** Strategische kansen */
-  opportunities: string[];
-
-  /** 90-dagen roadmap, verdeeld over 3 maanden */
-  roadmap_90d: {
+  board_memo: string;
+  strategic_conflict: string;
+  recommended_option: string;
+  interventions: any[];
+  strategic_levers?: any[];
+  strategy_dna?: any;
+  causal_analysis?: any;
+  scenario_simulation?: any;
+  benchmark?: any;
+  drift_analysis?: any;
+  decision_memory?: any;
+  insights?: string[];
+  risks?: string[];
+  opportunities?: string[];
+  killer_insights?: string[];
+  killer_insights_meta?: {
+    score: number;
+    failed_checks: string[];
+    evidence_used: number;
+  };
+  roadmap_90d?: {
     month1: string[];
     month2: string[];
     month3: string[];
   };
-
-  /** CEO / board boodschap */
-  ceo_message: string;
-
-  /** Vertrouwensscore van de analyse (0–1) */
-  confidence_score: number;
+  decision_pressure?: {
+    explicit_decision_required: boolean;
+    execution_risk_high: boolean;
+    governance_blocking: boolean;
+  };
+  execution_risks?: string[];
+  confidence_score?: number;
+  board_memo_quality?: {
+    score: number;
+    findings: string[];
+  };
+  decision_card_id?: string;
+  strategic_depth_score?: number;
+  strategic_reasoning_gate_passed?: boolean;
+  strategic_warnings?: string[];
+  thesis?: string;
+  conflict?: string;
+  decision?: string;
+  boardQuestion?: string;
+  stressTest?: string;
+  intervention_actions?: string[];
+  strategic_lever_combination?: any;
+  causal_strategy?: any;
+  recommendations?: string[];
+  ceo_message?: string;
 }
 
-/* ========================
-   HELPER TYPE GUARDS & EXTRACTORS
-======================= */
+type UnknownRecord = Record<string, unknown>;
 
-const isObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
+const DEFAULT_EXECUTIVE_SUMMARY =
+  "Strategische analyse voltooid. Executive summary automatisch aangevuld om het UI-contract stabiel te houden.";
+const DEFAULT_BOARD_MEMO =
+  "Board memo automatisch aangevuld. Gebruik executive summary, strategisch conflict en interventies als minimale besluitbasis.";
+const DEFAULT_STRATEGIC_CONFLICT =
+  "Strategisch conflict niet expliciet aangeleverd. Kies tussen focus, capaciteit en executiediscipline.";
+const DEFAULT_RECOMMENDED_OPTION = "C";
 
-const safeString = (value: unknown, fallback: string): string => {
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : fallback;
-  }
-  return fallback;
-};
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
-const safeArray = (value: unknown): string[] => {
+function normalizeText(value: unknown): string {
+  return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function asString(value: unknown, fallback = ""): string {
+  const text = normalizeText(value);
+  return text || fallback;
+}
+
+function asStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
+  return value.map((item) => normalizeText(item)).filter(Boolean);
+}
 
-  return value
-    .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
-    .map((item) => item.trim());
-};
+function pickNested(source: unknown, path: string[]): unknown {
+  let current: unknown = source;
+  for (const key of path) {
+    if (!isRecord(current) || !(key in current)) return undefined;
+    current = current[key];
+  }
+  return current;
+}
 
-const safeNumberInRange = (
-  value: unknown,
-  min: number,
-  max: number,
-  fallback: number
-): number => {
-  return typeof value === "number" && Number.isFinite(value) && value >= min && value <= max
-    ? value
-    : fallback;
-};
+function pickFirst(source: unknown, paths: string[][]): unknown {
+  for (const path of paths) {
+    const value = pickNested(source, path);
+    if (typeof value === "string" && normalizeText(value)) return value;
+    if (Array.isArray(value) && value.length) return value;
+    if (isRecord(value) && Object.keys(value).length) return value;
+  }
+  return undefined;
+}
 
-/* ========================
-   ROADMAP NORMALIZATION
-======================= */
-
-const normalizeRoadmap = (input: unknown): AureliusResult["roadmap_90d"] => {
-  // Case 1: Direct een array van items (bijv. platte lijst van 21 stappen)
-  if (Array.isArray(input)) {
-    const items = safeArray(input);
+function normalizeRoadmap(value: unknown): AureliusResult["roadmap_90d"] {
+  if (Array.isArray(value)) {
+    const items = asStringArray(value);
     return {
       month1: items.slice(0, 7),
       month2: items.slice(7, 14),
@@ -87,92 +109,182 @@ const normalizeRoadmap = (input: unknown): AureliusResult["roadmap_90d"] => {
     };
   }
 
-  // Case 2: Object met maand-velden (in verschillende talen/vormen)
-  if (isObject(input)) {
-    const pickMonth = (keys: string[]): string[] => {
-      for (const key of keys) {
-        if (key in input && Array.isArray(input[key])) {
-          return safeArray(input[key]);
-        }
-      }
-      return [];
-    };
-
+  if (isRecord(value)) {
     return {
-      month1: pickMonth(["month1", "maand1", "month_1", "fase1", "phase1", "kwartaal1"]),
-      month2: pickMonth(["month2", "maand2", "month_2", "fase2", "phase2", "kwartaal2"]),
-      month3: pickMonth(["month3", "maand3", "month_3", "fase3", "phase3", "kwartaal3"]),
+      month1: asStringArray(value.month1 ?? value.maand1 ?? value.phase1),
+      month2: asStringArray(value.month2 ?? value.maand2 ?? value.phase2),
+      month3: asStringArray(value.month3 ?? value.maand3 ?? value.phase3),
     };
   }
 
-  // Fallback: lege roadmap
   return { month1: [], month2: [], month3: [] };
-};
+}
 
-/* ========================
-   ALTERNATIVE FIELD MAPPING
-======================= */
-
-// Lijst van mogelijke veldnamen per uiteindelijke property
-const fieldAliases = {
-  executive_summary: ["executive_summary", "summary", "conclusion", "overall_assessment", "samenvatting"],
-  insights: ["insights", "key_findings", "key_themes", "strategic_insights", "inzichten"],
-  risks: ["risks", "key_risks", "strategic_risks", "threats", "risicos"],
-  opportunities: ["opportunities", "key_opportunities", "strategic_opportunities", "upsides", "kansen"],
-  roadmap: ["roadmap_90d", "roadmap", "action_plan", "implementation_plan", "next_steps", "routekaart"],
-  ceo_message: ["ceo_message", "leadership_message", "final_note", "concluding_remark", "boodschap"],
-  confidence_score: ["confidence_score", "confidence", "quality_score", "vertrouwen"],
-} as const;
-
-/* ========================
-   MAIN NORMALIZER
-======================= */
-
-export function normalizeAureliusResult(raw: unknown): AureliusResult {
-  const data = isObject(raw) ? raw : {};
-
-  const getFirstExisting = <T>(aliases: readonly string[], extractor: (val: unknown) => T, fallback: T): T => {
-    for (const alias of aliases) {
-      if (alias in data) {
-        const value = extractor(data[alias]);
-        // Als extractor een "valide" waarde teruggeeft (niet de fallback zelf), gebruik die
-        if (Array.isArray(value) ? value.length > 0 : value !== fallback) {
-          return value;
+function normalizeInterventions(value: unknown): any[] {
+  if (Array.isArray(value)) {
+    return value
+      .map((item, index) => {
+        if (typeof item === "string") {
+          const title = normalizeText(item);
+          if (!title) return null;
+          return {
+            id: `intervention-${index + 1}`,
+            title,
+            description: title,
+          };
         }
-      }
-    }
-    return fallback;
-  };
+        if (isRecord(item)) return item;
+        return null;
+      })
+      .filter(Boolean);
+  }
+
+  if (typeof value === "string" && normalizeText(value)) {
+    return normalizeText(value)
+      .split(/\n+/)
+      .map((line) => normalizeText(line.replace(/^[-*\d.)\s]+/, "")))
+      .filter(Boolean)
+      .map((title, index) => ({ id: `intervention-${index + 1}`, title, description: title }));
+  }
+
+  return [];
+}
+
+function buildBoardMemo(input: {
+  executive_summary: string;
+  strategic_conflict: string;
+  recommended_option: string;
+  interventions: any[];
+}): string {
+  const interventions = input.interventions
+    .slice(0, 3)
+    .map((item) => {
+      if (isRecord(item)) return asString(item.title ?? item.interventie ?? item.description, "Interventie");
+      return asString(item, "Interventie");
+    })
+    .filter(Boolean);
+
+  return [
+    "Bestuurlijke hypothese",
+    input.executive_summary,
+    "",
+    "Kernconflict (A/B keuze)",
+    input.strategic_conflict,
+    "",
+    "Besluitvoorstel",
+    `Aanbevolen optie: ${input.recommended_option}`,
+    "",
+    "Opvolging 90 dagen",
+    interventions.length ? interventions.map((item, index) => `${index + 1}. ${item}`).join("\n") : "Interventies volgen.",
+  ]
+    .join("\n")
+    .trim();
+}
+
+export function normalizeAureliusResultContract(raw: unknown): AureliusResult {
+  const source = isRecord(raw) ? raw : {};
+
+  const executive_summary = asString(
+    pickFirst(source, [
+      ["executive_summary"],
+      ["summary"],
+      ["samenvatting"],
+      ["executive_truth"],
+      ["narrative", "executive_summary"],
+    ]),
+    DEFAULT_EXECUTIVE_SUMMARY
+  );
+
+  const strategic_conflict = asString(
+    pickFirst(source, [
+      ["strategic_conflict"],
+      ["conflict"],
+      ["thesis"],
+      ["narrative", "strategic_conflict"],
+      ["forced_choices", "cost_of_inaction"],
+    ]),
+    DEFAULT_STRATEGIC_CONFLICT
+  );
+
+  const recommended_option = asString(
+    pickFirst(source, [
+      ["recommended_option"],
+      ["decision"],
+      ["decision", "recommended_option"],
+      ["decision", "preferred_option"],
+      ["gekozen_strategie"],
+    ]),
+    DEFAULT_RECOMMENDED_OPTION
+  ).slice(0, 240);
+
+  const interventions = normalizeInterventions(
+    pickFirst(source, [
+      ["interventions"],
+      ["intervention_predictions"],
+      ["intervention_actions"],
+      ["recommendations"],
+      ["actions"],
+      ["roadmap_90d"],
+    ])
+  );
+
+  const board_memo = asString(
+    pickFirst(source, [
+      ["board_memo"],
+      ["boardMemo"],
+      ["narrative", "board_memo"],
+      ["narrative", "boardroom_narrative"],
+      ["ceo_message"],
+    ]),
+    buildBoardMemo({
+      executive_summary,
+      strategic_conflict,
+      recommended_option,
+      interventions,
+    }) || DEFAULT_BOARD_MEMO
+  );
 
   return {
-    executive_summary: getFirstExisting(
-      fieldAliases.executive_summary,
-      (v) => safeString(v, "Strategische analyse voltooid. Kerninzichten, risico’s en een uitvoerbare roadmap zijn geïdentificeerd."),
-      "Strategische analyse voltooid. Kerninzichten, risico’s en een uitvoerbare roadmap zijn geïdentificeerd."
-    ),
-
-    insights: getFirstExisting(fieldAliases.insights, safeArray, []),
-
-    risks: getFirstExisting(fieldAliases.risks, safeArray, []),
-
-    opportunities: getFirstExisting(fieldAliases.opportunities, safeArray, []),
-
-    roadmap_90d: getFirstExisting(fieldAliases.roadmap, normalizeRoadmap, {
-      month1: [],
-      month2: [],
-      month3: [],
-    }),
-
-    ceo_message: getFirstExisting(
-      fieldAliases.ceo_message,
-      (v) => safeString(v, "Focus op executie. De komende 90 dagen bepalen het strategisch momentum."),
-      "Focus op executie. De komende 90 dagen bepalen het strategisch momentum."
-    ),
-
-    confidence_score: getFirstExisting(
-      fieldAliases.confidence_score,
-      (v) => safeNumberInRange(v, 0, 1, 0.92),
-      0.92
-    ),
+    executive_summary,
+    board_memo,
+    strategic_conflict,
+    recommended_option,
+    interventions,
+    strategic_levers:
+      (pickFirst(source, [["strategic_levers"], ["strategic_metadata", "strategic_hefbomen"]]) as any[]) || undefined,
+    strategy_dna: pickFirst(source, [["strategy_dna"], ["strategic_metadata", "strategy_dna"]]),
+    causal_analysis: pickFirst(source, [["causal_analysis"], ["causal_strategy"], ["strategic_metadata", "strategic_causal_analysis"]]),
+    scenario_simulation: pickFirst(source, [["scenario_simulation"], ["strategic_metadata", "strategy_simulation"]]),
+    benchmark: pickFirst(source, [["benchmark"], ["benchmark_context"], ["sector_benchmark"]]),
+    drift_analysis: pickFirst(source, [["drift_analysis"], ["strategic_drift"], ["drift"]]),
+    decision_memory: pickFirst(source, [["decision_memory"], ["strategic_metadata", "decision_memory"]]),
+    insights: asStringArray(source.insights ?? source.boardroom_summary ?? source.key_findings),
+    risks: asStringArray(source.risks ?? source.key_risks ?? source.tensions),
+    opportunities: asStringArray(source.opportunities ?? source.key_opportunities),
+    killer_insights: asStringArray(source.killer_insights),
+    killer_insights_meta: isRecord(source.killer_insights_meta)
+      ? (source.killer_insights_meta as AureliusResult["killer_insights_meta"])
+      : undefined,
+    roadmap_90d: normalizeRoadmap(source.roadmap_90d),
+    decision_pressure: isRecord(source.decision_pressure)
+      ? (source.decision_pressure as AureliusResult["decision_pressure"])
+      : undefined,
+    execution_risks: asStringArray(source.execution_risks),
+    confidence_score: typeof source.confidence_score === "number" ? source.confidence_score : undefined,
+    decision_card_id: asString(source.decision_card_id),
+    strategic_depth_score: typeof source.strategic_depth_score === "number" ? source.strategic_depth_score : undefined,
+    strategic_reasoning_gate_passed:
+      typeof source.strategic_reasoning_gate_passed === "boolean" ? source.strategic_reasoning_gate_passed : undefined,
+    strategic_warnings: asStringArray(source.strategic_warnings),
+    thesis: asString(source.thesis),
+    conflict: asString(source.conflict || strategic_conflict),
+    decision: asString(source.decision || recommended_option),
+    boardQuestion: asString(source.boardQuestion),
+    stressTest: asString(source.stressTest),
+    intervention_actions: asStringArray(source.intervention_actions),
+    strategic_lever_combination: source.strategic_lever_combination,
+    causal_strategy: source.causal_strategy,
+    recommendations: asStringArray(source.recommendations),
+    ceo_message: asString(source.ceo_message),
   };
 }

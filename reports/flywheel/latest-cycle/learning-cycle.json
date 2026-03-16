@@ -1,0 +1,127 @@
+{
+  "learning_cycle": {
+    "strategic_case": {
+      "case_id": "case-20260305-WUFSCC",
+      "organisatie_type": "GGZ-praktijk",
+      "sector": "Zorg/GGZ",
+      "organisatie_grootte": "25 medewerkers",
+      "verdienmodel": "Declaratiegedreven met verzekeraarsafhankelijkheid",
+      "dominant_problem": "Parallelle verbreding zonder contractzekerheid veroorzaakt structurele margeslijtage.",
+      "dominant_thesis": "Zonder harde volgorde tussen consolideren en verbreden ontstaat binnen 12-18 maanden verhoogd liquiditeitsrisico.",
+      "mechanisms": [
+        "Tariefdruk en contractplafonds limiteren omzetgroei.",
+        "Productiviteitsnorm zonder volledige cijferopenheid creëert gedragsfrictie.",
+        "Volgordefout vergroot liquiditeitsstress."
+      ],
+      "strategic_options": [
+        "A: Consolideren van de GGZ-kern met margeherstel.",
+        "B: Versneld verbreden via HR-loket en nieuwe pijlers.",
+        "C: Gefaseerde strategie met harde stopregels."
+      ],
+      "gekozen_strategie": "C: Gefaseerde strategie met harde stopregels.",
+      "interventieplan": "Consolideren eerst. Contractdiscipline afdwingen. Geen verbreding zonder positieve margevalidatie en capaciteitsimpact.",
+      "analyse_datum": "2026-03-05",
+      "dominant_problem_category": "overig",
+      "normalized_problem_label": "Overige strategische spanning",
+      "normalized_tags": [
+        "finance",
+        "operations",
+        "contracting"
+      ]
+    },
+    "interventions": [
+      {
+        "intervention_id": "case-20260305-WUFSCC-int-1",
+        "case_id": "case-20260305-WUFSCC",
+        "interventie_type": "contractheronderhandeling",
+        "beschrijving": "Contractdiscipline afdwingen",
+        "implementatie_datum": "2026-03-05"
+      },
+      {
+        "intervention_id": "case-20260305-WUFSCC-int-2",
+        "case_id": "case-20260305-WUFSCC",
+        "interventie_type": "capaciteitsherstructurering",
+        "beschrijving": "Geen verbreding zonder positieve margevalidatie en capaciteitsimpact.",
+        "implementatie_datum": "2026-03-05"
+      }
+    ],
+    "outcomes": [
+      {
+        "outcome_id": "case-20260305-WUFSCC-int-1-outcome-20260305",
+        "intervention_id": "case-20260305-WUFSCC-int-1",
+        "financieel_effect": "Financieel effect nog niet formeel geëvalueerd",
+        "operationeel_effect": "Operationeel effect nog niet formeel geëvalueerd",
+        "implementatie_succes": "middel",
+        "evaluatie_datum": "2026-03-05"
+      },
+      {
+        "outcome_id": "case-20260305-WUFSCC-int-2-outcome-20260305",
+        "intervention_id": "case-20260305-WUFSCC-int-2",
+        "financieel_effect": "Financieel effect nog niet formeel geëvalueerd",
+        "operationeel_effect": "Operationeel effect nog niet formeel geëvalueerd",
+        "implementatie_succes": "middel",
+        "evaluatie_datum": "2026-03-05"
+      }
+    ],
+    "dataset_update": {
+      "case_count": 1,
+      "intervention_count": 2,
+      "outcome_count": 2
+    },
+    "pattern_engine_update": {
+      "refreshed": true,
+      "intervention_success_patterns": [
+        {
+          "sector": "Zorg/GGZ",
+          "interventie": "contractheronderhandeling",
+          "resultaat": "Consistent positief effect (100% succesvolle implementatie)",
+          "confidence": "laag"
+        },
+        {
+          "sector": "Zorg/GGZ",
+          "interventie": "capaciteitsherstructurering",
+          "resultaat": "Consistent positief effect (100% succesvolle implementatie)",
+          "confidence": "laag"
+        }
+      ]
+    }
+  },
+  "agent_learning_context": {
+    "vergelijkbare_cases": [
+      {
+        "case_id": "case-20260305-WUFSCC",
+        "organisatie_type": "GGZ-praktijk",
+        "sector": "Zorg/GGZ",
+        "organisatie_grootte": "25 medewerkers",
+        "verdienmodel": "Declaratiegedreven met verzekeraarsafhankelijkheid",
+        "dominant_problem": "Parallelle verbreding zonder contractzekerheid veroorzaakt structurele margeslijtage.",
+        "dominant_thesis": "Zonder harde volgorde tussen consolideren en verbreden ontstaat binnen 12-18 maanden verhoogd liquiditeitsrisico.",
+        "mechanisms": [
+          "Tariefdruk en contractplafonds limiteren omzetgroei.",
+          "Productiviteitsnorm zonder volledige cijferopenheid creëert gedragsfrictie.",
+          "Volgordefout vergroot liquiditeitsstress."
+        ],
+        "strategic_options": [
+          "A: Consolideren van de GGZ-kern met margeherstel.",
+          "B: Versneld verbreden via HR-loket en nieuwe pijlers.",
+          "C: Gefaseerde strategie met harde stopregels."
+        ],
+        "gekozen_strategie": "C: Gefaseerde strategie met harde stopregels.",
+        "interventieprogramma": "Consolideren eerst. Contractdiscipline afdwingen. Geen verbreding zonder positieve margevalidatie en capaciteitsimpact.",
+        "analyse_datum": "2026-03-05"
+      }
+    ],
+    "historical_learning_section": "### HISTORISCHE LEERINZICHTEN\nVergelijkbare cases\n1. CASE case-20260305-WUFSCC | probleem: Parallelle verbreding zonder contractzekerheid veroorzaakt structurele margeslijtage. | strategie: C: Gefaseerde strategie met harde stopregels.\n\nHistorische interventies\nGebruik interventies met expliciete margevalidatie, capaciteitsimpact en contractdiscipline als default.\n\nResultaten van interventies\nHistorische uitkomstscores moeten leidend zijn in scenario-keuze en risico-inschatting."
+  },
+  "simulation_learning": {
+    "pattern_payload": {
+      "sector": "Zorg/GGZ",
+      "historical_success_probability": 1
+    },
+    "leverage_hints": [
+      "Verhoog allocatie naar interventies met bewezen historisch succes in vergelijkbare cases.",
+      "Versnel implementatie van contract- en marge-interventies met hoge slaagkans."
+    ]
+  },
+  "enriched_board_report": "1. Dominante These\nKernzin: Zonder harde volgorde tussen consolideren en verbreden ontstaat binnen 12-18 maanden verhoogd liquiditeitsrisico.. Dominant probleem: Parallelle verbreding zonder contractzekerheid veroorzaakt structurele margeslijtage.. Categorie: Overige strategische spanning.\n\n2. Structurele Kernspanning\nKernzin: De kernspanning ligt tussen C: Gefaseerde strategie met harde stopregels. en uitvoerbare capaciteit. Mechanismen: Tariefdruk en contractplafonds limiteren omzetgroei. | Productiviteitsnorm zonder volledige cijferopenheid creëert gedragsfrictie. | Volgordefout vergroot liquiditeitsstress.\n\n3. Keerzijde van de keuze\nKernzin: De keuze voor focus vraagt expliciet tijdelijk verlies op niet-kernactiviteiten. Strategische opties: A: Consolideren van de GGZ-kern met margeherstel. || B: Versneld verbreden via HR-loket en nieuwe pijlers. || C: Gefaseerde strategie met harde stopregels.\n\n4. De Prijs van Uitstel\nKernzin: Uitstel verhoogt financiële en operationele druk en verkleint bestuurlijke bewegingsruimte. 30/60/90-logica: zonder heldere volgorde verschuift risico van cijfers naar gedrag en executie.\n\n5. Mandaat & Besluitrecht\nKernzin: Mandaat moet centraal worden belegd met expliciet besluitrecht en escalatieritme. Besluitrecht: MT primair, RvT bevestigt uitzonderingen op stopregels.\n\n6. Onderstroom & Informele Macht\nKernzin: Onderstroomfrictie ontstaat wanneer normdruk niet wordt gekoppeld aan transparante margelogica. Gedragseffect: teamgesprekken over productie en capaciteit moeten ritmisch en cijfergedreven worden gemaakt.\n\n7. Faalmechanisme\nKernzin: Parallelle prioriteiten zonder stop-doing veroorzaken voorspelbare uitvoeringsdegradatie. Faalpad: scope-creep -> diffusie van eigenaarschap -> vertraagde escalatie -> margeslijtage.\n\n8. 90-Dagen Interventieontwerp\nInterventie 1: Contractdiscipline afdwingen Actie: Contractdiscipline afdwingen Eigenaar: MT Deadline: 2026-03-05 KPI: Implementatiestatus middel Escalatiepad: >48 uur blokkade = escalatie naar RvT. Casus-anker: contractheronderhandeling Interventie 2: Geen verbreding zonder positieve margevalidatie en capaciteitsimpact. Actie: Geen verbreding zonder positieve margevalidatie en capaciteitsimpact. Eigenaar: MT Deadline: 2026-03-05 KPI: Implementatiestatus middel Escalatiepad: >48 uur blokkade = escalatie naar RvT. Casus-anker: capaciteitsherstructurering.\n\n9. Besluitkader\nKernzin: Gekozen strategie is C: Gefaseerde strategie met harde stopregels.. Besluitregel: geen nieuwe initiatieven zonder margevalidatie en capaciteitsimpact. ### HISTORISCHE LEERINZICHTEN Vergelijkbare cases 1. CASE case-20260305-WUFSCC | probleem: Parallelle verbreding zonder contractzekerheid veroorzaakt structurele margeslijtage. | strategie: C: Gefaseerde strategie met harde stopregels. Historische interventies Gebruik interventies met expliciete margevalidatie, capaciteitsimpact en contractdiscipline als default. Resultaten van interventies Historische uitkomstscores moeten leidend zijn in scenario-keuze en risico-inschatting. Resultaatspoor: case-20260305-WUFSCC-int-1: middel (Financieel effect nog niet formeel geëvalueerd) case-20260305-WUFSCC-int-2: middel (Financieel effect nog niet formeel geëvalueerd)."
+}

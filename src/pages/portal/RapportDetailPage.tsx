@@ -69,8 +69,8 @@ export default function RapportDetailPage() {
 
     let cancelled = false;
 
-    const fetchAnalysis = async (): Promise<AnalysisRecord> => {
-      const res = await fetch(`/api/analyses/${encodeURIComponent(id)}`);
+    const fetchSession = async (): Promise<AnalysisRecord> => {
+      const res = await fetch(`/api/analysis-sessions/${encodeURIComponent(id)}`);
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
         const message =
@@ -78,23 +78,20 @@ export default function RapportDetailPage() {
         throw new Error(message);
       }
 
-      const analysis = (json?.analysis ?? {}) as Record<string, any>;
+      const session = (json?.session ?? {}) as Record<string, any>;
       const resultPayload =
-        (analysis.result_payload as AnalysisResult | undefined) ||
-        (analysis.result as AnalysisResult | undefined) ||
+        (session.output as AnalysisResult | undefined) ||
         {};
-      const inputPayload = (analysis.input_payload ?? {}) as Record<string, any>;
 
       return {
-        id: String(analysis.id || id),
-        analysis_type: String(analysis.analysis_type || analysis.type || "executive"),
-        created_at: String(analysis.created_at || new Date().toISOString()),
+        id: String(session.id || id),
+        analysis_type: String(session.analysis_type || "analysis"),
+        created_at: String(session.created_at || session.updated_at || new Date().toISOString()),
         result: resultPayload,
         input_data: {
           companyName: String(
-            inputPayload.organization_name ||
-              inputPayload.companyName ||
-              analysis.organization_id ||
+            session.organization_name ||
+              session.organization_id ||
               "Organisatie"
           ),
         },
@@ -104,38 +101,7 @@ export default function RapportDetailPage() {
           undefined,
       };
     };
-
-    const fetchSessionFallback = async (): Promise<AnalysisRecord> => {
-      const res = await fetch(`/api/platform/sessions/${encodeURIComponent(id)}`);
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok || !json?.success || !json?.data) {
-        throw new Error("Sessierapport niet gevonden.");
-      }
-
-      const session = json.data as Record<string, any>;
-      const resultPayload: AnalysisResult = {
-        executive_summary: String(session.executive_summary || "").trim(),
-        insights: Array.isArray(session?.strategic_metadata?.interventies)
-          ? session.strategic_metadata.interventies.map((value: unknown) => String(value))
-          : [],
-        risks: Array.isArray(session?.strategic_metadata?.mechanismen)
-          ? session.strategic_metadata.mechanismen.map((value: unknown) => String(value))
-          : [],
-      };
-
-      return {
-        id: String(session.session_id || id),
-        analysis_type: String(session.analysis_type || "Strategische analyse"),
-        created_at: String(session.analyse_datum || session.updated_at || new Date().toISOString()),
-        result: resultPayload,
-        input_data: {
-          companyName: String(session.organization_name || session.organization_id || "Organisatie"),
-        },
-      };
-    };
-
-    fetchAnalysis()
-      .catch(() => fetchSessionFallback())
+    fetchSession()
       .then((mapped) => {
         if (cancelled) return;
         setReport(mapped);

@@ -27,6 +27,7 @@ import {
 } from "@/aurelius/executive/ExecutiveGateStack";
 import { parseInputAnchors } from "@/aurelius/executive/anchor/anchorScan";
 import { DECISION_CODEX_PROMPT } from "@/aurelius/prompts/decisionCodex.prompt";
+import { renderPromptStackForNarrative } from "@/aurelius/promptStack/PromptStackComposer";
 import { runStrategicReasoningGate } from "@/aurelius/engine/gates/StrategicReasoningGate";
 import {
   buildBoardroomIntelligenceNodePrompt,
@@ -83,6 +84,10 @@ import { OpenAIProvider } from "@/aurelius/llm/OpenAIProvider";
 import { runStrategicCritiqueAgent } from "@/aurelius/reflection/StrategicCritiqueAgent";
 import { runNarrativeRewriteEngine } from "@/aurelius/reflection/NarrativeRewriteEngine";
 import { validateExecutionFeasibility } from "@/aurelius/execution/ExecutionFeasibilityValidator";
+import type { StrategicAnalysisMap } from "@/aurelius/analysis/StrategicAnalysisMap";
+import { renderStrategicAnalysisMapReport } from "@/aurelius/analysis/renderStrategicAnalysisMapReport";
+import { runStrategicAnalysisPipeline } from "@/aurelius/pipeline/StrategicAnalysisPipeline";
+import { RealityEngine } from "@/aurelius/core/RealityEngine";
 
 /* ============================================================
    TYPES
@@ -97,6 +102,7 @@ export interface ContextDocument {
 export interface BoardroomInput {
   analysis_id?: string;
   company_name?: string;
+  analysis_map?: StrategicAnalysisMap;
 
   /** OPTIONAL — LEGACY SAFE */
   questions?: {
@@ -265,7 +271,9 @@ Geen interventievoorstellen.
 `.trim();
 const SCENARIO_SIMULATION_ENGINE_SYSTEM_PROMPT = `
 JE BENT CYNTRA SCENARIO SIMULATION NODE.
-Genereer minimaal 3 scenario's: A consolidatie, B groei, C hybride model.
+Leid minimaal 3 scenario's direct af uit broninput, organisatiepositionering en sectorstructuur.
+Broninput heeft prioriteit boven generieke strategiemodellen.
+Verboden als standaardscenario: status quo, hybride, volumegroei, groei zonder context.
 Per scenario verplicht:
 SCENARIO
 STRATEGISCHE LOGICA
@@ -292,6 +300,8 @@ Geen interventieontwerp.
 const HYPOTHESE_ENGINE_SYSTEM_PROMPT = `
 JE BENT CYNTRA STRATEGISCHE HYPOTHESE ENGINE.
 Genereer minimaal 3 strategische opties: OPTIE A, OPTIE B, OPTIE C.
+Laat de opties direct volgen uit de broninput. Gebruik geen generieke templates als de input al echte strategische richtingen bevat.
+Als de bron expliciete keuzes bevat, hergebruik die keuzes in normale bestuurstaal.
 Per optie exact:
 VOORDEEL
 NADEEL
@@ -3165,7 +3175,72 @@ function buildFallbackNarrative(
   minWords: number,
   maxWords: number
 ): string {
+  if (input.analysis_map) {
+    return renderStrategicAnalysisMapReport(input.analysis_map);
+  }
   const company = input.company_name ?? "de organisatie";
+  const source = buildConcreteContextHint(input).toLowerCase();
+  const hasYouthAmbulantContext =
+    /\b(jeugdzorg|ambulant|ambulante|gemeent|consortium|triage)\b/i.test(source);
+  const scenarioBlock = hasYouthAmbulantContext
+    ? `SCENARIO A — BREDE AMBULANTE SPECIALIST BLIJVEN
+STRATEGISCHE LOGICA: behoud brede ambulante positionering, maar maak groei ondergeschikt aan contractdiscipline, triage-realiteit en teamstabiliteit.
+FINANCIËLE CONSEQUENTIES: lagere uitbreidingssnelheid, maar betere beheersing van druk op budget en capaciteit.
+ORGANISATORISCHE CONSEQUENTIES: meer focus op kernuitvoering, minder parallelle verbreding en scherper prioriteren in het aanbod.
+RISICO'S: beperkte ruimte voor nieuwe proposities en tijdelijke vertraging in marktverbreding.
+LANGE TERMIJN EFFECT: stabielere positie zolang regionale instroom en gemeentelijke ruimte leidend blijven.
+
+SCENARIO B — SELECTIEVE SPECIALISATIE / NICHE KIEZEN
+STRATEGISCHE LOGICA: versmal het profiel naar een kleiner aantal zorgvormen om capaciteit en kwaliteit te concentreren.
+FINANCIËLE CONSEQUENTIES: mogelijk scherper rendement per zorgvorm, maar ook grotere afhankelijkheid van smaller vraagvolume.
+ORGANISATORISCHE CONSEQUENTIES: eenvoudiger sturing, maar zwaardere keuze over wat niet langer prioriteit krijgt.
+RISICO'S: verlies van regionale breedte en minder flexibiliteit in instroomopvang.
+LANGE TERMIJN EFFECT: sterker specialistisch profiel, mits vraag en contractering die focus structureel ondersteunen.
+
+SCENARIO C — CONSORTIUMSTRATEGIE VERDIEPEN
+STRATEGISCHE LOGICA: vergroot invloed op regionale toegang, triage en samenwerking in plaats van primair op autonome verbreding te sturen.
+FINANCIËLE CONSEQUENTIES: minder autonome groeiruimte, maar potentieel betere voorspelbaarheid in instroom en contractafspraken.
+ORGANISATORISCHE CONSEQUENTIES: meer bestuurlijke afstemming extern, minder vrijheid voor solistische koerswijzigingen intern.
+RISICO'S: extra afhankelijkheid van partners en tragere besluitvorming als mandaat diffuus blijft.
+LANGE TERMIJN EFFECT: sterkere regionale verankering als de organisatie haar consortiumrol expliciet weet te sturen.
+
+### SCENARIOVERGELIJKING
+SCENARIO A: voordelen = continuiteit en beheersbaarheid; nadelen = beperkte verbreding; risiconiveau = middel; strategische robuustheid = hoog.
+SCENARIO B: voordelen = focus en profilering; nadelen = smaller speelveld; risiconiveau = middel-hoog; strategische robuustheid = middel.
+SCENARIO C: voordelen = betere aansluiting op instroommechaniek; nadelen = hogere externe afhankelijkheid; risiconiveau = middel; strategische robuustheid = hoog indien governance scherp is.
+
+VOORKEURSSCENARIO: SCENARIO A, met elementen van SCENARIO C in de bestuurlijke samenwerking.
+WAAROM DIT HET MEEST ROBUUST IS: het beschermt de operationele kern en sluit tegelijk aan op het echte sturingsmechanisme van contracten, triage en regionale samenwerking.
+WELKE VOORWAARDEN NODIG ZIJN: expliciete prioritering, harde capaciteitstoetsen, contractdiscipline en een actieve rol in regionale besluitvorming.`
+    : `SCENARIO A — KERN CONSOLIDEREN
+STRATEGISCHE LOGICA: stabilisatie van de kern met focus op margediscipline.
+FINANCIËLE CONSEQUENTIES: lagere variatie en voorspelbare kasdruk.
+ORGANISATORISCHE CONSEQUENTIES: centrale prioritering en lagere uitvoeringsruis.
+RISICO'S: tragere groei buiten de kern.
+LANGE TERMIJN EFFECT: hogere schokbestendigheid.
+
+SCENARIO B — SELECTIEF VERSNELLEN
+STRATEGISCHE LOGICA: versneld uitbreiden van activiteiten die direct op de broncontext aansluiten.
+FINANCIËLE CONSEQUENTIES: hogere investeringsdruk en margerisico.
+ORGANISATORISCHE CONSEQUENTIES: meer managementbelasting en complexiteit.
+RISICO'S: overbelasting en versnippering.
+LANGE TERMIJN EFFECT: hoger potentieel, maar fragieler profiel.
+
+SCENARIO C — GEFASEERDE VERBREDING
+STRATEGISCHE LOGICA: kern stabiliseren en verbreding gefaseerd ontwikkelen.
+FINANCIËLE CONSEQUENTIES: gebalanceerde kasdruk en gecontroleerde investeringen.
+ORGANISATORISCHE CONSEQUENTIES: hogere coördinatiebehoefte met bestuurlijke discipline.
+RISICO'S: scope-drift bij zwakke governance.
+LANGE TERMIJN EFFECT: adaptieve robuustheid.
+
+### SCENARIOVERGELIJKING
+SCENARIO A: voordelen stabiliteit; nadelen trage groei; risiconiveau laag-middel; strategische robuustheid hoog.
+SCENARIO B: voordelen schaal; nadelen hoge druk; risiconiveau hoog; strategische robuustheid laag-middel.
+SCENARIO C: voordelen balans; nadelen complexiteit; risiconiveau middel; strategische robuustheid hoog.
+
+VOORKEURSSCENARIO: SCENARIO C met consolidatie-eerst.
+WAAROM DIT HET MEEST ROBUUST IS: combineert risicobeperking en gecontroleerde groei.
+WELKE VOORWAARDEN NODIG ZIJN: harde gates op marge, capaciteit en mandaat.`;
 
 const base = `### 1. DOMINANTE THESE
 De dominante bestuurlijke these voor ${company} is dat de organisatie niet vastloopt op inzet of intentie, maar op besturing onder druk. In de bovenstroom is de richting vaak duidelijk, maar in de onderstroom wordt de uitvoering nog te vaak bepaald door uitzonderingen, onderlinge afstemming en de persoon die op dat moment de meeste ruimte neemt. Daardoor lijkt het besluitproces op papier stabiel, terwijl het in de praktijk teveel schommelt met de dagdruk. De kernboodschap is niet dat teams harder moeten werken, maar dat het bestuur scherper moet kiezen.
@@ -3214,35 +3289,7 @@ De feitelijke macht zit in deze fase vooral op intake, planning en uitzonderings
 Het primaire executierisico is terugval in oude werkafspraken zodra spanning oploopt. Het faalpunt is meestal dat oude en nieuwe prioriteiten naast elkaar actief blijven, waardoor teams tegelijk moeten versnellen en stabiliseren. De concrete blocker is dubbelmandaat: formeel wordt een richting gekozen, informeel blijft heronderhandeling bestaan. Dat maakt uitvoering langzaam zonder dat iemand expliciet nee zegt.
 
 ### 9. STRATEGISCHE SCENARIOANALYSE
-SCENARIO A — CONSOLIDATIE
-STRATEGISCHE LOGICA: stabilisatie van de kern met focus op margediscipline.
-FINANCIËLE CONSEQUENTIES: lagere variatie en voorspelbare kasdruk.
-ORGANISATORISCHE CONSEQUENTIES: centrale prioritering en lagere uitvoeringsruis.
-RISICO'S: tragere groei buiten de kern.
-LANGE TERMIJN EFFECT: hogere schokbestendigheid.
-
-SCENARIO B — GROEI
-STRATEGISCHE LOGICA: versneld uitbreiden van activiteiten en capaciteit.
-FINANCIËLE CONSEQUENTIES: hogere investeringsdruk en margerisico.
-ORGANISATORISCHE CONSEQUENTIES: meer managementbelasting en complexiteit.
-RISICO'S: overbelasting en versnippering.
-LANGE TERMIJN EFFECT: hoger potentieel, maar fragieler profiel.
-
-SCENARIO C — HYBRIDE MODEL
-STRATEGISCHE LOGICA: kern stabiliseren en verbreding gefaseerd ontwikkelen.
-FINANCIËLE CONSEQUENTIES: gebalanceerde kasdruk en gecontroleerde investeringen.
-ORGANISATORISCHE CONSEQUENTIES: hogere coördinatiebehoefte met bestuurlijke discipline.
-RISICO'S: scope-drift bij zwakke governance.
-LANGE TERMIJN EFFECT: adaptieve robuustheid.
-
-### SCENARIOVERGELIJKING
-SCENARIO A: voordelen stabiliteit; nadelen trage groei; risiconiveau laag-middel; strategische robuustheid hoog.
-SCENARIO B: voordelen schaal; nadelen hoge druk; risiconiveau hoog; strategische robuustheid laag-middel.
-SCENARIO C: voordelen balans; nadelen complexiteit; risiconiveau middel; strategische robuustheid hoog.
-
-VOORKEURSSCENARIO: SCENARIO C met consolidatie-eerst.
-WAAROM DIT HET MEEST ROBUUST IS: combineert risicobeperking en gecontroleerde groei.
-WELKE VOORWAARDEN NODIG ZIJN: harde gates op marge, capaciteit en mandaat.
+${scenarioBlock}
 
 ### 10. 90-DAGEN INTERVENTIEPROGRAMMA
 Maand 1 (dag 1-30): Owner CEO/CFO. Deliverable: bindend consolidatiebesluit, stop-doinglijst, eigenaarschap per prioriteit en vaste KPI-definities. Escalatiepad: uitzonderingen binnen 48 uur naar de formele regietafel.
@@ -3270,6 +3317,46 @@ De Raad van Bestuur committeert zich aan: een bindende keuze met eenduidige eind
     enforceMinimumWords(base, minWords, maxWords, company),
     maxWords
   );
+}
+
+function buildAnalysisMapPromptBlock(analysisMap?: StrategicAnalysisMap): string {
+  if (!analysisMap) {
+    return "Niet beschikbaar; val terug op bestaande node-output en expliciteer ontbrekende velden.";
+  }
+  return [
+    `Organisatie: ${analysisMap.organisation}`,
+    `Sector: ${analysisMap.sector}`,
+    `Analyse datum: ${analysisMap.analysisDate}`,
+    `Dominant risico: ${analysisMap.dominantRisk}`,
+    `Strategische spanning A: ${analysisMap.strategicTension.optionA}`,
+    `Strategische spanning B: ${analysisMap.strategicTension.optionB}`,
+    `Aanbevolen keuze: ${analysisMap.recommendedOption}`,
+    `Historisch outcome-signaal: ${analysisMap.memoryInsights?.historicalOutcome || "niet beschikbaar"}`,
+    "",
+    ...(analysisMap.memoryInsights?.rankedRecommendations?.length
+      ? [
+          "Historische aanbevelingsranking:",
+          ...analysisMap.memoryInsights.rankedRecommendations.map(
+            (item) =>
+              `- ${item.recommendation} | score: ${item.weightedScore} | support: ${item.supportCount} | outcome: ${item.averageOutcomeScore} | sector match: ${item.sectorMatch ? "ja" : "nee"}`
+          ),
+          "",
+        ]
+      : []),
+    "Scenario's:",
+    ...analysisMap.scenarios.map(
+      (scenario) =>
+        `- ${scenario.name} | mechanisme: ${scenario.mechanism} | risico: ${scenario.risk} | bestuurlijke implicatie: ${scenario.governanceImplication}`
+    ),
+    "",
+    "Interventies:",
+    ...analysisMap.interventions.map(
+      (intervention) =>
+        `- ${intervention.action} | reden: ${intervention.reason} | risico: ${intervention.risk} | stopregel: ${intervention.stopRule} | owner: ${intervention.owner || "Bestuur"} | deadline: ${intervention.deadline || "30 dagen"} | KPI: ${intervention.KPI || "n.v.t."}`
+    ),
+    "",
+    renderPromptStackForNarrative(analysisMap),
+  ].join("\n");
 }
 
 function buildConcreteContextHint(input: BoardroomInput): string {
@@ -3419,6 +3506,8 @@ JE RAPPORT FORCEERT EEN BESTUURSBESLUIT.
 
 JE SCHRIJFT UITSLUITEND NEDERLANDS, OOK KOPPEN EN TERMINOLOGIE.
 GEEN MARKETINGTAAL. GEEN AI-TAAL. GEEN VAGE FORMULERINGEN.
+BRONINPUT HEEFT ALTIJD PRIORITEIT BOVEN GENERIEKE STRATEGIEMODELLEN.
+DE STRATEGIC ANALYSIS MAP IS DE PRIMAIRE BRON VOOR RAPPORTTEKST; ANDERE NODE-OUTPUT MAG ALLEEN NORMALISEREN OF VALIDEREN.
 
 CYNTRA SIGNATURE LAYER:
 - Besluitkracht blijft de centrale variabele.
@@ -3472,6 +3561,8 @@ INHOUDSEISEN:
 - Sectie 7 bevat minimaal 3 BOARDROOM INZICHT-blokken met bestuurlijk belang en niet-adresseringsrisico.
 - Sectie 8 benoemt waar uitvoering misgaat, wie blokkeert, wat het concrete faalpunt is en welke onderstroom onzichtbaar werkt.
 - Sectie 9 bevat scenarioanalyse met SCENARIO A/B/C plus scenariovergelijking en voorkeursscenario.
+- Scenario's in sectie 9 moeten naam en logica direct ontlenen aan de broncontext; generieke labels als "groei", "hybride", "status quo" of "volumegroei" zijn verboden tenzij letterlijk door de bron onderbouwd.
+- Als de bron expliciete strategische richtingen bevat, moeten die richtingen terugkomen in sectie 9 en in de afwijzing van niet-gekozen opties.
 - Sectie 10 gebruikt exact: MAAND 1 (dag 1–30): STABILISEREN EN KNOPEN DOORHAKKEN, MAAND 2 (dag 31–60): HERONTWERPEN EN HERALLOCEREN, MAAND 3 (dag 61–90): VERANKEREN EN CONTRACTEREN.
 - Sectie 10 bevat exact 6 interventies, met exact 2 interventies per maand.
 - Sectie 10 bevat dag-30, dag-60 en dag-90 beslisgates met meetbaar resultaat.
@@ -3492,6 +3583,7 @@ STIJLREGELS:
 - Maximaal 4 zinnen per alinea.
 - Geen bullets of checklist-fragmenten; schrijf doorlopende boardroomtaal.
 - Geen vrijblijvende aanbevelingen of algemeenheden.
+- Geen generieke consultancy-abstracties zoals "bestuurlijke inertie" als de bron een concreter extern mechanisme laat zien.
 - Als context dun is: noem hiaten expliciet en verzin geen feiten.
 - Geen termen als "op basis van de analyse", "het lijkt erop dat", "mogelijk", "zou kunnen" of "men zou".
 - Geen termen als "default template", "transformatie-template", "governance-technisch", "patroon", "context is schaars", "werk uit", "aanname", "contextanker", "belangrijke succesfactor", "quick win" of "low hanging fruit".
@@ -3552,6 +3644,7 @@ Gebruik absolute €-bedragen alleen met expliciete berekening + bron; anders ex
 Verwerk StrategicReasoningNode zichtbaar in sectie 1 (Dominante these), sectie 2 (Kernconflict) en sectie 3 (Strategische inzichten).
 Vul blok ### 3. STRATEGISCHE INZICHTEN met minimaal 3 inzichten (INZICHT, WAAROM DIT BELANGRIJK IS, BESTUURLIJKE CONSEQUENTIE).
 Werk sectie 9 uit als scenarioanalyse (A/B/C, vergelijking, voorkeur).
+Leid scenarionamen en keuzecontrasten af uit de broncontext; vermijd generieke labels tenzij brongebonden.
 Werk sectie 10 uit met Maand 1 (dag 1-30), Maand 2 (dag 31-60), Maand 3 (dag 61-90) inclusief owner, deliverable, KPI, escalatiepad en dag-30/60/90 beslisgates.
 Werk sectie 11 uit met besluitscore, risicoanalyse, uitvoerbaarheidsanalyse en verbeteringen inclusief DECISION CONTRACT.
 Sluit sectie 12 af met formeel/informeel machtsverlies, directe stopregels en expliciet verlies met impact.
@@ -3560,6 +3653,7 @@ Neem letterlijk op: "Dan is het escalatiemoment geen marktrisico meer, maar een 
 Neem letterlijk op: "Na dag 90 zonder volledige margekaart vervalt het mandaat om nieuwe initiatieven te starten automatisch, tenzij RvT schriftelijk herbevestigt."
 Voeg alleen sectorspecifieke claims toe als ze aantoonbaar in de broncontext staan.
 Gebruik altijd gecombineerde input uit geüploade documenten en vrije tekstcontext.
+Gebruik de Strategic Analysis Map als primaire rapportbron en wijk alleen af als een veld aantoonbaar ontbreekt.
 ${OPPORTUNITY_GOVERNANCE_DEPTH_DIRECTIVE}
 ${NUMERIC_CLAIM_EXPLANATION_DIRECTIVE}
 ${EXECUTION_PLAN_DEPTH_DIRECTIVE}
@@ -4635,6 +4729,38 @@ ${d.content}
 
   strategicReasoningGateScore = strategicReasoningGate.strategicDepthScore;
   strategicReasoningGatePassed = strategicReasoningGate.pass;
+  const analysisPipeline = runStrategicAnalysisPipeline({
+    organisation: input.company_name,
+    sector: input.sector_selected,
+    dominantRisk:
+      strategicReasoningGate.message ||
+      extractSingleLineValue(decisionPressureOutput, /\bWELK PROBLEEM HIERMEE WORDT OPGELOST:\s*(.+)$/im) ||
+      "",
+    strategicOptions: (strategicOptionOutput.match(/Optie [ABC].+/gi) ?? []).map((line) =>
+      line.replace(/^Optie\s+[ABC]\s*[–-]\s*/i, "").trim()
+    ),
+    recommendedOption:
+      preferredStrategicOption ||
+      extractSingleLineValue(decisionPressureOutput, /\bBESCHRIJVING:\s*(OPTIE\s+[ABC][^.:\n]*)/im) ||
+      "",
+    scenarioSimulationOutput,
+    interventionOutput: interventionEngineOutput,
+    memoryProblemText: groundingSource,
+  });
+  const analysisMap = input.analysis_map ?? analysisPipeline.analysisMap;
+  const realityEngine = new RealityEngine();
+  const realityReport = realityEngine.run({
+    claimText: buildAnalysisMapPromptBlock(analysisMap),
+    evidenceText: groundingSource,
+  });
+  if (realityReport.contradictorySignals.length) {
+    strategicWarnings.push(...realityReport.contradictorySignals);
+  }
+  if (realityReport.evidenceConfidenceScore < 40) {
+    strategicWarnings.push(
+      `RealityEngine: lage evidence-confidence (${realityReport.evidenceConfidenceScore}/100) op analysekaart.`
+    );
+  }
 
   if (!strategicReasoningGate.pass) {
     strategicWarnings.push(
@@ -4722,6 +4848,9 @@ ${decisionQualityOutput || "Niet beschikbaar; leid besluitkwaliteitsanalyse af u
 
 STRATEGISCHE OPTIES EN BESLUITDRUK ENGINE:
 ${decisionPressureOutput}
+
+STRATEGIC ANALYSIS MAP (PRIMAIRE RAPPORTBRON):
+${buildAnalysisMapPromptBlock(analysisMap)}
 
 ORGANIZATIONAL SIMULATION ENGINE:
 ${organizationalSimulationOutput}
@@ -5354,6 +5483,12 @@ ${candidate}
       execution_validation_excerpt: executionValidationText.slice(0, 800),
       strategic_depth_score: strategicReasoningGateScore,
       strategic_reasoning_warnings: strategicWarnings,
+      analysis_map_enabled: true,
+      analysis_map_scenarios: analysisMap.scenarios.length,
+      analysis_map_interventions: analysisMap.interventions.length,
+      analysis_map_recommended_option: analysisMap.recommendedOption,
+      reality_engine_enabled: true,
+      reality_engine_confidence_score: realityReport.evidenceConfidenceScore,
       strategic_memory_cases_retrieved: similarCasesRetrieved,
       knowledge_graph_comparable_organizations: knowledgeGraphComparableCount,
       hypothesis_count: hypothesisCount,

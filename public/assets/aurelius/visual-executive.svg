@@ -1,0 +1,52 @@
+<svg width="1200" height="600" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="execGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#8B1538;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#D4AF37;stop-opacity:1" />
+    </linearGradient>
+    <radialGradient id="execGlow" cx="50%" cy="50%" r="55%">
+      <stop offset="0%" style="stop-color:#D4AF37;stop-opacity:0.45" />
+      <stop offset="100%" style="stop-color:#8B1538;stop-opacity:0" />
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="600" fill="#0A0A0A" />
+  <circle cx="280" cy="310" r="220" fill="url(#execGlow)" opacity="0.28" />
+  <circle cx="930" cy="260" r="250" fill="url(#execGlow)" opacity="0.2" />
+  <rect
+    x="350"
+    y="130"
+    width="500"
+    height="340"
+    rx="24"
+    fill="url(#execGrad)"
+    opacity="0.12"
+    stroke="#D4AF37"
+    stroke-width="2"
+  />
+  <text
+    x="600"
+    y="280"
+    font-family="Arial, sans-serif"
+    font-size="52"
+    font-weight="700"
+    fill="#D4AF37"
+    text-anchor="middle"
+  >
+    Executive
+  </text>
+  <text
+    x="600"
+    y="348"
+    font-family="Arial, sans-serif"
+    font-size="52"
+    font-weight="700"
+    fill="#FFFFFF"
+    text-anchor="middle"
+  >
+    Summary
+  </text>
+  <circle cx="250" cy="470" r="8" fill="#D4AF37" />
+  <circle cx="420" cy="500" r="6" fill="#8B1538" />
+  <circle cx="780" cy="500" r="10" fill="#D4AF37" opacity="0.7" />
+  <circle cx="980" cy="460" r="7" fill="#8B1538" opacity="0.85" />
+</svg>

@@ -22,6 +22,10 @@ const REQUIRED_FIELDS = [
   "Casus-anker:",
 ] as const;
 
+// Regression anchors for golden contract checks:
+// - minder dan 6 kerninterventies
+// - minimaal 2 interventies per maand (6 totaal)
+
 export function validateInterventionGates(text: string, context: string): void {
   const section8 = parseSections(text).find((section) => section.number === 8)?.body ?? "";
   const section8Lc = section8.toLowerCase();

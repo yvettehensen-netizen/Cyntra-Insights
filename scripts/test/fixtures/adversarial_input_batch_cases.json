@@ -1,0 +1,41 @@
+[
+  {
+    "id": "misleidende-ggz",
+    "organization_name": "GGZ Schakel",
+    "sector": "GGZ",
+    "organisatie_grootte": "Middelgroot",
+    "sourcePath": "scripts/test/fixtures/misleidende_ggz_input.txt",
+    "expectedOptions": [
+      "Eerst stabiliseren en contractdiscipline herstellen",
+      "Versneld nieuwe behandelstromen openen",
+      "Selectief uitbreiden onder harde voorwaarden"
+    ],
+    "expectedKeywords": ["groei", "stabiliseren", "contract", "productiviteit"]
+  },
+  {
+    "id": "tegenstrijdige-jeugdzorg",
+    "organization_name": "Jeugdkompas",
+    "sector": "Jeugdzorg",
+    "organisatie_grootte": "Middelgroot",
+    "sourcePath": "scripts/test/fixtures/tegenstrijdige_jeugdzorg_input.txt",
+    "expectedOptions": [
+      "Brede regionale positie beschermen",
+      "Nichefocus aanscherpen",
+      "Consortiumsturing verdiepen"
+    ],
+    "expectedKeywords": ["niche", "brede", "consortium", "gemeenten"]
+  },
+  {
+    "id": "arme-saas",
+    "organization_name": "ThinCloud",
+    "sector": "SaaS",
+    "organisatie_grootte": "Klein",
+    "sourcePath": "scripts/test/fixtures/arme_saas_input.txt",
+    "expectedOptions": [
+      "Kernstabiliteit en retentie eerst herstellen",
+      "Sales versnellen ondanks druk",
+      "Gefaseerde prioritering tussen product en sales"
+    ],
+    "expectedKeywords": ["sales", "product", "druk", "klanten"]
+  }
+]

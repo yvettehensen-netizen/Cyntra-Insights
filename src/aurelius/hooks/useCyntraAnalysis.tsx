@@ -8,6 +8,8 @@ import { useState, useCallback } from "react";
 import type { AnalysisType } from "@/aurelius/types";
 import type { Sector } from "@/aurelius/sector/types";
 import type { CyntraDualLayerOutput } from "@/aurelius/synthesis/dualLayer";
+import type { StrategicLeverInsight } from "@/aurelius/strategy/StrategicLeverDetector";
+import type { CausalStrategyResult } from "@/aurelius/causal/CausalStrategyEngine";
 
 /* ============================================================
    INPUT
@@ -27,12 +29,94 @@ export type RunCyntraInput = {
 ============================================================ */
 
 export type RunCyntraResult = {
-  report?: string;
+  report?: unknown;
   confidence?: "high" | "medium" | "low";
   created_at?: string;
   intelligence_layer?: CyntraDualLayerOutput["intelligence_layer"];
   decision_layer?: CyntraDualLayerOutput["decision_layer"];
+  strategic_levers?: StrategicLeverInsight[];
+  causal_strategy?: CausalStrategyResult;
 };
+
+function extractNarrativeText(input: unknown): string {
+  if (typeof input === "string") return input;
+  if (!input || typeof input !== "object") return "";
+
+  const obj = input as Record<string, unknown>;
+  if (typeof obj.report === "string") return obj.report;
+  if (obj.report && typeof obj.report === "object") {
+    const report = obj.report as Record<string, unknown>;
+    if (typeof report.narrative === "string") return report.narrative;
+  }
+  if (typeof obj.narrative === "string") return obj.narrative;
+  return "";
+}
+
+function normalizeResultPayload(payload: Record<string, unknown>): RunCyntraResult {
+  return {
+    report: extractNarrativeText(payload),
+    confidence: (payload.confidence as RunCyntraResult["confidence"]) ?? "high",
+    created_at:
+      typeof payload.created_at === "string" ? payload.created_at : undefined,
+    intelligence_layer: payload.intelligence_layer as RunCyntraResult["intelligence_layer"],
+    decision_layer: payload.decision_layer as RunCyntraResult["decision_layer"],
+    strategic_levers: payload.strategic_levers as RunCyntraResult["strategic_levers"],
+    causal_strategy: payload.causal_strategy as RunCyntraResult["causal_strategy"],
+  };
+}
+
+async function runLocalAnalyseFallback(
+  input: RunCyntraInput
+): Promise<RunCyntraResult> {
+  const runId =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `run-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+  const startRes = await fetch("/api/analyse", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      runId,
+      payload: {
+        analysis_type: input.analysis_type,
+        company_context: input.company_context,
+        document_data: input.document_data,
+        analysisContext: input.analysisContext,
+      },
+    }),
+  });
+
+  if (!startRes.ok) {
+    const txt = await startRes.text();
+    throw new Error(`Lokale analyse start mislukt (${startRes.status}): ${txt}`);
+  }
+
+  for (let attempt = 0; attempt < 90; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    const statusRes = await fetch(`/api/analyse/status/${encodeURIComponent(runId)}`);
+    if (!statusRes.ok) continue;
+
+    const statusJson = (await statusRes.json()) as {
+      status?: string;
+      result?: Record<string, unknown>;
+      error?: string;
+    };
+
+    if (statusJson.status === "completed" && statusJson.result) {
+      return normalizeResultPayload(statusJson.result);
+    }
+
+    if (statusJson.status === "error") {
+      throw new Error(statusJson.error || "Lokale analyse mislukt");
+    }
+  }
+
+  throw new Error("Lokale analyse timeout.");
+}
 
 /* ============================================================
    HOOK
@@ -52,71 +136,49 @@ export function useCyntraAnalysis() {
       try {
         const baseUrl = import.meta.env.VITE_SUPABASE_FUNCTIONS_URL;
         const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-        if (!baseUrl || !anonKey) {
-          throw new Error("Supabase env vars ontbreken");
-        }
-
         const payload = JSON.stringify(input);
 
-        const res = await fetch(`${baseUrl}/aurelius-analyze`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${anonKey}`,
-            apikey: anonKey,
-          },
-          body: payload,
-        });
+        let finalResult: RunCyntraResult;
 
-        if (!res.ok) {
-          // Fallback for local API path when edge function rejects payload/auth.
-          const localRes = await fetch("/api/analyze", {
+        if (baseUrl && anonKey) {
+          const res = await fetch(`${baseUrl}/aurelius-analyze`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
+              Authorization: `Bearer ${anonKey}`,
+              apikey: anonKey,
             },
             body: payload,
           });
 
-          if (!localRes.ok) {
-            const txt = await res.text();
-            throw new Error(`Analyse faalde (${res.status}): ${txt}`);
+          if (!res.ok) {
+            throw new Error(`Analyse faalde (${res.status})`);
           }
 
-          const localJson = await localRes.json();
-          if (localJson.success === false) {
-            throw new Error(localJson.error || "Analyse mislukt");
+          const json = await res.json();
+
+          if (json.success === false) {
+            throw new Error(json.error || "Analyse mislukt");
           }
 
-          const localResult: RunCyntraResult = {
-            report: localJson.report,
-            confidence: localJson.confidence ?? "high",
-            created_at: localJson.created_at,
-            intelligence_layer: localJson.intelligence_layer,
-            decision_layer: localJson.decision_layer,
-          };
-          setResult(localResult);
-          return localResult;
+          finalResult = normalizeResultPayload(json);
+        } else {
+          finalResult = await runLocalAnalyseFallback(input);
         }
-
-        const json = await res.json();
-
-        if (json.success === false) {
-          throw new Error(json.error || "Analyse mislukt");
-        }
-
-        const finalResult: RunCyntraResult = {
-          report: json.report,
-          confidence: json.confidence ?? "high",
-          created_at: json.created_at,
-          intelligence_layer: json.intelligence_layer,
-          decision_layer: json.decision_layer,
-        };
 
         setResult(finalResult);
         return finalResult;
       } catch (e) {
+        if ((e as Error).name !== "AbortError") {
+          try {
+            const fallback = await runLocalAnalyseFallback(input);
+            setResult(fallback);
+            return fallback;
+          } catch {
+            // Preserve original upstream error when local fallback also fails.
+          }
+        }
+
         if ((e as Error).name === "AbortError") return {};
         const msg = e instanceof Error ? e.message : "Analyse mislukt";
         setError(msg);

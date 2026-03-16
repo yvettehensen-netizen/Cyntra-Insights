@@ -1,0 +1,1 @@
+function p(e){const t=String(e||"").trim(),r=t.match(/^sess-(\d{8})(\d{6})-([A-Z0-9]+)$/i);if(r){const[,s,o,a]=r;return`RPT-${s}-${o}-${a.toUpperCase()}`}return t?t.toUpperCase().startsWith("RPT-")?t.toUpperCase():`RPT-${t.toUpperCase()}`:"RPT-ONBEKEND"}export{p as f};

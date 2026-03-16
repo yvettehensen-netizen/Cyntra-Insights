@@ -1,0 +1,14 @@
+{
+  "timestamp": "2026-03-05T11:40:59.480Z",
+  "case_id": "case-20260305-WUFSCC",
+  "sector": "Zorg/GGZ",
+  "dominant_problem_category": "overig",
+  "dataset_update": {
+    "case_count": 1,
+    "intervention_count": 2,
+    "outcome_count": 2
+  },
+  "interventions_registered": 2,
+  "outcomes_evaluated": 2,
+  "pattern_updates": 2
+}

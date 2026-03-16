@@ -42,6 +42,8 @@ function logError(err: any) {
    CANON
 ============================================================ */
 
+// Invariant marker: single_call_mode vereist in stabilisatiemodus
+
 const DECISION_FRAMEWORKS_CANON = [
   "Porter",
   "PESTEL",

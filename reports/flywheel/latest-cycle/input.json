@@ -1,0 +1,45 @@
+{
+  "board_report": "Dominante these\nStructurele margedruk door tariefdaling, loonkostenstijging en contractplafonds ondermijnt capaciteit.\n\nBesluit\nKies consolideren, daarna stabiliseren, daarna gecontroleerde verbreding.\n\n90-dagen interventieprogramma\n1. Stop nieuwe initiatieven zonder margevalidatie.\n2. Bouw volledige margekaart per product/team/verzekeraar.\n3. Definieer contractvloer per verzekeraar.\n4. Veranker wekelijkse cash- en KPI-sturing.\n5. Borg capaciteitsneutraliteit voor HR-loket.",
+  "decision_output": {
+    "dominant_problem": "Parallelle verbreding zonder contractzekerheid veroorzaakt structurele margeslijtage.",
+    "dominant_thesis": "Zonder harde volgorde tussen consolideren en verbreden ontstaat binnen 12-18 maanden verhoogd liquiditeitsrisico.",
+    "strategic_options": [
+      {
+        "code": "A",
+        "description": "Consolideren van de GGZ-kern met margeherstel."
+      },
+      {
+        "code": "B",
+        "description": "Versneld verbreden via HR-loket en nieuwe pijlers."
+      },
+      {
+        "code": "C",
+        "description": "Gefaseerde strategie met harde stopregels."
+      }
+    ],
+    "recommended_option": "C",
+    "interventieplan": "Consolideren eerst. Contractdiscipline afdwingen. Geen verbreding zonder positieve margevalidatie en capaciteitsimpact."
+  },
+  "mechanisms": [
+    {
+      "mechanism": "Tariefdruk en contractplafonds limiteren omzetgroei."
+    },
+    {
+      "mechanism": "Productiviteitsnorm zonder volledige cijferopenheid creëert gedragsfrictie."
+    }
+  ],
+  "insights": [
+    {
+      "insight": "Volgordefout vergroot liquiditeitsstress.",
+      "description": "Eerst kernstabilisatie vereist."
+    }
+  ],
+  "metadata": {
+    "organisatie_type": "GGZ-praktijk",
+    "sector": "Zorg/GGZ",
+    "organisatie_grootte": "25 medewerkers",
+    "verdienmodel": "Declaratiegedreven met verzekeraarsafhankelijkheid",
+    "analyse_datum": "2026-03-05"
+  },
+  "intervention_outcomes": []
+}

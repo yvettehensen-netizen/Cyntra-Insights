@@ -19,6 +19,7 @@ import "./styles/print.css";
 ============================================================ */
 import PublicLayout from "./layouts/PublicLayout";
 import PortalLayout from "./layouts/PortalLayout";
+import PortalErrorBoundary from "./components/PortalErrorBoundary";
 
 /* ============================================================
    GUARDS
@@ -28,43 +29,59 @@ import PortalGuard from "./aurelius/guards/PortalGuard";
 /* ============================================================
    PUBLIC PAGES
 ============================================================ */
-import HomePage from "./pages/marketing/HomePage";
-import HowItWorksPage from "./pages/marketing/HowItWorksPage";
-import PricingPage from "./pages/marketing/PricingPage";
-import VoorConsultantsPage from "./pages/marketing/VoorConsultantsPage";
-import SectorenPage from "./pages/marketing/SectorenPage";
-import DemoPage from "./pages/marketing/DemoPage";
-import AureliusPreview from "./pages/marketing/solutions/AureliusPreview";
-import ZorgScanPreviewPage from "./pages/marketing/ZorgScanPreviewPage";
-import {
-  SectorScaleupPage,
-  SectorOverheidPage,
-} from "./pages/marketing/SectorPages";
-import StrategicQuickscan from "./pages/StrategicQuickscan";
-import Contact from "./pages/Contact";
-import SignupPage from "./pages/SignupPage";
-import Bedankt from "./pages/Bedankt";
-import DemoReportPage from "./pages/demo/DemoReportPage";
+const HomePage = lazy(() => import("./pages/marketing/HomePage"));
+const HowItWorksPage = lazy(() => import("./pages/marketing/HowItWorksPage"));
+const PricingPage = lazy(() => import("./pages/marketing/PricingPage"));
+const SectorenPage = lazy(() => import("./pages/marketing/SectorenPage"));
+const DemoPage = lazy(() => import("./pages/marketing/DemoPage"));
+const StrategicQuickscan = lazy(() => import("./pages/StrategicQuickscan"));
+const Contact = lazy(() => import("./pages/Contact"));
+const SignupPage = lazy(() => import("./pages/SignupPage"));
+const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage"));
+const Bedankt = lazy(() => import("./pages/Bedankt"));
 
 /* ============================================================
    AUTH
 ============================================================ */
-import LoginPage from "./auth/LoginPage";
+import {
+  AUTH_DEFAULT_AFTER_LOGIN_PATH,
+  AUTH_FALLBACK_FORGOT_PASSWORD_PATH,
+  AUTH_FALLBACK_LOGIN_PATH,
+  AUTH_LOGIN_PATH,
+  AUTH_RESET_PASSWORD_PATH,
+  AUTH_SIGNUP_PATH,
+} from "./auth/authPaths";
+import {
+  PORTAL_ANALYSIS_PATH,
+  PORTAL_BENCHMARK_PATH,
+  PORTAL_CASES_PATH,
+  PORTAL_DATASET_PATH,
+  PORTAL_DASHBOARD_PATH,
+  PORTAL_INTERVENTIONS_PATH,
+  PORTAL_ORGANIZATION_SCANNER_PATH,
+  PORTAL_REPORT_PATH,
+  PORTAL_REPORT_LIBRARY_PATH,
+  PORTAL_SECTOR_INSIGHTS_PATH,
+  PORTAL_SETTINGS_PATH,
+  PORTAL_SIGNALS_PATH,
+} from "./pages/portal/portalPaths";
+const LoginPage = lazy(() => import("./auth/LoginPage"));
 
 /* ============================================================
    PORTAL CORE
 ============================================================ */
-import PortalHomePage from "./pages/portal/PortalHomePage";
-import InstellingenPage from "./pages/portal/InstellingenPage";
-import BoardTestPage from "./pages/aurelius/BoardTestPage";
-import BoardEvaluationPage from "./pages/aurelius/BoardEvaluationPage";
-import DashboardDecisionOS from "./pages/portal/DashboardDecisionOS";
-import ExecutionDashboard from "./execution/components/ExecutionDashboard";
+const PortalHomePage = lazy(() => import("./pages/portal/PortalHomePage"));
+const InstellingenPage = lazy(() => import("./pages/portal/InstellingenPage"));
+const BoardTestPage = lazy(() => import("./pages/aurelius/BoardTestPage"));
+const BoardEvaluationPage = lazy(() => import("./pages/aurelius/BoardEvaluationPage"));
+const ExecutionDashboard = lazy(() => import("./execution/components/ExecutionDashboard"));
+const StrategischeAnalyseSaaSPage = lazy(() => import("./pages/portal/saas/StrategischeAnalyseSaaSPage"));
+const CyntraSaaSDashboardPage = lazy(() => import("./pages/portal/saas/CyntraSaaSDashboardPage"));
 
 /* ============================================================
    AURELIUS ENGINE PAGES
 ============================================================ */
-import EngineTest from "./core/EngineTest";
+const EngineTest = lazy(() => import("./core/EngineTest"));
 
 /* ============================================================
    PDF
@@ -75,14 +92,6 @@ const UnifiedAnalysisPage = lazy(
   () => import("./aurelius/pages/analysis/UnifiedAnalysisPage")
 );
 const ControlSurface = lazy(() => import("./pages/aurelius/ControlSurface"));
-const RapportenPage = lazy(() => import("./pages/portal/RapportenPage"));
-const RapportDetailPage = lazy(() => import("./pages/portal/RapportDetailPage"));
-const CyntraSaaSDashboardPage = lazy(
-  () => import("./pages/portal/saas/CyntraSaaSDashboardPage")
-);
-const StrategischeAnalyseSaaSPage = lazy(
-  () => import("./pages/portal/saas/StrategischeAnalyseSaaSPage")
-);
 const StrategischRapportSaaSPage = lazy(
   () => import("./pages/portal/saas/StrategischRapportSaaSPage")
 );
@@ -174,6 +183,15 @@ function AureliusReportPDFRoute() {
   );
 }
 
+function LegacyPortalReportRoute() {
+  const { id } = useParams<{ id: string }>();
+  return <StrategischRapportSaaSPage key={id ?? "report"} />;
+}
+
+function RedirectToCanonicalAnalysis() {
+  return <Navigate to={PORTAL_ANALYSIS_PATH} replace />;
+}
+
 /* ============================================================
    APP ROUTER
 ============================================================ */
@@ -194,35 +212,43 @@ export default function App() {
       {/* PUBLIC */}
       <Route element={<PublicLayout />}>
         <Route path="/" element={<HomePage />} />
+        <Route path="/analysis" element={<RedirectToCanonicalAnalysis />} />
+        <Route path="/analysis/new" element={<RedirectToCanonicalAnalysis />} />
+        <Route path="/analysis/session/:id" element={<RedirectToCanonicalAnalysis />} />
+        <Route path="/aurelius" element={<Navigate to="/" replace />} />
         <Route path="/hoe-het-werkt" element={<HowItWorksPage />} />
         <Route path="/scan" element={<StrategicQuickscan />} />
         <Route path="/prijzen" element={<PricingPage />} />
         <Route path="/pricing" element={<PricingPage />} />
-        <Route path="/voor-consultants" element={<VoorConsultantsPage />} />
+        <Route path="/portal/login" element={<Navigate to={AUTH_LOGIN_PATH} replace />} />
         <Route path="/sectoren" element={<SectorenPage />} />
         <Route path="/besluitdocument" element={<DemoPage />} />
-        <Route path="/demo" element={<DemoPage />} />
-        <Route path="/demo-report" element={<DemoReportPage />} />
-        <Route path="/aurelius" element={<AureliusPreview />} />
-        <Route path="/aurelius/login" element={<LoginPage />} />
-        <Route path="/zorgscan" element={<ZorgScanPreviewPage />} />
-        <Route path="/scaleups" element={<SectorScaleupPage />} />
-        <Route path="/overheid" element={<SectorOverheidPage />} />
+        <Route path={AUTH_LOGIN_PATH} element={<LoginPage />} />
+        <Route path={AUTH_FALLBACK_LOGIN_PATH} element={<Navigate to={AUTH_LOGIN_PATH} replace />} />
         <Route path="/quickscan" element={<StrategicQuickscan />} />
-        <Route path="/signup" element={<SignupPage />} />
+        <Route path={AUTH_SIGNUP_PATH} element={<SignupPage />} />
+        <Route path={AUTH_RESET_PASSWORD_PATH} element={<ResetPasswordPage />} />
+        <Route
+          path={AUTH_FALLBACK_FORGOT_PASSWORD_PATH}
+          element={<Navigate to={AUTH_RESET_PASSWORD_PATH} replace />}
+        />
         <Route path="/contact" element={<Contact />} />
         <Route path="/bedankt" element={<Bedankt />} />
       </Route>
 
       {/* PORTAL */}
       <Route element={<PortalGuard />}>
-        <Route element={<PortalLayout />}>
-          <Route path="/portal/aurelius/intake/:type" element={<UnifiedAnalysisPage />} />
-          <Route path="/portal/analyse/:slug" element={<UnifiedAnalysisPage />} />
-          <Route path="/portal/analysis/:slug" element={<UnifiedAnalysisPage />} />
-          <Route path="/portal" element={<Navigate to="/portal/dashboard" replace />} />
+        <Route element={<PortalErrorBoundary><PortalLayout /></PortalErrorBoundary>}>
+          <Route path="/portal/aurelius/intake/:type" element={<RedirectToCanonicalAnalysis />} />
+          <Route path="/portal/analys" element={<RedirectToCanonicalAnalysis />} />
+          <Route path="/portal/analys/:slug" element={<RedirectToCanonicalAnalysis />} />
+          <Route path="/portal/analyse" element={<RedirectToCanonicalAnalysis />} />
+          <Route path="/portal/analyse/:slug" element={<RedirectToCanonicalAnalysis />} />
+          <Route path="/portal/analysis" element={<RedirectToCanonicalAnalysis />} />
+          <Route path="/portal/analysis/:slug" element={<RedirectToCanonicalAnalysis />} />
+          <Route path="/portal" element={<Navigate to={PORTAL_DASHBOARD_PATH} replace />} />
           <Route path="/portal/home" element={<PortalHomePage />} />
-          <Route path="/portal/dashboard" element={<DashboardDecisionOS />} />
+          <Route path={PORTAL_DASHBOARD_PATH} element={<CyntraSaaSDashboardPage />} />
           <Route path="/aurelius/control-surface" element={<ControlSurface />} />
           <Route path="/aurelius/gebruikersinvoer" element={<BoardTestPage />} />
           <Route
@@ -233,36 +259,46 @@ export default function App() {
             path="/aurelius/board-evaluation"
             element={<BoardEvaluationPage />}
           />
-          <Route path="/portal/rapporten" element={<RapportenPage />} />
-          <Route path="/portal/rapporten/:id" element={<RapportDetailPage />} />
+          <Route path={PORTAL_ANALYSIS_PATH} element={<StrategischeAnalyseSaaSPage />} />
+          <Route path={PORTAL_REPORT_LIBRARY_PATH} element={<StrategischRapportSaaSPage />} />
+          <Route path={`${PORTAL_REPORT_PATH}/:id`} element={<LegacyPortalReportRoute />} />
+          <Route path={PORTAL_INTERVENTIONS_PATH} element={<InterventiesSaaSPage />} />
+          <Route path={PORTAL_CASES_PATH} element={<HistorischeCasesSaaSPage />} />
+          <Route path={PORTAL_BENCHMARK_PATH} element={<BenchmarkSaaSPage />} />
+          <Route path={PORTAL_SECTOR_INSIGHTS_PATH} element={<BrancheAnalyseSaaSPage />} />
+          <Route path={PORTAL_SIGNALS_PATH} element={<SignalenSaaSPage />} />
+          <Route path={PORTAL_DATASET_PATH} element={<DatasetSaaSPage />} />
+          <Route path={PORTAL_ORGANIZATION_SCANNER_PATH} element={<OrganisatieScannerSaaSPage />} />
+          <Route path={PORTAL_SETTINGS_PATH} element={<InstellingenSaaSPlatformPage />} />
+          <Route path="/portal/rapporten/:id" element={<LegacyPortalReportRoute />} />
           <Route path="/portal/saas" element={<CyntraSaaSDashboardPage />} />
-          <Route path="/portal/saas/analyse" element={<StrategischeAnalyseSaaSPage />} />
-          <Route path="/portal/saas/rapporten" element={<StrategischRapportSaaSPage />} />
-          <Route path="/portal/saas/interventies" element={<InterventiesSaaSPage />} />
-          <Route path="/portal/saas/cases" element={<HistorischeCasesSaaSPage />} />
-          <Route path="/portal/saas/branche-analyse" element={<BrancheAnalyseSaaSPage />} />
+          <Route path="/portal/saas/analysis" element={<RedirectToCanonicalAnalysis />} />
+          <Route path="/portal/saas/rapporten" element={<Navigate to={PORTAL_REPORT_LIBRARY_PATH} replace />} />
+          <Route path="/portal/saas/interventies" element={<Navigate to={PORTAL_INTERVENTIONS_PATH} replace />} />
+          <Route path="/portal/saas/cases" element={<Navigate to={PORTAL_CASES_PATH} replace />} />
+          <Route path="/portal/saas/branche-analyse" element={<Navigate to={PORTAL_SECTOR_INSIGHTS_PATH} replace />} />
           <Route path="/portal/saas/sector-radar" element={<SectorRadarPage />} />
-          <Route path="/portal/saas/organisatie-scanner" element={<OrganisatieScannerSaaSPage />} />
+          <Route path="/portal/saas/organisatie-scanner" element={<Navigate to={PORTAL_ORGANIZATION_SCANNER_PATH} replace />} />
           <Route path="/portal/saas/autopilot" element={<AutopilotPage />} />
           <Route path="/portal/saas/ai-agent" element={<AIAgentPage />} />
           <Route path="/portal/saas/strategy-copilot" element={<StrategyCopilotPage />} />
           <Route path="/portal/saas/besluit-simulator" element={<BesluitSimulatorPage />} />
           <Route path="/portal/saas/boardroom" element={<BoardroomPage />} />
           <Route path="/portal/saas/strategische-kennis" element={<StrategischeKennisPage />} />
-          <Route path="/portal/saas/benchmark" element={<BenchmarkSaaSPage />} />
-          <Route path="/portal/saas/dataset" element={<DatasetSaaSPage />} />
+          <Route path="/portal/saas/benchmark" element={<Navigate to={PORTAL_BENCHMARK_PATH} replace />} />
+          <Route path="/portal/saas/dataset" element={<Navigate to={PORTAL_DATASET_PATH} replace />} />
           <Route path="/portal/saas/voorspellingen" element={<VoorspellingenPage />} />
-          <Route path="/portal/saas/signalen" element={<SignalenSaaSPage />} />
-          <Route path="/portal/saas/instellingen" element={<InstellingenSaaSPlatformPage />} />
-          <Route path="/analyse" element={<Navigate to="/portal/saas/analyse" replace />} />
-          <Route path="/rapporten" element={<Navigate to="/portal/saas/rapporten" replace />} />
-          <Route path="/interventies" element={<Navigate to="/portal/saas/interventies" replace />} />
-          <Route path="/historische-cases" element={<Navigate to="/portal/saas/cases" replace />} />
-          <Route path="/benchmark" element={<Navigate to="/portal/saas/benchmark" replace />} />
+          <Route path="/portal/saas/signalen" element={<Navigate to={PORTAL_SIGNALS_PATH} replace />} />
+          <Route path="/portal/saas/instellingen" element={<Navigate to={PORTAL_SETTINGS_PATH} replace />} />
+          <Route path="/analyse" element={<Navigate to={PORTAL_ANALYSIS_PATH} replace />} />
+          <Route path="/rapporten" element={<Navigate to={PORTAL_REPORT_LIBRARY_PATH} replace />} />
+          <Route path="/interventies" element={<Navigate to={PORTAL_INTERVENTIONS_PATH} replace />} />
+          <Route path="/historische-cases" element={<Navigate to={PORTAL_CASES_PATH} replace />} />
+          <Route path="/benchmark" element={<Navigate to={PORTAL_BENCHMARK_PATH} replace />} />
           <Route path="/sector-radar" element={<Navigate to="/portal/saas/sector-radar" replace />} />
-          <Route path="/signalen" element={<Navigate to="/portal/saas/signalen" replace />} />
+          <Route path="/signalen" element={<Navigate to={PORTAL_SIGNALS_PATH} replace />} />
           <Route path="/voorspellingen" element={<Navigate to="/portal/saas/voorspellingen" replace />} />
-          <Route path="/organisatie-scanner" element={<Navigate to="/portal/saas/organisatie-scanner" replace />} />
+          <Route path="/organisatie-scanner" element={<Navigate to={PORTAL_ORGANIZATION_SCANNER_PATH} replace />} />
           <Route path="/strategy-copilot" element={<Navigate to="/portal/saas/strategy-copilot" replace />} />
           <Route
             path="/portal/rapporten/:id/pdf"

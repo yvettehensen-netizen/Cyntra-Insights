@@ -1,0 +1,34 @@
+{
+  "id": "northline-advisory",
+  "organizationName": "Northline Advisory",
+  "sector": "B2B dienstverlening",
+  "overallScore": 94,
+  "memoScore": 100,
+  "keywordHits": 4,
+  "keywordTarget": 4,
+  "memoArtifactPass": true,
+  "rawReportArtifactPass": true,
+  "pass": true,
+  "recommendedOption": "Kern beschermen en delivery disciplineren",
+  "historicalOutcome": "Geen historisch outcome-signaal beschikbaar",
+  "boardIssueCodes": [
+    "incomplete_sentence",
+    "generic_scenario"
+  ],
+  "boardIssues": [
+    "Onvolledige of semantisch kapotte regel verwijderd.",
+    "Onvolledige of semantisch kapotte regel verwijderd.",
+    "Onvolledige of semantisch kapotte regel verwijderd.",
+    "Scenario niet onderscheidend: Commercieel versnellen via nieuwe proposities: verhoogt omzetkans maar ook uitvoeringsdruk.",
+    "Scenario niet onderscheidend: Selectieve focus op rendabele accounts: verlaagt ruis en beschermt deliverykwaliteit."
+  ],
+  "consistencyFindings": [],
+  "rawConsistencyFindings": [
+    "Kernprobleem, kernstelling en aanbevolen keuze sluiten semantisch niet strak op elkaar aan."
+  ],
+  "scenarioIssues": [
+    "Scenario niet onderscheidend: Commercieel versnellen via nieuwe proposities: verhoogt omzetkans maar ook uitvoeringsdruk.",
+    "Scenario niet onderscheidend: Selectieve focus op rendabele accounts: verlaagt ruis en beschermt deliverykwaliteit."
+  ],
+  "boardMemoQualityFindings": []
+}

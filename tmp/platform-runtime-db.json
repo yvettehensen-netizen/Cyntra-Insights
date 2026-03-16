@@ -1,0 +1,28 @@
+{
+  "organizations": [
+    {
+      "organization_id": "project-cyntra-insights",
+      "organisatie_naam": "Cyntra Insights",
+      "sector": "AI / Strategisch analyseplatform",
+      "organisatie_grootte": "Kernplatform",
+      "abonnementstype": "Enterprise",
+      "analyses": [],
+      "created_at": "2026-03-16T00:00:00.000Z",
+      "updated_at": "2026-03-16T00:00:00.000Z"
+    },
+    {
+      "organization_id": "project-7",
+      "organisatie_naam": "Project 7",
+      "sector": "AI / Strategisch analyseplatform",
+      "organisatie_grootte": "Nieuwste versie",
+      "abonnementstype": "Enterprise",
+      "analyses": [],
+      "created_at": "2026-03-16T00:00:00.000Z",
+      "updated_at": "2026-03-16T00:00:00.000Z"
+    }
+  ],
+  "sessions": [],
+  "datasetRecords": [],
+  "interventions": [],
+  "cases": []
+}

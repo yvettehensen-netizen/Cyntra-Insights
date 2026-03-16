@@ -77,46 +77,119 @@ function extractNarrativeText(input: unknown): string {
   return "";
 }
 
+function extractStructuredResultPayload(input: unknown): Record<string, unknown> | null {
+  if (!input || typeof input !== "object") return null;
+  const obj = input as Record<string, unknown>;
+
+  if (obj.result_payload && typeof obj.result_payload === "object") {
+    return obj.result_payload as Record<string, unknown>;
+  }
+
+  if (obj.result && typeof obj.result === "object") {
+    const legacy = obj.result as Record<string, unknown>;
+    if ("input_payload" in legacy) {
+      const next = Object.fromEntries(
+        Object.entries(legacy).filter(([key]) => key !== "input_payload")
+      );
+      return next;
+    }
+    return legacy;
+  }
+
+  return obj;
+}
+
+function formatStructuredResultAsMarkdown(input: Record<string, unknown>): string {
+  const executiveSummary = String(input.executive_summary || "").trim();
+  const keyFindings = Array.isArray(input.key_findings) ? input.key_findings.map(String) : [];
+  const risks = Array.isArray(input.risks) ? input.risks.map(String) : [];
+  const opportunities = Array.isArray(input.opportunities)
+    ? input.opportunities.map(String)
+    : [];
+  const actions = Array.isArray(input.actions) ? input.actions.map(String) : [];
+  const scores = Array.isArray(input.scores)
+    ? input.scores
+        .map((score) => {
+          if (!score || typeof score !== "object") return "";
+          const item = score as Record<string, unknown>;
+          return `- ${String(item.name || "Score")}: ${String(item.value || 0)} (${String(item.trend || "flat")})`;
+        })
+        .filter(Boolean)
+    : [];
+
+  return [
+    "### Executive Summary",
+    executiveSummary || "Analyse afgerond zonder executive summary.",
+    "",
+    "### Kernbevindingen",
+    ...(keyFindings.length ? keyFindings.map((item) => `- ${item}`) : ["- Geen kernbevindingen beschikbaar."]),
+    "",
+    "### Risico's",
+    ...(risks.length ? risks.map((item) => `- ${item}`) : ["- Geen risico's beschikbaar."]),
+    "",
+    "### Kansen",
+    ...(opportunities.length
+      ? opportunities.map((item) => `- ${item}`)
+      : ["- Geen kansen beschikbaar."]),
+    "",
+    "### Acties",
+    ...(actions.length ? actions.map((item) => `- ${item}`) : ["- Geen acties beschikbaar."]),
+    "",
+    "### Scores",
+    ...(scores.length ? scores : ["- Geen scores beschikbaar."]),
+  ]
+    .join("\n")
+    .trim();
+}
+
 async function runLocalAnalyseFallback(
   payload: Pick<RunCyntraInput, "analysis_type" | "company_context" | "document_data">,
   onProgress?: (progress: number, partial: string) => void
 ): Promise<unknown> {
-  const runId =
-    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-      ? crypto.randomUUID()
-      : `fallback-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  onProgress?.(15, "");
 
-  const startRes = await fetch("/api/analyse", {
+  const startRes = await fetch("/api/analyses", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ runId, payload }),
+    body: JSON.stringify({
+      organization: "Organisatie",
+      description: payload.company_context,
+      context: {
+        analysis_type: payload.analysis_type,
+        document_data: payload.document_data ?? "",
+      },
+      runImmediately: true,
+    }),
   });
   if (!startRes.ok) {
     const txt = await startRes.text();
     throw new Error(`Lokale analyse start mislukt (${startRes.status}): ${txt}`);
   }
 
-  const maxAttempts = 90;
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    const statusRes = await fetch(`/api/analyse/status/${encodeURIComponent(runId)}`);
-    if (!statusRes.ok) continue;
-    const statusJson = (await statusRes.json()) as {
-      status?: string;
-      progress?: number;
-      result?: unknown;
-      error?: string;
-    };
-    const pct = Math.max(0, Math.min(100, Number(statusJson.progress ?? 0)));
-    onProgress?.(pct, "");
-
-    if (statusJson.status === "completed") return statusJson.result;
-    if (statusJson.status === "error") {
-      throw new Error(statusJson.error || "Lokale analyse mislukt.");
-    }
+  const body = (await startRes.json()) as {
+    analysis?: Record<string, unknown>;
+    error?: string;
+  };
+  const analysis = body.analysis ?? null;
+  const resultPayload = extractStructuredResultPayload(analysis);
+  if (!analysis || !resultPayload) {
+    throw new Error(body.error || "Lokale analyse gaf geen resultaat terug.");
   }
 
-  throw new Error("Lokale analyse timeout.");
+  onProgress?.(100, "");
+  return {
+    id: typeof analysis.id === "string" ? analysis.id : undefined,
+    report: formatStructuredResultAsMarkdown(resultPayload),
+    metadata: {
+      confidence: "medium",
+      processing_time: 0,
+      word_count: formatStructuredResultAsMarkdown(resultPayload).split(/\s+/).filter(Boolean).length,
+      depth_applied: "boardroom",
+      priority_applied: "high",
+      visuals_included: false,
+      stream_processed: false,
+    },
+  };
 }
 
 /* ============================================================

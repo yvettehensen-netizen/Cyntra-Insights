@@ -1,0 +1,34 @@
+{
+  "id": "signalstack",
+  "organizationName": "SignalStack",
+  "sector": "SaaS",
+  "overallScore": 94,
+  "memoScore": 100,
+  "keywordHits": 4,
+  "keywordTarget": 4,
+  "memoArtifactPass": true,
+  "rawReportArtifactPass": true,
+  "pass": true,
+  "recommendedOption": "Retentie en unit economics eerst herstellen",
+  "historicalOutcome": "Geen historisch outcome-signaal beschikbaar",
+  "boardIssueCodes": [
+    "incomplete_sentence",
+    "generic_scenario"
+  ],
+  "boardIssues": [
+    "Onvolledige of semantisch kapotte regel verwijderd.",
+    "Onvolledige of semantisch kapotte regel verwijderd.",
+    "Onvolledige of semantisch kapotte regel verwijderd.",
+    "Scenario niet onderscheidend: Enterprise sales versnellen: verhoogt ACV maar vergroot implementatiedruk.",
+    "Scenario niet onderscheidend: Focus op selectieve verticale groei: scherpt ICP en retentie per segment aan."
+  ],
+  "consistencyFindings": [],
+  "rawConsistencyFindings": [
+    "Kernprobleem, kernstelling en aanbevolen keuze sluiten semantisch niet strak op elkaar aan."
+  ],
+  "scenarioIssues": [
+    "Scenario niet onderscheidend: Enterprise sales versnellen: verhoogt ACV maar vergroot implementatiedruk.",
+    "Scenario niet onderscheidend: Focus op selectieve verticale groei: scherpt ICP en retentie per segment aan."
+  ],
+  "boardMemoQualityFindings": []
+}

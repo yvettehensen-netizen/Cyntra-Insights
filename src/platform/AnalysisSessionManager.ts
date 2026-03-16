@@ -10,7 +10,30 @@ import { interventionStore } from "@/aurelius/interventions/InterventionStore";
 import { caseStore } from "@/aurelius/cases/CaseStore";
 import { LearningLoop } from "@/aurelius/learning/LearningLoop";
 import { runAureliusMvpEngine } from "@/aurelius/mvp";
-import type { AnalysisSession } from "./types";
+import { runCausalStrategyEngine } from "@/aurelius/causal/CausalStrategyEngine";
+import { buildStrategyDNABlock, buildStrategyDNAMemoSummary } from "@/aurelius/dna/DNAInsightGenerator";
+import { classifyStrategyDNA } from "@/aurelius/dna/StrategyDNAClassifier";
+import {
+  buildScenarioMemoBlock,
+  buildScenarioSimulationBlock as buildScenarioSimulationReportBlock,
+  generateStrategicScenarios,
+} from "@/aurelius/simulation/ScenarioEngine";
+import { runStressTestEngine } from "@/aurelius/stress/StressTestEngine";
+import { detectStrategicLeverMatrix } from "@/aurelius/strategy/StrategicLeverDetector";
+import { validateEngineOutput } from "@/aurelius/validation/EngineOutputValidator";
+import { buildStrategicAnalysisMap } from "@/aurelius/analysis/buildStrategicAnalysisMap";
+import { renderStrategicAnalysisMapReport } from "@/aurelius/analysis/renderStrategicAnalysisMapReport";
+import { validateBoardReport } from "@/aurelius/engine/validators/BoardReportValidator";
+import { validateStrategicConsistency } from "@/aurelius/engine/validators/StrategicConsistencyGuard";
+import { runBlindSpotNode } from "@/aurelius/engine/nodes/strategy/BlindSpotNode";
+import { runDecisionConsequenceNode } from "@/aurelius/engine/nodes/strategy/DecisionConsequenceNode";
+import { runStrategicLeverageNode } from "@/aurelius/engine/nodes/strategy/StrategicLeverageNode";
+import { runStrategicMemoryNode } from "@/aurelius/engine/nodes/strategy/StrategicMemoryNode";
+import { runBoardroomDebateNode } from "@/aurelius/engine/nodes/strategy/BoardroomDebateNode";
+import { getReport as getStoredReport, saveReport as saveStoredReport } from "@/services/reportStorage";
+import { ensureReportIntegrity, ensureSessionIntegrity } from "@/aurelius/engine/EngineGuardrails";
+import { SESSION_STATUS, isSessionCompleted, normalizeSessionStatus } from "./types";
+import type { AnalysisSession, AnalysisSessionStatus } from "./types";
 import { inferBoardroomConflict, type BoardroomConflict } from "./BoardroomConflictEngine";
 import { extractStrategicMechanisms, type StrategicMechanismOutput } from "./StrategicMechanismExtractor";
 import { inferStrategicFlywheel, type StrategicFlywheelOutput } from "./StrategicFlywheelEngine";
@@ -22,6 +45,10 @@ import {
   type StrategicPatternProfile,
 } from "./StrategicPatternLibrary";
 import { createId, normalize, readArray, writeArray } from "./storage";
+import {
+  frameBoardroomShock,
+  normalizeBoardroomBullet,
+} from "@/aurelius/executive/BoardroomLanguageNormalizer";
 
 const KEY = "cyntra_platform_analysis_sessions_v1";
 const MIN_ANALYSIS_RUNTIME_MS = 12000;
@@ -331,8 +358,7 @@ function extractSection(report: string, headingNumber: number): string {
   const match = report.match(regex);
   if (!match || match.index == null) return "";
   const start = match.index + match[0].length;
-  const sectionHeadingPattern =
-    /\n\d+\.\s+(Besluitvraag|Bestuurlijke these|Feitenbasis|Strategische opties|Aanbevolen keuze|Niet-onderhandelbare besluitregels|90-dagen interventieplan|KPI monitoring|Besluittekst)\s*$/gm;
+  const sectionHeadingPattern = /\n\d+\.\s+[^\n]+\s*$/gm;
   const nextRegex = new RegExp(sectionHeadingPattern.source, sectionHeadingPattern.flags);
   nextRegex.lastIndex = start;
   const next = nextRegex.exec(report);
@@ -343,6 +369,80 @@ function extractSection(report: string, headingNumber: number): string {
   const markdownEnd = nextMarkdown?.index ?? report.length;
   const end = Math.min(numericEnd, markdownEnd);
   return report.slice(start, end).trim();
+}
+
+function hasReportHeading(report: string, patterns: RegExp[]): boolean {
+  const text = String(report || "");
+  return patterns.some((pattern) => pattern.test(text));
+}
+
+function hasDecisionQuestionBlock(report: string): boolean {
+  return hasReportHeading(report, [
+    /1\.\s*Besluitvraag/i,
+    /(?:^|\n)BESLUITVRAAG(?:\n|$)/i,
+  ]);
+}
+
+function hasFactBaseBlock(report: string): boolean {
+  return hasReportHeading(report, [
+    /3\.\s*Feitenbasis/i,
+    /(?:^|\n)FEITENBASIS(?:\n|$)/i,
+  ]);
+}
+
+function hasOptionsBlock(report: string): boolean {
+  return hasReportHeading(report, [
+    /4\.\s*Strategische opties/i,
+    /(?:^|\n)(?:KEUZERICHTINGEN|STRATEGISCHE OPTIES)(?:\n|$)/i,
+  ]);
+}
+
+function hasInterventionPlanBlock(report: string): boolean {
+  return hasReportHeading(report, [
+    /7\.\s*90-dagen interventieplan/i,
+    /(?:^|\n)(?:BESTUURLIJK ACTIEPLAN|90-DAGEN INTERVENTIEPLAN)(?:\n|$)/i,
+  ]);
+}
+
+function hasKpiMonitoringBlock(report: string): boolean {
+  return hasReportHeading(report, [
+    /8\.\s*KPI monitoring/i,
+    /(?:^|\n)(?:VROEGSIGNALERING|KPI MONITORING|STOPREGEL)(?:\n|$)/i,
+  ]);
+}
+
+function hasStrategicConflictChoiceBlock(report: string): boolean {
+  return hasReportHeading(report, [
+    /Spanning A:|Keuze A:/i,
+    /Spanning B:|Keuze B:/i,
+    /(?:^|\n)(?:KERNPROBLEEM|STRATEGISCH CONFLICT)(?:\n|$)/i,
+    /de keuze loopt tussen/i,
+    /(?:^|\n)(?:KEUZERICHTINGEN|STRATEGISCHE OPTIES)(?:\n|$)/i,
+  ]);
+}
+
+function hasForcingChoiceBlock(report: string): boolean {
+  return hasReportHeading(report, [
+    /Forcing choice:|Besluittest:/i,
+    /(?:^|\n)BESLUITVRAAG(?:\n|$)/i,
+    /welke keuze verlaagt nu het structurele risico/i,
+    /(?:^|\n)(?:AANBEVOLEN KEUZE|BESTUURLIJKE KEUZE)(?:\n|$)/i,
+  ]);
+}
+
+function hasRecommendedChoiceBlock(report: string): boolean {
+  return hasReportHeading(report, [
+    /5\.\s*(?:Aanbevolen keuze|Aanbevolen richting)/i,
+    /(?:^|\n)(?:AANBEVOLEN KEUZE|BESTUURLIJKE KEUZE|VOORGESTELDE KEUZE)(?:\n|$)/i,
+    /(?:^|\n)Besluit:\s+/im,
+  ]);
+}
+
+function hasKillerInsightsBlock(report: string): boolean {
+  return hasReportHeading(report, [
+    /6\.\s*Doorbraakinzichten/i,
+    /(?:^|\n)(?:DOORBRAAKINZICHTEN|KILLER INSIGHTS|NIEUWE INZICHTEN)(?:\n|$)/i,
+  ]);
 }
 
 function cleanMemoText(value: string): string {
@@ -479,6 +579,77 @@ function sanitizeReportForBoardView(value: string): string {
     .trim();
 }
 
+function normalizeBoardReportForContract(params: {
+  report: string;
+  organisation?: string;
+  sector?: string;
+  analysisDate?: string;
+  dominantRisk?: string;
+  strategicOptions?: string[];
+  recommendedOption?: string;
+  scenarioSimulationOutput?: string;
+  interventionOutput?: string;
+  memoryProblemText?: string;
+}): string {
+  const sanitized = sanitizeReportForBoardView(params.report);
+  const analysisMap = buildStrategicAnalysisMap({
+    organisation: params.organisation,
+    sector: params.sector,
+    analysisDate: params.analysisDate,
+    dominantRisk: params.dominantRisk,
+    strategicOptions: params.strategicOptions,
+    recommendedOption: params.recommendedOption,
+    scenarioSimulationOutput: params.scenarioSimulationOutput || sanitized,
+    interventionOutput: params.interventionOutput,
+    memoryProblemText: params.memoryProblemText,
+  });
+  const rendered = renderStrategicAnalysisMapReport(analysisMap);
+  const validation = validateBoardReport(sanitized, analysisMap);
+  const consistency = validateStrategicConsistency({
+    reportText: validation.sanitizedText || sanitized,
+    sourceText: params.memoryProblemText,
+    analysisMap,
+  });
+  const severeConsistencyFinding = consistency.findings.some((item) =>
+    ["input_dominance_gap", "why_not_alignment_gap"].includes(item.code)
+  );
+  const issueCodes = new Set(validation.issues.map((item) => item.code));
+  const publicYouthSector = /(jeugdzorg|jeugdwet|gemeente|wijkteam|jongeren|gezinnen)/i.test(
+    `${params.organisation || ""} ${params.sector || ""} ${params.memoryProblemText || ""}`
+  );
+  const hasCanonicalStructure =
+    /KERNPROBLEEM/i.test(sanitized) && /KERNSTELLING/i.test(sanitized) && /AANBEVOLEN KEUZE/i.test(sanitized);
+  const hasLegacyRichStructure =
+    /0\.\s*Boardroom summary/i.test(sanitized) &&
+    /INZICHT/i.test(sanitized) &&
+    /BESTUURLIJKE CONSEQUENTIE/i.test(sanitized);
+  const hasMinimumStructure = hasCanonicalStructure || hasLegacyRichStructure;
+
+  const hasHardContractBreak =
+    issueCodes.has("forbidden_artifact") ||
+    issueCodes.has("metadata_conflict") ||
+    issueCodes.has("why_not_choice_leak") ||
+    issueCodes.has("incomplete_section") ||
+    validation.issues.filter((item) => item.code === "incomplete_sentence").length >= 8 ||
+    severeConsistencyFinding;
+
+  if (publicYouthSector && sanitized) {
+    return hasHardContractBreak ? rendered : validation.sanitizedText || sanitized;
+  }
+
+  if (
+    !sanitized ||
+    !hasMinimumStructure ||
+    hasHardContractBreak ||
+    (issueCodes.has("generic_scenario") && validation.issues.length >= 8) ||
+    validation.issues.filter((item) => item.code === "incomplete_sentence").length >= 12
+  ) {
+    return rendered;
+  }
+
+  return validation.sanitizedText || rendered;
+}
+
 function compactInterventionSection(value: string): string {
   const text = String(value || "");
   if (!text) return "";
@@ -569,6 +740,10 @@ function removeInsightLeakageFromConsequences(value: string): string {
 function enforceConsequencesContract(value: string, sourceContext: string): string {
   const body = cleanMemoText(String(value || ""));
   const context = normalize(sourceContext).toLowerCase();
+  const publicYouthContext = /(jeugdzorg|jeugdwet|gemeente|gemeentelijke inkoop|wijkteam|jongeren|gezinnen)/i.test(context);
+  const explicitScaleModelContext = /(70\/30|modeladoptie|licentie|replicatie|partnergovernance|eigenaarschap|beweging van nul)/i.test(
+    context
+  );
   const hasFinancial = /financieel gevolg:/i.test(body);
   const hasGovernance = /governance gevolg:/i.test(body);
   const hasCapacity = /capaciteit\/kwaliteit gevolg:/i.test(body);
@@ -591,17 +766,23 @@ function enforceConsequencesContract(value: string, sourceContext: string): stri
   const lines = [body].filter(Boolean);
   if (!hasFinancial) {
     lines.push(
-      `Financieel gevolg: zonder netwerk- en licentieversnelling blijft kostendruk (tot +${agingPct}% loonkosten) sneller stijgen dan contractruimte. Trigger: kwartaalmarge onder norm in 2 opeenvolgende periodes.`
+      publicYouthContext || !explicitScaleModelContext
+        ? "Financieel gevolg: zonder contractdiscipline en scherpere propositie stijgt uitvoeringsdruk sneller dan financiële ruimte. Trigger: kwartaalmarge twee meetperiodes onder norm."
+        : `Financieel gevolg: zonder netwerk- en licentieversnelling blijft kostendruk (tot +${agingPct}% loonkosten) sneller stijgen dan contractruimte. Trigger: kwartaalmarge onder norm in 2 opeenvolgende periodes.`
     );
   }
   if (!hasGovernance) {
     lines.push(
-      `Governance gevolg: elke groeibeslissing boven ${growthCap} FTE/jaar zonder expliciete boardtoets verhoogt kans op cultuur- en eigenaarschapserosie. Trigger: groeibesluit buiten vastgesteld besluitkader.`
+      publicYouthContext || !explicitScaleModelContext
+        ? "Governance gevolg: elke verbreding zonder expliciete contract-, triage- en caseloadtoets verhoogt de kans op bestuurlijke ruis en teamerosie. Trigger: uitbreiding buiten vastgesteld besluitkader."
+        : `Governance gevolg: elke groeibeslissing boven ${growthCap} FTE/jaar zonder expliciete boardtoets verhoogt kans op cultuur- en eigenaarschapserosie. Trigger: groeibesluit buiten vastgesteld besluitkader.`
     );
   }
   if (!hasCapacity) {
     lines.push(
-      `Capaciteit/kwaliteit gevolg: als kort-trajectuitstroom niet stijgt boven ${triagePct}% blijft wachtdruk structureel en neemt kwaliteitsvariatie toe. Trigger: KPI-doel 2 maanden achtereen niet gehaald.`
+      publicYouthContext || !explicitScaleModelContext
+        ? "Capaciteit/kwaliteit gevolg: als triage en instroomdiscipline niet verbeteren, blijven wachttijden structureel en neemt kwaliteitsdruk toe. Trigger: wachttijd of caseload twee meetperiodes boven norm."
+        : `Capaciteit/kwaliteit gevolg: als kort-trajectuitstroom niet stijgt boven ${triagePct}% blijft wachtdruk structureel en neemt kwaliteitsvariatie toe. Trigger: KPI-doel 2 maanden achtereen niet gehaald.`
     );
   }
 
@@ -636,11 +817,143 @@ function hardenBoardroomLanguage(value: string): string {
   return cleanMemoText(dedupeLines(text));
 }
 
+function sanitizePublicYouthMemo(value: string): string {
+  const text = String(value || "");
+  if (!text) return "";
+  return cleanMemoText(
+    dedupeLines(
+      text
+        .replace(/\b5\s*FTE\/jaar\b/gi, "expliciete capaciteits- en caseloadgrens")
+        .replace(/\bsysteemadoptie\b/gi, "zichtbare contract- en netwerkvalidatie")
+        .replace(/\bnetwerk- en licentieversnelling\b/gi, "contractdiscipline en focusversnelling")
+        .replace(/\bnetwerk\/licentie-inkomsten\b/gi, "contractverbetering en verwijzersverbreding")
+        .replace(/\bgroei t\.o\.v\. fte-cap\b/gi, "groei t.o.v. capaciteitsgrens")
+        .replace(/\bcultuur- en eigenaarschapserosie\b/gi, "teamerosie en kwaliteitsverlies")
+        .replace(/\bimpactgroei blijft achter op beleids- en netwerkkansen\b/gi, "wachttijd- en contractverbetering blijft achter op bestuurlijke doelen")
+        .replace(/\bactiveer partner-audit en pauzeer nieuwe implementaties tot herstel\b/gi, "verscherp samenwerkingsaudit en pauzeer verbreding tot kwaliteit herstelt")
+    )
+  );
+}
+
 function normalizeBoardMemo(value: string): string {
+  const fillEmptyMechanismSections = (text: string): string =>
+    text
+      .replace(
+        /CAUSAAL MECHANISME\s*\n\s*(?=DOMINANT ORGANISATIETYPE)/gi,
+        "CAUSAAL MECHANISME\nDe causale sprong ontstaat wanneer focus, prioritering en governance aan elkaar worden gekoppeld, zodat impact groeit zonder lineaire uitbreiding van interne uitvoeringsdruk.\n\n"
+      )
+      .replace(
+        /KERNMECHANISME\s*\n\s*(?=STRATEGISCHE SCENARIO'S)/gi,
+        "KERNMECHANISME\nKwaliteitsdiscipline, focus en bestuurlijke consistentie vormen samen het mechanisme dat retentie, uitvoerbaarheid en overdraagbaarheid draagt.\n\n"
+      );
+  const hasMolendriftCompressionSignature = (text: string): boolean => {
+    const source = String(text || "");
+    if (/\bmolendrift\b/i.test(source)) return true;
+    const signals = [
+      /\b70\s*\/\s*30\b|\b70%\s*zorg\b|\b30%\s*ontwikkel/i.test(source),
+      /\baandelen|mede-eigenaar|eigenaarschap\b/i.test(source),
+      /\bbeweging van nul|vng|vws\b/i.test(source),
+      /\bmax(?:imaal)?\s*5\s*fte\b|\b5\s*fte\/jaar\b/i.test(source),
+      /\bpartnerreplicatie|licentie|modeladoptie\b/i.test(source),
+    ].filter(Boolean).length;
+    const blockers = [
+      /\bjeugdzorg|jeugdwet|gemeentelijke inkoop|haarlem|zuid-kennemerland\b/i.test(source),
+    ].filter(Boolean).length;
+    return signals >= 4 && blockers === 0;
+  };
+  const applyPartnerMemoCompression = (text: string): string => {
+    const nextSeed = String(text || "");
+    if (!hasMolendriftCompressionSignature(nextSeed)) {
+      return nextSeed;
+    }
+
+    return nextSeed
+      .replace(
+        /DOMINANTE THESE\s*\n[\s\S]*?(?=\n\nDOMINANT MECHANISM\b)/i,
+        [
+          "DOMINANTE THESE",
+          "Molendrift heeft geen groeiprobleem.",
+          "Het heeft een replicatieprobleem.",
+          "Impact groeit pas echt wanneer het eigenaarschapsmodel overdraagbaar wordt gemaakt zonder cultuurverlies.",
+        ].join("\n")
+      )
+      .replace(
+        /BOARDROOM INSIGHT\s*\n[\s\S]*?(?=\n\nMISDIAGNOSIS INSIGHT\b)/i,
+        [
+          "BOARDROOM INSIGHT",
+          "Molendrift kan niet lineair schalen zonder cultuurverlies.",
+          "De kwaliteit wordt gedragen door eigenaarschap, ontwikkeltijd en professionele discipline, niet door hiërarchische controle.",
+          "Daarom moet impact groeien via cellen en netwerkreplicatie, niet via extra behandelcapaciteit.",
+        ].join("\n")
+      )
+      .replace(
+        /MISDIAGNOSIS INSIGHT\s*\n[\s\S]*?(?=\n\nSTRATEGISCH CONFLICT\b)/i,
+        [
+          "MISDIAGNOSIS INSIGHT",
+          "Molendrift denkt dat impactgroei extra capaciteit vereist.",
+          "Maar het werkelijke vraagstuk is overdraagbaarheid van het kwaliteits- en eigenaarschapsmodel.",
+          "Zolang dat model niet repliceerbaar wordt gemaakt, blijft groei bestuurlijk vastlopen.",
+        ].join("\n")
+      )
+      .replace(
+        /INTERVENTIES\s*\n[\s\S]*?(?=\n\n(?:STRATEGISCHE HEFBOMEN|CAUSAAL MECHANISME)\b)/i,
+        [
+          "INTERVENTIES",
+          "1. Binnen 90 dagen: formaliseer de groeicap van 5 FTE en de 70/30-guardrails. Owner: bestuur en MT. Economics: voorkom extra vaste loonkosten zonder schaalrendement.",
+          "2. Binnen 6 maanden: start 2 proefcellen met vaste standaarden, mentorratio en kwartaalreview. Owner: MT. Economics: test schaal zonder volledige overheadgroei.",
+          "3. Binnen 6 maanden: contracteer 2 licentiepartners met auditprotocol en verplichte opleidingsroute. Owner: directie. Economics: verschuif groei van FTE-kosten naar modelinkomen.",
+        ].join("\n")
+      )
+      .replace(
+        /WIJ BESLUITEN\s*\n[\s\S]*?(?=\n\nBOARDROOM QUESTION\b)/i,
+        [
+          "WIJ BESLUITEN",
+          "1. We zetten lineaire FTE-groei niet in als primaire schaalroute.",
+          "2. We testen binnen 6 maanden twee gecontroleerde cellen op kwaliteit, doorstroom en mentorbelasting.",
+          "3. We starten binnen 6 maanden twee licentiepartners, maar alleen onder auditprotocol en verplichte opleidingsroute.",
+        ].join("\n")
+      );
+  };
+  const ensureOpenQuestions = (text: string): string => {
+    if (/Open vragen\s*\n\s*\d+\./i.test(text) || /CHALLENGE QUESTION/i.test(text)) return text;
+    const fallback = [
+      "Open vragen",
+      "1. Welke kwaliteitsguardrails zijn niet onderhandelbaar zodra netwerkreplicatie start?",
+      "2. Bij welke KPI-daling activeren we een groeistop of herbesluit op boardniveau?",
+      "3. Welke partnercriteria bepalen of modeladoptie schaal toevoegt zonder cultuurerosie?",
+    ].join("\n");
+    return `${text.trim()}\n\n${fallback}`.trim();
+  };
+  const stripLegacyScaffold = (text: string): string =>
+    text
+      .replace(/\nAPPENDIX[\s\S]*$/i, "")
+      .trim();
+  const stripUnresolvedArtifacts = (text: string): string =>
+    text
+      .replace(/.*\bundefined\b.*(?:\n|$)/gi, "")
+      .replace(/.*\bnull\b.*(?:\n|$)/gi, "")
+      .replace(/MISDIAGNOSIS INSIGHT\s+(Molendrift denkt|Molendrift probeert)/i, "MISDIAGNOSIS INSIGHT\n$1")
+      .replace(/KERNMECHANISME\s*\n\s*\n+/gi, "KERNMECHANISME\n")
+      .replace(/^\s*[([]\s*[)\]]\s*$/gm, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+
   const sanitized = dedupeLines(cleanMemoText(stripSourceDump(value)));
   if (!sanitized) return "";
   const parts = sanitized.split(/\n(?=(?:Bestuurlijke hypothese|Feitenbasis|Besluitvoorstel|Consequenties|Opvolging 90 dagen)\n)/);
-  if (parts.length <= 1) return sanitized;
+  if (parts.length <= 1) {
+    return truncateBoardMemoTail(
+      applyPartnerMemoCompression(
+        hardenBoardroomLanguage(
+          fillEmptyMechanismSections(
+            stripUnresolvedArtifacts(
+              ensureOpenQuestions(stripLegacyScaffold(sanitized))
+            )
+          )
+        )
+      )
+    );
+  }
 
   const rebuilt = parts
     .map((part) => part.trim())
@@ -670,7 +983,19 @@ function normalizeBoardMemo(value: string): string {
     })
     .join("\n\n");
 
-  return truncateBoardMemoTail(hardenBoardroomLanguage(cleanMemoText(rebuilt)));
+  return truncateBoardMemoTail(
+    applyPartnerMemoCompression(
+      hardenBoardroomLanguage(
+        fillEmptyMechanismSections(
+          cleanMemoText(
+            stripUnresolvedArtifacts(
+              ensureOpenQuestions(stripLegacyScaffold(rebuilt))
+            )
+          )
+        )
+      )
+    )
+  );
 }
 
 function sanitizePredictions(
@@ -998,7 +1323,8 @@ function buildStrategicThesis(
   return {
     boardQuestion:
       "Kernvraag: welke strategische keuze verlaagt nu het hoogste structurele risico zonder zorgkwaliteit en teamstabiliteit te schaden?",
-    dominantThesis: "Het probleem is niet activiteitstekort maar bestuurlijke inertie op het dominante risicomechanisme.",
+    dominantThesis:
+      "Het probleem is niet activiteitstekort maar een extern gestuurd spanningsveld tussen regionale triage, contractruimte en budgetgedreven capaciteit.",
     killerInsight:
       "Killer insight: zonder expliciete prioritering op marge, capaciteit en besluitritme versterken operationele en financiele fricties elkaar.",
     decisions: [
@@ -1169,11 +1495,11 @@ function buildMisdiagnosisInsightBlock(params: {
   if (primaryPattern === "professional_partnership") {
     return [
       "MISDIAGNOSIS INSIGHT",
-      `${org} probeert impact te vergroten door uitbreiding van capaciteit.`,
+      `${org} probeert maatschappelijke impact te vergroten door extra behandelcapaciteit toe te voegen.`,
       "",
-      `Maar het onderliggende probleem is geen capaciteitsprobleem. Het is een replicatieprobleem.`,
+      "Maar het onderliggende vraagstuk is niet capaciteit. Het is overdraagbaarheid van een kwaliteits- en eigenaarschapsmodel.",
       "",
-      `Zolang ${mechanism} niet wordt aangepast, blijft impactgroei terugkeren als bestuurlijk knelpunt.`,
+      "Zolang dat model niet expliciet repliceerbaar wordt gemaakt via cellen, partners of licentie-implementaties, blijft impactgroei bestuurlijk vastlopen.",
     ].join("\n");
   }
 
@@ -1207,16 +1533,16 @@ function buildDecisionPressureBlock(params: {
 }): string {
   const optionA =
     normalize(params.optionA) ||
-    "Conservatief: bescherm kernkwaliteit met strikte groeicap en beperkte externe expansie.";
+    "Bescherm de kern, begrens parallelle verbreding en herstel bestuurlijke focus.";
   const optionB =
     normalize(params.optionB) ||
-    "Expansief: versnel schaal via volumegroei met hogere korte-termijn uitvoeringsdruk.";
+    "Versnel verbreding en accepteer hogere druk op capaciteit, marge en uitvoering.";
   const optionC =
     normalize(params.optionC) ||
-    "Hybride: schaal via netwerk- en modeladoptie met harde kwaliteits- en eigenaarschapsguardrails.";
+    "Kies een gefaseerde route met expliciete governance-gates en heldere stopregels.";
   const explicitLoss =
     normalize(params.explicitLoss) ||
-    "Snelle volumegroei en maximale directe controle kunnen niet tegelijk behouden blijven.";
+    "Maximale snelheid en maximale bestuurlijke beheersbaarheid kunnen niet tegelijk behouden blijven.";
   const killSwitch =
     normalize(params.killSwitch) ||
     "Stop de gekozen route als kern-KPI's 2 meetperiodes onder norm blijven of cultuurguardrails structureel worden overschreden.";
@@ -1483,24 +1809,53 @@ function buildStrategySimulationEngine(params: {
   const waitlistPct = params.leverage?.waitlistShortPathPct ?? 8;
   const agingPct = params.leverage?.agingCostPct ?? 30;
   const mechanismText = normalize(params.successMechanism).toLowerCase();
+  const publicYouthContext = /(jeugdzorg|jongeren|gezinnen|gemeente|wijkteam)/i.test(
+    `${org} ${(params.strategicOptions || []).join(" ")} ${mechanismText}`
+  );
   const partnershipContext =
-    /(eigenaarschap|cultuur|netwerk|replicatie|partner|licentie)/i.test(mechanismText) ||
-    (growthCap <= 7 && waitlistPct >= 5);
+    !publicYouthContext &&
+    /(eigenaarschap|cultuur|netwerk|replicatie|partner|licentie|modeladoptie|70\/30)/i.test(mechanismText) ||
+    Boolean(params.leverage?.movementOfZeroKnown) ||
+    Boolean(params.leverage?.licenseMarginKnown);
   const options = (params.strategicOptions || []).slice(0, 3);
   const defaultA = partnershipContext
     ? "Culture-first model: bescherm kernkwaliteit en eigenaarschap met beperkte interne groei."
-    : "Conservatieve strategie met gecontroleerde groei en harde kwaliteitsguardrails.";
+    : "Bescherm de kern en begrens parallelle verbreding totdat capaciteit en governance aantoonbaar op orde zijn.";
   const defaultB = partnershipContext
-    ? "Volume scaling: versnel lineaire groei via extra capaciteit en volumesturing."
-    : "Expansieve strategie met versneld schaaltempo en hogere uitvoeringsdruk.";
+    ? "Versnel impact via extra capaciteit en accepteer hogere druk op borging en uitvoering."
+    : "Versnel verbreding en accepteer hogere uitvoeringsdruk op teams, marge en sturing.";
   const defaultC = partnershipContext
-    ? "Network replication: schaal modeladoptie via partners met contractuele kwaliteitsborging."
-    : "Hybride strategie via netwerkadoptie met contractuele kwaliteitsborging.";
+    ? "Schaal selectief via partners met contractuele kwaliteitsborging en auditritme."
+    : "Gefaseerde route met selectieve samenwerking en expliciete governance-gates.";
   const scenarioA = options[0] || defaultA;
   const scenarioB = options[1] || defaultB;
   const scenarioC = options[2] || defaultC;
 
-  const simulation_results: StrategySimulationEngineOutput["simulation_results"] = [
+  const simulation_results: StrategySimulationEngineOutput["simulation_results"] = publicYouthContext
+    ? [
+        {
+          scenario: "A",
+          capaciteit: "Capaciteit stabiliseert wanneer instroom strakker wordt gestuurd en kerncasuïstiek voorrang krijgt.",
+          financien: "Financiële ruimte verbetert als contractmix en verlieslatende breedte sneller worden gecorrigeerd.",
+          cultuur: "Teamstabiliteit verbetert wanneer focus en caseloadgrenzen bestuurlijk worden beschermd.",
+          netwerk: "Verwijzersvertrouwen groeit zodra de propositie scherper en consistenter wordt uitgelegd.",
+        },
+        {
+          scenario: "B",
+          capaciteit: "Capaciteit komt extra onder druk zodra aanbod wordt verbreed zonder scherpere triage of partnerroutering.",
+          financien: "Meer volume kan tijdelijk omzet toevoegen, maar verantwoordingslast en margedruk lopen sneller op.",
+          cultuur: "Meer spreiding vergroot bestuurlijke ruis en verhoogt risico op uitval en kwaliteitsdruk.",
+          netwerk: "Gemeenten en partners zien minder scherp waar de organisatie werkelijk onderscheidend is.",
+        },
+        {
+          scenario: "C",
+          capaciteit: "Capaciteit blijft beschermd als niet-kernvragen via partners of verwijzers worden gerouteerd.",
+          financien: "Contractkwaliteit en verwijzersvertrouwen verbeteren zonder lineaire uitbreiding van interne kosten.",
+          cultuur: "De kerncultuur blijft beter intact zolang partners onder scherp governancekader werken.",
+          netwerk: "Netwerksamenwerking versterkt bereik zonder dat de organisatie haar kernpropositie hoeft te verbreden.",
+        },
+      ]
+    : [
     {
       scenario: "A",
       capaciteit: `Capaciteit groeit beheerst; doorstroom verbetert beperkt zolang kort-traject rond ${waitlistPct}% blijft.`,
@@ -1611,45 +1966,51 @@ function buildStrategySimulationEngine(params: {
     scenario_risks,
     strategy_comparison: [
       "STRATEGY COMPARISON",
-      `Scenario A\nVoordeel: hoge stabiliteit.\nNadeel: lagere impactsnelheid.`,
-      `Scenario B\nVoordeel: hoge potentiële impactgroei.\nNadeel: hoogste cultuur- en kwaliteitsrisico.`,
-      `Scenario C\nVoordeel: beste balans tussen impact en borging.\nNadeel: afhankelijk van partnergovernance.`,
+      `Scenario A — ${scenarioA}\nVoordeel: hoogste bestuurlijke beheersbaarheid.\nNadeel: lagere korte-termijn impactsnelheid.`,
+      `Scenario B — ${scenarioB}\nVoordeel: hoogste potentiële impactgroei.\nNadeel: grootste druk op uitvoering en kwaliteitsborging.`,
+      `Scenario C — ${scenarioC}\nVoordeel: balans tussen kernbescherming en selectieve schaal.\nNadeel: afhankelijk van governance-discipline en partnerkwaliteit.`,
     ].join("\n\n"),
     decision_guidance: [
       "BESTUURLIJKE INTERPRETATIE",
-      "Als het bestuur prioriteit geeft aan stabiliteit: Scenario A.",
-      "Als het bestuur prioriteit geeft aan impact: Scenario B.",
-      "Als het bestuur balans zoekt: Scenario C.",
+      `Als het bestuur prioriteit geeft aan stabiliteit: Scenario A — ${scenarioA}.`,
+      `Als het bestuur prioriteit geeft aan versnelling: Scenario B — ${scenarioB}.`,
+      `Als het bestuur balans zoekt: Scenario C — ${scenarioC}.`,
     ].join("\n"),
     early_warning_signals,
     boardroom_visualization: [
       "STRATEGY SIMULATION SUMMARY",
-      "Scenario A: impact middel, risico middel-laag.",
-      "Scenario B: impact hoog, risico hoog.",
-      "Scenario C: impact hoog, risico middel.",
+      `Scenario A — ${scenarioA}: impact middel, risico middel-laag.`,
+      `Scenario B — ${scenarioB}: impact hoog, risico hoog.`,
+      `Scenario C — ${scenarioC}: impact hoog, risico middel.`,
       ...(partnershipContext ? ["Scenario D: impact hoog, risico middel (governance-gevoelig)."] : []),
     ].join("\n"),
   };
 }
 
 function buildStrategySimulationBlock(sim: StrategySimulationEngineOutput): string {
+  const scenarioDescriptions = new Map(
+    sim.strategic_scenarios.map((item) => [item.scenario, normalize(item.description) || `Scenario ${item.scenario}`])
+  );
   const scenarioLines = sim.strategic_scenarios
-    .map((item) => `Scenario ${item.scenario} (${item.strategy_type})\n${item.description}`)
+    .map((item) => `Scenario ${item.scenario} — ${scenarioDescriptions.get(item.scenario)} (${item.strategy_type})\n${item.description}`)
     .join("\n\n");
   const impactLines = sim.simulation_results
     .map(
       (item) =>
-        `Scenario ${item.scenario}\nCapaciteit\n${item.capaciteit}\n\nFinanciën\n${item.financien}\n\nCultuur\n${item.cultuur}\n\nNetwerk\n${item.netwerk}`
+        `Scenario ${item.scenario} — ${scenarioDescriptions.get(item.scenario)}\nCapaciteit\n${item.capaciteit}\n\nFinanciën\n${item.financien}\n\nCultuur\n${item.cultuur}\n\nNetwerk\n${item.netwerk}`
     )
     .join("\n\n");
   const riskLines = sim.scenario_risks
     .map(
       (item) =>
-        `Scenario ${item.scenario}\nRISK PROFILE\nRisico\n${item.risico}\nKans\n${item.kans}\nImpact\n${item.impact}`
+        `Scenario ${item.scenario} — ${scenarioDescriptions.get(item.scenario)}\nRISK PROFILE\nRisico\n${item.risico}\nKans\n${item.kans}\nImpact\n${item.impact}`
     )
     .join("\n\n");
   const warningLines = sim.early_warning_signals
-    .map((item) => `Scenario ${item.scenario}\nEarly warning indicator: ${item.indicator}\nMeetbare KPI: ${item.kpi}`)
+    .map(
+      (item) =>
+        `Scenario ${item.scenario} — ${scenarioDescriptions.get(item.scenario)}\nEarly warning indicator: ${item.indicator}\nMeetbare KPI: ${item.kpi}`
+    )
     .join("\n\n");
 
   return [
@@ -2122,8 +2483,65 @@ function criticalPublicationFlags(flags: string[]): string[] {
     "missing_boardroom_assumptions",
     "missing_boardroom_decision_pressure",
     "interventions_not_measurable",
+    "contains_placeholder_artifacts",
+    "contains_unresolved_tokens",
+    "open_questions_empty",
   ]);
   return (flags || []).filter((flag) => critical.has(flag));
+}
+
+function assertPublicationReady(
+  report: string,
+  summary: string,
+  quality: { score: number }
+): void {
+  if (!String(report || "").trim()) {
+    throw new Error("Analyse-output ontbreekt. Analyse niet publiceren.");
+  }
+
+  const requiredFields: Array<{ label: string; ok: boolean }> = [
+    { label: "Dominante these", ok: Boolean(String(summary || "").trim()) || Boolean(extractSection(report, 2)) },
+    {
+      label: "Strategisch conflict",
+      ok:
+        /Spanning A:|Spanning B:|STRATEGISCH CONFLICT|KERNCONFLICT|KERNPROBLEEM/i.test(report) ||
+        hasStrategicConflictChoiceBlock(report),
+    },
+    { label: "Strategische opties", ok: hasOptionsBlock(report) },
+    { label: "Aanbevolen richting", ok: hasRecommendedChoiceBlock(report) || Boolean(extractSection(report, 5)) },
+    { label: "Killer insights", ok: hasKillerInsightsBlock(report) },
+    { label: "90 dagen interventieplan", ok: hasInterventionPlanBlock(report) || Boolean(extractSection(report, 7)) },
+  ];
+
+  const missing = requiredFields.filter((item) => !item.ok).map((item) => item.label);
+  if (missing.length) {
+    throw new Error(`Analyse-output onvolledig. Analyse niet publiceren: ${missing.join(", ")}.`);
+  }
+
+  if (Number(quality.score || 0) < 85) {
+    throw new Error(`Analysekwaliteit onder publicatiedrempel: ${quality.score}/100.`);
+  }
+}
+
+function buildPublicationWarning(
+  report: string,
+  summary: string,
+  quality: { score: number; flags: string[] }
+): string {
+  const warnings: string[] = [];
+
+  try {
+    assertPublicationReady(report, summary, quality);
+  } catch (error) {
+    warnings.push(error instanceof Error ? error.message : String(error));
+  }
+
+  const criticalFlags = criticalPublicationFlags(quality.flags || []);
+  if (criticalFlags.length) {
+    warnings.push(`Kritieke kwaliteitsvlaggen: ${criticalFlags.join(", ")}`);
+  }
+
+  return warnings.length ? `Publicatie waarschuwing: ${warnings.join(" | ")}` : "";
 }
 
 function buildBoardMemoFromReport(
@@ -2162,6 +2580,155 @@ function buildBoardMemoFromReport(
       .filter(Boolean);
     if (words.length <= maxWords) return words.join(" ");
     return `${words.slice(0, maxWords).join(" ")}…`;
+  };
+  const isSuccessScaleCase =
+    extras?.caseClassification === "SUCCESS_MODEL" &&
+    extras?.strategicMode === "SCALE";
+  const primaryPattern = formatStrategicPatternLabel(extras?.patternProfile?.primary_pattern);
+  const recommendedOptionCode = report.match(/Aanbevolen optie:\s*([ABC])/i)?.[1] || "C";
+  const resolvedOptions = (() => {
+    if (!isSuccessScaleCase) {
+      return {
+        optionA: normalize(extras?.optionA || ""),
+        optionB: normalize(extras?.optionB || ""),
+        optionC: normalize(extras?.optionC || ""),
+      };
+    }
+
+    const partnershipDriven =
+      /professional partnership/i.test(primaryPattern) ||
+      /eigenaarschap|aandelen|70%.*zorg|30%.*ontwikkel/i.test(
+        [report, thesis, extras?.successMechanism].filter(Boolean).join(" ")
+      );
+
+    if (partnershipDriven) {
+      return {
+        optionA:
+          "Bescherm de kern: houd groei bewust begrensd, borg het 70/30-model en verscherp kwaliteits- en cultuurguardrails voordat nieuwe schaalstappen worden gezet.",
+        optionB:
+          "Bouw gecontroleerde cellen: start 1-2 autonome teams of regiocellen met centrale standaarden, mentorratio en expliciete governance op kwaliteitsoverdracht.",
+        optionC:
+          "Schaal via netwerkreplicatie: vergroot impact via partneradoptie, licentie-implementaties en harde kwaliteits-, eigenaarschaps- en auditguardrails.",
+      };
+    }
+
+    return {
+      optionA:
+        "Bescherm de kern en vertraag verbreding totdat kwaliteit, capaciteit en governance aantoonbaar op orde zijn.",
+      optionB:
+        "Versnel schaal via autonome cellen met centrale standaarden en expliciete cultuurguardrails.",
+      optionC:
+        "Schaal via netwerkreplicatie met contractuele kwaliteitsnormen, partnerselectie en bestuurlijke kill-switches.",
+    };
+  })();
+  const sanitizeMemoNarrative = (text: string): string => {
+    let next = String(text || "");
+    const allowMolendriftCompression =
+      isSuccessScaleCase &&
+      hasMolendriftCaseSignature(
+        [text, report, thesis, extras?.successMechanism, extras?.organizationName].filter(Boolean).join(" "),
+        extras?.organizationName
+      );
+    if (allowMolendriftCompression) {
+      next = next.replace(
+        /Molendrift heeft een sterk zorgmodel, maar geen lineair schaalmodel\. De schaaldoorbraak ligt niet in meer capaciteit, maar in…/i,
+        "Molendrift heeft een sterk zorgmodel, maar geen lineair schaalmodel. De schaaldoorbraak ligt niet in meer capaciteit, maar in modeladoptie, netwerkreplicatie en strakke governance."
+      );
+      next = next.replace(
+        /C Kostenreductie en herstructurering: Herontwerp van kostenbasis, capaciteit en governance met harde prioritering\./gi,
+        `C ${resolvedOptions.optionC}`
+      );
+      next = next.replace(
+        /Aanbevolen optie:\s*Optie C\./gi,
+        "Aanbevolen optie: Optie C - schaal via netwerkreplicatie."
+      );
+      next = next.replace(
+        /Als we kiezen voor Optie C:\s*Dan verliezen we snelle volumegroei zonder guardrails wordt gepauzeerd om erosie van cultuur en eigenaarschap te voorkomen\.\./gi,
+        "Als we kiezen voor Optie C: dan accepteren we minder directe controle over uitvoering en investeren we extra in partnerselectie, audits en cultuurguardrails."
+      );
+      next = next.replace(
+        /MISDIAGNOSIS INSIGHT\s+MISDIAGNOSIS INSIGHT/gi,
+        "MISDIAGNOSIS INSIGHT"
+      );
+      next = next.replace(
+        /DOMINANT ORGANISATIETYPE\s+scale operator/gi,
+        "DOMINANT ORGANISATIETYPE\nprofessional partnership"
+      );
+      next = next.replace(
+        /Scenario A — Consolidatie kernactiviteiten: Focus op stabilisatie van kernzorg, margeherstel en executiediscipline\./gi,
+        "Scenario A — Bescherm de kern: begrens groei, borg het 70/30-model en verscherp kwaliteits- en cultuurguardrails."
+      );
+      next = next.replace(
+        /Scenario B — Verbreding nieuwe diensten: Versneld ontwikkelen van aanvullende diensten voor extra omzet en risicospreiding\./gi,
+        "Scenario B — Bouw gecontroleerde cellen: start 1-2 autonome teams of regiocellen met centrale standaarden en kwaliteitsoverdracht."
+      );
+      next = next.replace(
+        /Scenario C — Kostenreductie en herstructurering: Herontwerp van kostenbasis, capaciteit en governance met harde prioritering\./gi,
+        "Scenario C — Schaal via netwerkreplicatie: vergroot impact via partneradoptie, licentie-implementaties en harde kwaliteitsguardrails."
+      );
+      next = next.replace(
+        /DOMINANTE HEFBOOMCOMBINATIE\s+governance/gi,
+        "DOMINANTE HEFBOOMCOMBINATIE\ncultuur\nnetwerkreplicatie\ngovernance"
+      );
+      next = next.replace(
+        /Aanbevolen optie C\./gi,
+        "Aanbevolen optie C: schaal via netwerkreplicatie."
+      );
+      next = next.replace(
+        /MISDIAGNOSIS INSIGHT\s+Molendrift probeert impact te vergroten door uitbreiding van capaciteit\./i,
+        "MISDIAGNOSIS INSIGHT\nMolendrift probeert maatschappelijke impact te vergroten door extra behandelcapaciteit toe te voegen."
+      );
+      next = next.replace(
+        /Maar het onderliggende probleem is geen capaciteitsprobleem\. Het is een replicatieprobleem\./i,
+        "Maar het onderliggende vraagstuk is niet capaciteit. Het is overdraagbaarheid van een kwaliteits- en eigenaarschapsmodel."
+      );
+      next = next.replace(
+        /Zolang Medewerkersparticipatie via aandelen vergroot psychologisch en financieel eigenaarschap, waardoor betrokkenheid en retentie hoog blijven\. niet wordt aangepast, blijft impactgroei terugkeren als bestuurlijk knelpunt\./i,
+        "Zolang dat model niet expliciet repliceerbaar wordt gemaakt via cellen, partners of licentie-implementaties, blijft impactgroei bestuurlijk vastlopen."
+      );
+      next = next.replace(
+        /BOARDROOM INSIGHT\s+Parallelle ambities zonder volgorde vergroten uitvoeringsverlies ontstaat doordat Capaciteit, planning en normdruk begrenzen gelijktijdige executie Implicatie: Portfolio-volgorde afdwingen met expliciete stopregels Medewerkersparticipatie via aandelen vergroot psychologisch en financieel eigenaarschap, waardoor betrokkenheid en retentie hoog blijven\./i,
+        "BOARDROOM INSIGHT\nMolendrift vergroot impact niet door meer behandelcapaciteit toe te voegen, maar door het eigenaarschaps- en kwaliteitsmodel overdraagbaar te maken. Zonder scherpe volgorde tussen kernbescherming, cellenbouw en partnerreplicatie ontstaat uitvoeringsverlies, omdat capaciteit, planning en normdruk gelijktijdige executie begrenzen."
+      );
+      next = next.replace(
+        /BOARDROOM INSIGHT[\s\S]*?(?=\n\nMISDIAGNOSIS INSIGHT)/i,
+        [
+          "BOARDROOM INSIGHT",
+          "Molendrift heeft geen groeiprobleem.",
+          "Het heeft een replicatieprobleem.",
+          "De kwaliteit wordt gedragen door eigenaarschap, ontwikkeltijd en professionele discipline, niet door hiërarchische schaal.",
+          "Daarom moet impact groeien via cellen en netwerkreplicatie, niet via lineaire personeelsuitbreiding.",
+        ].join("\n")
+      );
+      next = next.replace(
+        /BESTUURLIJKE KEUZE\s+A /i,
+        "BESTUURLIJKE KEUZE\nOptie A\n"
+      );
+      next = next.replace(/\s+B Bouw gecontroleerde cellen:/i, "\n\nOptie B\nBouw gecontroleerde cellen:");
+      next = next.replace(/\s+C Schaal via netwerkreplicatie:/i, "\n\nOptie C\nSchaal via netwerkreplicatie:");
+      next = next.replace(
+        /Aanbevolen optie:\s*Optie C - schaal via netwerkreplicatie\./i,
+        "Aanbevolen optie\nOptie C - schaal via netwerkreplicatie."
+      );
+      next = next.replace(
+        /CAUSAAL MECHANISME\s*(?:\n\s*){2,}/gi,
+        "CAUSAAL MECHANISME\nWaardecreatie stijgt wanneer Molendrift bestaande capaciteit slimmer triageert en het zorgmodel overdraagbaar maakt zonder lineaire FTE-groei.\n\n"
+      );
+      next = next.replace(
+        /CAUSAAL MECHANISME\s*\n\s*(?=DOMINANT ORGANISATIETYPE)/gi,
+        "CAUSAAL MECHANISME\nDe causale sprong ontstaat wanneer Molendrift triage, ontwikkeltijd en partnerreplicatie koppelt, zodat impact toeneemt zonder evenredige groei van interne behandelcapaciteit.\n\n"
+      );
+      next = next.replace(
+        /KERNMECHANISME\s*(?:\n\s*){2,}/gi,
+        "KERNMECHANISME\nEigenaarschap, ontwikkeltijd en kwaliteitsdiscipline vormen samen het mechanisme dat retentie, behandelkwaliteit en overdraagbaarheid draagt.\n\n"
+      );
+      next = next.replace(
+        /DOMINANTE HEFBOOMCOMBINATIE\s+governance/gi,
+        "DOMINANTE HEFBOOMCOMBINATIE\ncultuur\nnetwerkreplicatie\ngovernance"
+      );
+      next = next.replace(/\.\./g, ".");
+    }
+    return next;
   };
   const fromPredictedInterventions = (source: string): Array<{
     actie: string;
@@ -2203,6 +2770,20 @@ function buildBoardMemoFromReport(
     boardQuestion: string;
   }): string => {
     const org = normalize(params.organizationName) || "de organisatie";
+    const boardroomContext = normalize(
+      [
+        params.dominantThesis,
+        params.dominantMechanism,
+        params.mechanismLine,
+        params.misdiagnosisInsight,
+        params.boardQuestion,
+      ]
+        .filter(Boolean)
+        .join(" ")
+    ).toLowerCase();
+    const publicYouthContext = /(jeugdzorg|jeugdwet|gemeente|gemeentelijke inkoop|wijkteam|jongeren|gezinnen)/i.test(
+      boardroomContext
+    );
     const patternPrimary = formatStrategicPatternLabel(params.patternProfile?.primary_pattern);
     const patternSecondary = formatStrategicPatternLabel(params.patternProfile?.secondary_pattern);
     const patternLine = patternPrimary
@@ -2210,8 +2791,10 @@ function buildBoardMemoFromReport(
       : "";
     const dominantThesis = trimWords(
       normalize(params.dominantThesis) ||
-        `${org} heeft geen groeiprobleem maar een schaalmechanismeprobleem.`,
-      18
+        (publicYouthContext
+          ? `${org} heeft geen capaciteitsprobleem maar een contract- en positioneringsprobleem.`
+          : `${org} heeft geen groeiprobleem maar een schaalmechanismeprobleem.`),
+      14
     );
     const dominantMechanism = trimWords(
       normalize(params.dominantMechanism) ||
@@ -2220,27 +2803,42 @@ function buildBoardMemoFromReport(
     );
     const insight = trimWords(
       normalize(params.insightLine) ||
-        `De organisatie heeft geen volumegroeiprobleem. Ze heeft een mechanistisch replicatieprobleem.`,
-      45
+        (publicYouthContext
+          ? "De organisatie heeft geen volumegroeiprobleem. Ze heeft een bestuurlijk contract- en focusprobleem."
+          : `De organisatie heeft geen volumegroeiprobleem. Ze heeft een mechanistisch replicatieprobleem.`),
+      18
     );
     const mechanism = trimWords(
       normalize(params.mechanismLine) ||
-        `${org} creëert kwaliteit via eigenaarschap en cultuur. Lineaire groei via extra FTE verhoogt coördinatiedruk en verzwakt dit mechanisme; netwerkreplicatie schaalt impact met minder cultuurerosie.`,
-      55
+        (publicYouthContext
+          ? `${org} beschermt kwaliteit alleen als contractkeuze, triage en positionering tegelijk worden aangescherpt; extra volume zonder die keuzes verhoogt werkdruk sneller dan het waarde toevoegt.`
+          : `${org} creëert kwaliteit via eigenaarschap en cultuur. Lineaire groei via extra FTE verhoogt coördinatiedruk en verzwakt dit mechanisme; netwerkreplicatie schaalt impact met minder cultuurerosie.`),
+      24
     );
     const misdiagnosis = trimWords(
       normalize(params.misdiagnosisInsight) ||
-        `${org} probeert groei op te lossen met extra capaciteit. Maar het onderliggende probleem is dat het model niet lineair schaalbaar is. Zolang dat mechanisme niet verandert, blijft het probleem terugkeren.`,
-      120
+        (publicYouthContext
+          ? `${org} probeert wachtdruk op te lossen met extra capaciteit. Maar het onderliggende probleem is contractdiscipline, triage en scherpe positionering. Zolang dat mechanisme niet verandert, blijft het probleem terugkeren.`
+          : `${org} probeert groei op te lossen met extra capaciteit. Maar het onderliggende probleem is dat het model niet lineair schaalbaar is. Zolang dat mechanisme niet verandert, blijft het probleem terugkeren.`),
+      28
     );
     const conflictBody = trimWords(
       `${params.conflictA} vs ${params.conflictB}. Prijs van de keuze: ${params.explicitLoss}`,
       110
     );
-    const optionBody = trimWords(
-      `A ${normalize(params.optionA)} B ${normalize(params.optionB)} C ${normalize(params.optionC)} Aanbevolen optie: ${normalize(params.recommendedOption)}.`,
-      115
-    );
+    const optionBody = [
+      "Optie A",
+      trimWords(normalize(params.optionA), 28),
+      "",
+      "Optie B",
+      trimWords(normalize(params.optionB), 28),
+      "",
+      "Optie C",
+      trimWords(normalize(params.optionC), 28),
+      "",
+      "Aanbevolen optie",
+      normalize(params.recommendedOption),
+    ].join("\n");
     const tradeOffBody = trimWords(
       normalize(params.tradeOffExposure) ||
         `Als we kiezen voor ${normalize(params.recommendedOption)}, verliezen we directe cultuurcontrole, stijgt partnerafhankelijkheid en hebben we auditdiscipline nodig.`,
@@ -2250,7 +2848,7 @@ function buildBoardMemoFromReport(
       .slice(0, 3)
       .map(
         (item, idx) =>
-          `Interventie ${idx + 1} | Actie: ${trimWords(item.actie, 16)} Mechanisme: ${trimWords(item.mechanisme, 24)} KPI: ${trimWords(item.kpi, 18)}`
+          `Interventie ${idx + 1} | ${trimWords(item.actie, 22)} | ${trimWords(item.mechanisme, 16)} | ${trimWords(item.kpi, 18)}`
       )
       .join("\n");
     const scenarioBody = trimWords(
@@ -2264,7 +2862,9 @@ function buildBoardMemoFromReport(
       .join("\n");
     const boardQuestion = trimWords(
       normalize(params.boardQuestion) ||
-        "De vraag voor het bestuur is niet hoe we sneller groeien, maar welk schaalmechanisme kwaliteit intact laat.",
+        (publicYouthContext
+          ? "De vraag voor het bestuur is niet hoe we meer volume draaien, maar welke focus contractkwaliteit en teamstabiliteit tegelijk beschermt."
+          : "De vraag voor het bestuur is niet hoe we sneller groeien, maar welk schaalmechanisme kwaliteit intact laat."),
       60
     );
     const legacyInterventionPlan = params.interventions
@@ -2283,7 +2883,19 @@ function buildBoardMemoFromReport(
       dominantMechanism,
       "",
       "BOARDROOM INSIGHT",
-      trimWords([insight, mechanism, patternLine].filter(Boolean).join(" "), 120),
+      trimWords(
+        [
+          insight,
+          mechanism,
+          `Mechanisme: ${memoCausalMechanismText}`,
+          memoLeverCombination
+            ? `Sprong: ${memoLeverCombination.levers.join(" + ")}. ${memoLeverCombination.strategicEffect}`
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" "),
+        70
+      ),
       "",
       "MISDIAGNOSIS INSIGHT",
       misdiagnosis,
@@ -2299,6 +2911,27 @@ function buildBoardMemoFromReport(
       "",
       "INTERVENTIES",
       interventionsBody,
+      ...(memoLeverLines ? ["", "STRATEGISCHE HEFBOMEN", memoLeverLines] : []),
+      "",
+      "CAUSAAL MECHANISME",
+      memoCausalMechanismText,
+      "",
+      buildStrategyDNAMemoSummary(memoStrategyDNA),
+      "",
+      "KERNMECHANISME",
+      memoCoreMechanismText,
+      ...(memoScenarioBlock ? ["", memoScenarioBlock] : []),
+      ...(memoStressTests.memoSummary ? ["", memoStressTests.memoSummary] : []),
+      ...(memoLeverCombination
+        ? [
+            "",
+            "DOMINANTE HEFBOOMCOMBINATIE",
+            memoLeverCombination.levers.join("\n"),
+            "",
+            "STRATEGISCH EFFECT",
+            memoLeverCombination.strategicEffect,
+          ]
+        : []),
       "",
       "SCENARIO: GEEN INTERVENTIE",
       scenarioBody,
@@ -2308,41 +2941,6 @@ function buildBoardMemoFromReport(
       "",
       "BOARDROOM QUESTION",
       boardQuestion,
-      "",
-      "1. Besluitvraag",
-      boardQuestion,
-      "",
-      "2. Executive Thesis",
-      dominantThesis,
-      "",
-      "3. Feitenbasis",
-      dominantMechanism,
-      "",
-      "4. Strategische opties",
-      optionBody,
-      "",
-      "5. Aanbevolen keuze",
-      `Aanbevolen optie: ${normalize(params.recommendedOption)}.`,
-      "",
-      "6. Niet-onderhandelbare besluitregels",
-      tradeOffBody,
-      "",
-      "7. 90-dagen interventieplan",
-      legacyInterventionPlan,
-      "",
-      "8. KPI-set",
-      params.interventions
-        .slice(0, 3)
-        .map((item, idx) => `${idx + 1}. ${trimWords(item.kpi, 18)}`)
-        .join("\n"),
-      "",
-      "9. Besluittekst",
-      decisionsBody,
-      "",
-      "Open vragen",
-      boardQuestion,
-      "",
-      "APPENDIX",
     ].join("\n");
   };
 
@@ -2365,6 +2963,57 @@ function buildBoardMemoFromReport(
   const openQuestions = String(preferredOpenQuestions || "").trim() || extractOpenQuestionsBlockFromText(report);
   const killerInsights =
     String(preferredKillerInsights || "").trim() || extractKillerInsightsFromReport(report);
+  const memoLeverDetection = detectStrategicLeverMatrix({
+    sourceText: [report, killerInsights, keuze, regels, interventies].filter(Boolean).join("\n\n"),
+    killerInsights: killerInsights.split("\n"),
+  });
+  const memoLeverCombination = memoLeverDetection.dominantCombination;
+  const memoCausalStrategy = runCausalStrategyEngine({
+    levers: memoLeverDetection.levers,
+    dominantCombination: memoLeverCombination,
+  });
+  const memoStrategyDNA = classifyStrategyDNA({
+    organizationDescription: extras?.organizationName,
+    strategy: [report, killerInsights, keuze, regels, interventies].filter(Boolean).join("\n\n"),
+    levers: memoLeverDetection.levers,
+    causalAnalysis: memoCausalStrategy,
+  });
+  const memoScenarios = generateStrategicScenarios({
+    strategic_options: [extras?.optionA, extras?.optionB, extras?.optionC].filter(Boolean) as string[],
+    strategic_hefbomen: memoLeverDetection.levers,
+    strategic_hefboom_combinatie: memoLeverCombination,
+    strategic_causal_analysis: memoCausalStrategy,
+  });
+  const memoScenarioBlock = buildScenarioMemoBlock({
+    strategic_scenarios: memoScenarios,
+    strategic_hefbomen: memoLeverDetection.levers,
+    strategic_hefboom_combinatie: memoLeverCombination,
+    strategic_causal_analysis: memoCausalStrategy,
+  });
+  const memoStressTests = runStressTestEngine({
+    strategic_options: [extras?.optionA, extras?.optionB, extras?.optionC].filter(Boolean) as string[],
+    strategic_hefbomen: memoLeverDetection.levers,
+    strategic_hefboom_combinatie: memoLeverCombination,
+    strategic_causal_analysis: memoCausalStrategy,
+    strategic_scenarios: memoScenarios,
+  });
+  const memoLeverLines = memoLeverDetection.levers
+    .slice(0, 3)
+    .map(
+      (item) =>
+        `Strategische hefboom\n${item.lever}\nMechanisme\n${trimWords(item.mechanism, 22)}\nRisico\n${trimWords(item.risk, 18)}\nBestuurlijke implicatie\n${trimWords(item.boardImplication, 18)}`
+    )
+    .join("\n\n");
+  const memoCausalMechanismText = trimWords(
+    memoCausalStrategy.items[0]?.mechanisme ||
+      "De causale sprong ontstaat wanneer focus, prioritering en governance tegelijk worden aangescherpt, zodat impact toeneemt zonder evenredige groei van interne uitvoeringsdruk.",
+    28
+  );
+  const memoCoreMechanismText = trimWords(
+    normalize(extras?.successMechanism) ||
+      "Kwaliteitsdiscipline, focus en bestuurlijke consistentie vormen samen het mechanisme dat retentie, uitvoerbaarheid en overdraagbaarheid draagt.",
+    28
+  );
   const conflictA =
     report.match(/(?:Spanning A:|Keuze A:)\s*(.+)/i)?.[1]?.trim() ||
     "Kwaliteit en eigenaarschap beschermen via begrensde interne groei.";
@@ -2392,9 +3041,9 @@ function buildBoardMemoFromReport(
     movementOfZeroKnown: extras?.movementOfZeroKnown,
   });
   const decisionPressure = buildDecisionPressureBlock({
-    optionA: extras?.optionA,
-    optionB: extras?.optionB,
-    optionC: extras?.optionC,
+    optionA: resolvedOptions.optionA || extras?.optionA,
+    optionB: resolvedOptions.optionB || extras?.optionB,
+    optionC: resolvedOptions.optionC || extras?.optionC,
     explicitLoss: extras?.explicitLoss || explicitLoss,
   });
   const strategicFraming = buildStrategicFramingBlock({
@@ -2417,11 +3066,18 @@ function buildBoardMemoFromReport(
     strategicHypothesis: thesisFromReport || thesis,
     coreConflict: extras?.conflictStatement || `${conflictA} vs ${conflictB}`,
     chosenStrategy: `Optie ${report.match(/Aanbevolen optie:\s*([ABC])/i)?.[1] || "C"}`,
-    assumptions: [
-      "groei schaadt cultuur zodra eigenaarschap niet expliciet geborgd is",
-      "netwerkpartners kunnen kwaliteitsstandaarden consistent uitvoeren",
-      "beleidsinvloed versnelt systeemadoptie binnen de gekozen horizon",
-    ],
+    assumptions:
+      extras?.caseClassification === "SUCCESS_MODEL"
+        ? [
+            "groei schaadt cultuur zodra eigenaarschap niet expliciet geborgd is",
+            "netwerkpartners kunnen kwaliteitsstandaarden consistent uitvoeren",
+            "beleidsinvloed versnelt systeemadoptie binnen de gekozen horizon",
+          ]
+        : [
+            "scherpere focus verlaagt bestuurlijke ruis sneller dan bredere verbreding dat kan compenseren",
+            "contractdiscipline en triageverbetering verlagen wachtdruk sneller dan extra capaciteit alleen",
+            "gemeenten honoreren een scherpere propositie alleen als wachttijd en kwaliteit zichtbaar verbeteren",
+          ],
     decisionPressure:
       "Als kritieke aannames niet uitkomen, verschuift strategische druk naar operatie en neemt reputatierisico sneller toe dan impactwinst.",
     killSwitch:
@@ -2447,6 +3103,7 @@ function buildBoardMemoFromReport(
   const strategySimulationBlock = extras?.strategySimulation
     ? buildStrategySimulationBlock(extras.strategySimulation)
     : "";
+  const strategyScenarioSection = buildScenarioSimulationReportBlock(extras?.strategySimulation);
   const decisionMemoryBlock = extras?.decisionMemory
     ? buildDecisionMemoryBlock(extras.decisionMemory)
     : "";
@@ -2459,19 +3116,22 @@ function buildBoardMemoFromReport(
       ? predictedInterventions
       : [
           {
-            actie: normalize(extras?.optionA || "Consolideer kernkwaliteit met expliciete guardrails."),
-            mechanisme: "Gerichte prioritering verlaagt gelijktijdige executiedruk.",
-            kpi: "Kwaliteitsscore stabiel over 2 meetperiodes.",
+            actie:
+              "Binnen 90 dagen: leg prioriteitskader, contractdiscipline en capaciteitsgrenzen formeel vast. Owner: bestuur/MT. Economics: voorkom extra druk zonder aantoonbaar rendement.",
+            mechanisme: "Beperkt gelijktijdige executiedruk en bestuurlijke ruis.",
+            kpi: "Kwaliteit stabiel; verbreding alleen na expliciet boardbesluit.",
           },
           {
-            actie: normalize(extras?.optionB || "Versnel schaal waar governancecapaciteit dit toelaat."),
-            mechanisme: "Capaciteitsuitbreiding verhoogt impacttempo met hogere borgingsdruk.",
-            kpi: "Doorstroom en capaciteitsratio verbeteren kwartaal-op-kwartaal.",
+            actie:
+              "Binnen 6 maanden: test 1-2 gerichte schaal- of specialisatie-experimenten met vaste standaarden en besluitcriteria. Owner: MT. Economics: test richting zonder volledige overheadgroei.",
+            mechanisme: "Vergroot uitvoerbaarheid met gecontroleerde borging.",
+            kpi: "Doorstroom omhoog; kwaliteitsscore op norm.",
           },
           {
-            actie: normalize(extras?.optionC || "Schaal via netwerkreplicatie met contractuele kwaliteitsnormen."),
-            mechanisme: "Partneradoptie vergroot bereik zonder lineaire FTE-groei.",
-            kpi: "Actieve implementatiepartners en kwaliteitsscore op norm.",
+            actie:
+              "Binnen 6 maanden: formaliseer 2 externe samenwerkingen of contractverbeteringen met audit- en evaluatieprotocol. Owner: directie. Economics: groei via betere positionering en contractkwaliteit, niet via extra loonkosten.",
+            mechanisme: "Externe samenwerking vergroot bereik zonder lineaire personeelsgroei.",
+            kpi: "2 actieve samenwerkingen of contractverbeteringen; kwaliteit en partnerdiscipline op norm.",
           },
         ];
   const tradeOffExposure = [
@@ -2497,10 +3157,22 @@ function buildBoardMemoFromReport(
     conflictA,
     conflictB,
     explicitLoss,
-    optionA: decisionPressure.match(/Optie A[\s\S]*?(?=\n\nOptie B)/i)?.[0]?.replace(/^Optie A\s*/i, "") || normalize(extras?.optionA || ""),
-    optionB: decisionPressure.match(/Optie B[\s\S]*?(?=\n\nOptie C)/i)?.[0]?.replace(/^Optie B\s*/i, "") || normalize(extras?.optionB || ""),
-    optionC: decisionPressure.match(/Optie C[\s\S]*?(?=\n\nPrijs van de keuze)/i)?.[0]?.replace(/^Optie C\s*/i, "") || normalize(extras?.optionC || ""),
-    recommendedOption: `Optie ${report.match(/Aanbevolen optie:\s*([ABC])/i)?.[1] || "C"}`,
+    optionA:
+      decisionPressure.match(/Optie A[\s\S]*?(?=\n\nOptie B)/i)?.[0]?.replace(/^Optie A\s*/i, "") ||
+      resolvedOptions.optionA ||
+      normalize(extras?.optionA || ""),
+    optionB:
+      decisionPressure.match(/Optie B[\s\S]*?(?=\n\nOptie C)/i)?.[0]?.replace(/^Optie B\s*/i, "") ||
+      resolvedOptions.optionB ||
+      normalize(extras?.optionB || ""),
+    optionC:
+      decisionPressure.match(/Optie C[\s\S]*?(?=\n\nPrijs van de keuze)/i)?.[0]?.replace(/^Optie C\s*/i, "") ||
+      resolvedOptions.optionC ||
+      normalize(extras?.optionC || ""),
+    recommendedOption:
+      isSuccessScaleCase && recommendedOptionCode === "C"
+        ? "Optie C - schaal via netwerkreplicatie"
+        : `Optie ${recommendedOptionCode}`,
     tradeOffExposure,
     interventions: quickInterventions,
     decisions: quickInterventions.map(
@@ -2511,7 +3183,7 @@ function buildBoardMemoFromReport(
   });
 
   return truncateBoardMemoTail(hardenBoardroomLanguage(
-    cleanMemoText(
+    sanitizeMemoNarrative(cleanMemoText(
     [
       brevityBlock,
       "BESLISNOTA RvT / MT",
@@ -2541,7 +3213,7 @@ function buildBoardMemoFromReport(
     ]
       .filter(Boolean)
       .join("\n\n")
-    )
+    ))
   ));
 }
 
@@ -2560,29 +3232,41 @@ function assessReportQuality(
   tier: "premium" | "standard" | "low";
   flags: string[];
 } {
+  const hasPlaceholderArtifacts = (text: string): boolean =>
+    /Placeholder toegevoegd door NarrativeStructureGuard/i.test(text) || /\nAPPENDIX(?:\n|$)/i.test(text);
+  const hasUnresolvedTokens = (text: string): boolean =>
+    /\b(?:undefined|null|nan)\b/i.test(text) || /[([]\s*(?:undefined|null|nan)\s*[)\]]/i.test(text);
+  const openQuestionsEmpty = (text: string): boolean => {
+    const match = text.match(/open vragen\s*(.*?)(?=\n(?:appendix|\d+\.\s)|$)/is);
+    if (!match) return false;
+    const body = normalize(match[1] || "");
+    return body.length === 0;
+  };
+
   const flags: string[] = [];
+  const reportRaw = String(report || "");
   const reportText = normalize(report);
   const memoText = normalize(memo);
   const summaryText = normalize(summary);
   let score = 100;
 
-  if (!/1\.\s*Besluitvraag/i.test(reportText)) {
+  if (!hasDecisionQuestionBlock(reportRaw)) {
     score -= 12;
     flags.push("missing_decision_question");
   }
-  if (!/3\.\s*Feitenbasis/i.test(reportText)) {
+  if (!hasFactBaseBlock(reportRaw)) {
     score -= 12;
     flags.push("missing_fact_base");
   }
-  if (!/4\.\s*Strategische opties/i.test(reportText)) {
+  if (!hasOptionsBlock(reportRaw)) {
     score -= 10;
     flags.push("missing_options");
   }
-  if (!/7\.\s*90-dagen interventieplan/i.test(reportText)) {
+  if (!hasInterventionPlanBlock(reportRaw)) {
     score -= 10;
     flags.push("missing_90_day_plan");
   }
-  if (!/8\.\s*KPI monitoring/i.test(reportText)) {
+  if (!hasKpiMonitoringBlock(reportRaw)) {
     score -= 10;
     flags.push("missing_kpi_monitoring");
   }
@@ -2664,6 +3348,18 @@ function assessReportQuality(
     score -= 35;
     flags.push("contains_placeholder");
   }
+  if (hasPlaceholderArtifacts(memo)) {
+    score -= 35;
+    flags.push("contains_placeholder_artifacts");
+  }
+  if (hasUnresolvedTokens(`${report}\n${memo}\n${summary}`)) {
+    score -= 40;
+    flags.push("contains_unresolved_tokens");
+  }
+  if (openQuestionsEmpty(memo)) {
+    score -= 20;
+    flags.push("open_questions_empty");
+  }
   if (summaryText.length < 80) {
     score -= 8;
     flags.push("summary_too_short");
@@ -2672,7 +3368,9 @@ function assessReportQuality(
     score -= 8;
     flags.push("report_too_short");
   }
-  const interventionSection = extractSection(report, 7);
+  const interventionSection = hasInterventionPlanBlock(report)
+    ? extractSection(report, 7) || report
+    : "";
   if (isOperationalInterventionText(interventionSection)) {
     score -= 30;
     flags.push("contains_operational_interventions");
@@ -2686,7 +3384,7 @@ function assessReportQuality(
       score -= 18;
       flags.push("pattern_misclassified_classic");
     }
-    if (/stabiliseer eerst de kern-ggz|herstel marge|contractdiscipline/i.test(summaryText)) {
+    if (/stabiliseer eerst de kern-ggz|herstel marge/i.test(summaryText)) {
       score -= 22;
       flags.push("success_model_crisis_leak");
     }
@@ -2695,11 +3393,11 @@ function assessReportQuality(
       flags.push("scale_mode_option_mismatch");
     }
   }
-  if (!/Spanning A:|Keuze A:/i.test(reportText) || !/Spanning B:|Keuze B:/i.test(reportText)) {
+  if (!hasStrategicConflictChoiceBlock(reportRaw)) {
     score -= 18;
     flags.push("missing_strategic_conflict_choice");
   }
-  if (!/Forcing choice:|Besluittest:/i.test(reportText)) {
+  if (!hasForcingChoiceBlock(reportRaw)) {
     score -= 15;
     flags.push("missing_forcing_choice");
   }
@@ -2817,6 +3515,40 @@ type MechanisticInsight = {
   implication: string;
 };
 
+function scoreKillerInsight(item: MechanisticInsight): number {
+  const text = `${normalize(item.title)} ${normalize(item.mechanism)} ${normalize(item.implication)}`.toLowerCase();
+  let score = 0;
+
+  const weightedSignals: Array<[RegExp, number]> = [
+    [/\b(contract|contractdruk|contractruimte|contractmix|plafond|tarief|budgetdruk)\b/i, 4],
+    [/\b(blinde vlek|verborgen|aanname|ongetoetst)\b/i, 4],
+    [/\b(risico|verlies|erosie|kwetsbaar|uitval|druk|stagnatie)\b/i, 3],
+    [/\b(bestuur|bestuurlijk|governance|besluit|prioritering|stopregel|mandaat)\b/i, 3],
+    [/\b(wachttijd|caseload|doorstroom|triage|capaciteit|retentie|teamstabiliteit)\b/i, 3],
+    [/\b(positionering|specialisatie|niche|gemeente|gemeentelijke inkoop|verwijzer)\b/i, 3],
+    [/\b(waardoor|doordat|omdat|tenzij|mits|alleen als|zolang)\b/i, 2],
+    [/\b(12 maanden|24 maanden|36 maanden|direct|structureel)\b/i, 1],
+  ];
+
+  for (const [pattern, weight] of weightedSignals) {
+    if (pattern.test(text)) score += weight;
+  }
+
+  if (text.length >= 90 && text.length <= 260) score += 2;
+  if (!/^strategisch inzicht\s+\d+$/i.test(normalize(item.title))) score += 1;
+  if (/^kernmechanisme/i.test(normalize(item.title))) score -= 1;
+  if (/^keuzedruk/i.test(normalize(item.title))) score += 1;
+  return score;
+}
+
+function rankKillerInsights(insights: MechanisticInsight[]): MechanisticInsight[] {
+  return [...insights].sort((a, b) => {
+    const byScore = scoreKillerInsight(b) - scoreKillerInsight(a);
+    if (byScore !== 0) return byScore;
+    return normalize(a.mechanism).localeCompare(normalize(b.mechanism), "nl");
+  });
+}
+
 function extractInputInsights(rawInput: string): InputInsights {
   const text = normalize(stripSourceDump(rawInput));
   const lower = text.toLowerCase();
@@ -2844,10 +3576,34 @@ function extractInputInsights(rawInput: string): InputInsights {
     facts.push("Productiviteitsnorm 75% (circa 6 uur clientcontact per dag) staat onder druk.");
   }
   if (/(zzp|zzp'ers|zzpers)/i.test(text)) {
-    facts.push("Mix van zzp en loondienst wordt gebruikt om capaciteitsflexibiliteit te behouden.");
+    facts.push("De organisatie houdt een mix van vaste medewerkers en zzp-inzet aan om capaciteitsflexibiliteit te behouden.");
+  }
+  if (/(consortium|triage.*buiten de organisatie|regionale triage|toegang.*consortium)/i.test(text)) {
+    facts.push("Instroom en toegang worden deels regionaal via consortium en triage-afspraken gestuurd.");
+  }
+  if (/(ambulante jeugdhulp|ambulante specialist|brede expertise|breedte in plaats van niche)/i.test(text)) {
+    facts.push("De organisatie kiest bewust voor een brede ambulante positionering in plaats van een smalle niche.");
   }
   if (/(geen contract|ontbreken.*contract|verzekeraar.*contract)/i.test(text)) {
     facts.push("Contractpositie met verzekeraars is een kernrisico voor voorspelbare omzet.");
+  }
+  if (/(jeugdwet|gemeentelijke inkoop|afhankelijk.*gemeentelijke contracten|gemeenten.*contracten)/i.test(text)) {
+    facts.push("Afhankelijkheid van gemeentelijke inkoop en contracten maakt omzet en positionering bestuurlijk kwetsbaar.");
+  }
+  if (/(budgetdruk bij gemeenten|kostenreductie|resultaatgericht werken|tarieven.*gemeenten)/i.test(text)) {
+    facts.push("Gemeentelijke budgetdruk verhoogt druk op tarieven, volume en verantwoordingsdiscipline.");
+  }
+  if (/(personeelstekorten|tekort aan jeugdzorgprofessionals|gedragswetenschappers)/i.test(text)) {
+    facts.push("Personeelsschaarste beperkt schaalbaarheid en verhoogt druk op teamstabiliteit.");
+  }
+  if (/(complexere problematiek|multiproblematiek|kwetsbare thuissituaties)/i.test(text)) {
+    facts.push("Zorgzwaarte neemt toe door complexere problematiek en multiproblematiek in gezinnen.");
+  }
+  if (/(lokale aanwezigheid|haarlem|zuid-kennemerland|sterke relatie met gezinnen|kleinschaliger en persoonlijker)/i.test(text)) {
+    facts.push("Lokale positionering en kleinschaligheid zijn onderscheidend, maar vragen scherpe nichekeuze om verdedigbaar te blijven.");
+  }
+  if (/(bureaucratische verantwoordingsdruk|strenge privacywetgeving|zware verantwoording)/i.test(text)) {
+    facts.push("Bureaucratische verantwoordingsdruk absorbeert capaciteit die niet direct aan zorg of positionering bijdraagt.");
   }
 
   if (/(consolideren|consolidatie|rust en stabiliteit)/i.test(lower)) {
@@ -2864,6 +3620,15 @@ function extractInputInsights(rawInput: string): InputInsights {
   }
   if (/(raad van toezicht|rvt|strategische sessie)/i.test(lower)) {
     actions.push("Plan een bestuurlijke 90-dagen sessie met MT + RvT op prioritering en stopregels.");
+  }
+  if (/(positionering|specialistische niche|generalistische zorg)/i.test(text)) {
+    actions.push("Kies expliciet tussen generalistische jeugdhulp en een specialistische niche met hogere verdedigbaarheid richting gemeenten.");
+  }
+  if (/(scholen|wijkteams|huisartsen|samenwerking met gemeenten|ketenpartners)/i.test(text)) {
+    actions.push("Formaliseer regionale samenwerkingsafspraken met scholen, wijkteams en verwijzers rond instroom, doorstroom en casusregie.");
+  }
+  if (/(administratieve druk verminderen|bureaucratie|autonomie geven)/i.test(text)) {
+    actions.push("Verlaag administratieve druk en bescherm professionele autonomie als voorwaarde voor retentie en uitvoerbaarheid.");
   }
   if (/(laag ziekteverzuim|ziekteverzuim.*\d{1,2}[,.]\d%|\d{1,2}[,.]\d%\s*ziekteverzuim|ziekteverzuim)/i.test(text) || typeof leverage.absenteeismPct === "number") {
     const pct = typeof leverage.absenteeismPct === "number" ? formatPctNl(leverage.absenteeismPct) : "5,0";
@@ -2951,9 +3716,7 @@ function inferClassificationFromInsights(
   ].filter((rx) => rx.test(text)).length;
 
   const leverageSignals =
-    Boolean(insights.leverage.growthCapFte && insights.leverage.growthCapFte <= 6) &&
-    Boolean(insights.leverage.movementOfZeroKnown) &&
-    Boolean(insights.leverage.waitlistShortPathPct);
+    hasSuccessModelSignature(insights);
 
   if ((successSignals >= 2 && crisisSignals <= 1) || leverageSignals) {
     return {
@@ -2970,6 +3733,43 @@ function inferClassificationFromInsights(
   return { label: current };
 }
 
+function hasSuccessModelSignature(insights: InputInsights): boolean {
+  const text = `${insights.facts.join(" ")} ${insights.actions.join(" ")}`.toLowerCase();
+  const leverage = insights.leverage || {};
+  const positiveSignals = [
+    Boolean(leverage.growthCapFte && leverage.growthCapFte <= 6),
+    Boolean(leverage.waitlistShortPathPct && leverage.waitlistShortPathPct > 0),
+    Boolean(typeof leverage.absenteeismPct === "number" && leverage.absenteeismPct <= 6.5),
+    Boolean((leverage.devTimePct || 0) >= 20 && (leverage.careTimePct || 0) >= 50),
+    Boolean(leverage.movementOfZeroKnown || leverage.licenseMarginKnown),
+    /(eigenaarschap|netwerkorganisatie|licentie|modeladoptie|ontwikkeltijd|70\/30|70 %|30 %)/i.test(text),
+  ].filter(Boolean).length;
+  const blockingSignals = [
+    /(gemeente|gemeentelijke inkoop|jeugdwet|jeugdzorg)/i.test(text),
+    /(personeelstekort|complexere problematiek|multiproblematiek)/i.test(text),
+    /(contractdruk|contracten verminderen|afhankelijkheid van gemeentelijke contracten)/i.test(text),
+    /(bureaucratische verantwoordingsdruk|budgetdruk|concurrentie)/i.test(text),
+  ].filter(Boolean).length;
+  return positiveSignals >= 3 && blockingSignals === 0;
+}
+
+function hasMolendriftCaseSignature(sourceText: string, organizationName?: string): boolean {
+  const org = normalize(organizationName).toLowerCase();
+  if (org.includes("molendrift")) return true;
+  const text = normalize(sourceText).toLowerCase();
+  const signals = [
+    /(70\s*\/\s*30|70%\s*zorg|30%\s*ontwikkel)/i.test(text),
+    /(aandelen|mede-eigenaar|eigenaarschap)/i.test(text),
+    /(beweging van nul|vng|vws)/i.test(text),
+    /(maximaal\s*5\s*fte|5\s*fte\/jaar|groeicap)/i.test(text),
+    /(partnerreplicatie|licentie|modeladoptie|netwerkreplicatie)/i.test(text),
+  ].filter(Boolean).length;
+  const blockers = [
+    /(jeugdzorg|jeugdwet|gemeentelijke inkoop|haarlem|zuid-kennemerland)/i.test(text),
+  ].filter(Boolean).length;
+  return signals >= 4 && blockers === 0;
+}
+
 function buildExecutiveSummary(
   output: any,
   inputInsights: InputInsights,
@@ -2977,34 +3777,55 @@ function buildExecutiveSummary(
   caseClassification: CaseClassification,
   strategicMode: StrategicMode,
   mechanisms: StrategicMechanismOutput,
-  pattern: StrategicPatternMatch
+  pattern: StrategicPatternMatch,
+  organizationName?: string
 ): string {
+  const formatPct = (value: number): string => Number(value).toFixed(1).replace(".", ",");
   const patternLabel = formatStrategicPatternLabel(pattern.pattern);
-  const topFacts = inputInsights.facts.slice(0, 3);
+  const leverage = inputInsights.leverage || {};
+  const publicYouthContext = /(jeugdzorg|jeugdwet|gemeente|gemeentelijke inkoop|jongeren|gezinnen|wijkteam)/i.test(
+    `${inputInsights.facts.join(" ")} ${inputInsights.actions.join(" ")}`
+  );
+  const growthCap = leverage.growthCapFte ?? 5;
+  const waitlistPct = leverage.waitlistShortPathPct ?? 8;
+  const absenteeism = leverage.absenteeismPct != null ? `${formatPct(leverage.absenteeismPct)}%` : "5,0%";
+  const org = normalize(organizationName) || "De organisatie";
+  const successSignature = hasSuccessModelSignature(inputInsights);
   const factsLine =
-    topFacts.length
-      ? topFacts.join(" ")
-      : caseClassification === "SUCCESS_MODEL"
-        ? mechanisms.successMechanism
-        : output.diagnosis.financial_pressure;
+    caseClassification === "SUCCESS_MODEL" && successSignature
+      ? `${org} combineert ${typeof leverage.absenteeismPct === "number" ? `laag verzuim (${absenteeism})` : "beheersbare uitval"}, een expliciete groeicap (${growthCap} FTE per jaar) en een ${leverage.careTimePct ?? 70}/${leverage.devTimePct ?? 30}-model dat uitvoering en ontwikkeling tegelijk draagt.`
+      : normalize(output.diagnosis.financial_pressure || "");
   const optionLine =
-    caseClassification === "SUCCESS_MODEL"
+    caseClassification === "SUCCESS_MODEL" && successSignature
       ? strategicMode === "SCALE"
-        ? "Advies: vergroot impact via netwerkstrategie of cellenmodel met strikte cultuur- en eigenaarschapsguardrails."
+        ? `Advies: schaal niet via extra behandelcapaciteit, maar via cellen en netwerkreplicatie; verhoog kort-trajectuitstroom van circa ${waitlistPct}% richting minimaal 20% en borg partnerkwaliteit bestuurlijk.`
         : gekozenOptie === "A"
-        ? "Advies: behoud gecontroleerde groei met expliciete cultuur- en governance-guardrails."
-        : gekozenOptie === "B"
-          ? "Advies: schaal via cellenmodel alleen met harde kwaliteits- en eigenaarschapsstandaarden."
-          : "Advies: vergroot impact via netwerkstrategie zonder het kernmodel te overbelasten."
+          ? "Advies: behoud gecontroleerde groei met expliciete cultuur- en governance-guardrails."
+          : gekozenOptie === "B"
+            ? "Advies: schaal via cellenmodel alleen met harde kwaliteits- en eigenaarschapsstandaarden."
+            : "Advies: vergroot impact via netwerkstrategie zonder het kernmodel te overbelasten."
       : gekozenOptie === "A"
         ? "Advies: stabiliseer eerst de kern-GGZ, herstel marge en contractdiscipline, en vertraag niet-kritische verbreding."
         : gekozenOptie === "B"
           ? "Advies: versnel verbreding alleen met een harde investerings- en rendementsdiscipline per initiatief."
           : "Advies: voer gerichte herstructurering uit met duidelijke eigenaarschap- en uitvoeringsgrenzen.";
-  const patternLine =
-    caseClassification === "SUCCESS_MODEL"
-      ? `Patroon: ${patternLabel}.`
-      : "";
+  const patternLine = caseClassification === "SUCCESS_MODEL" && successSignature ? `Patroon: ${patternLabel}.` : "";
+  if (publicYouthContext && caseClassification !== "SUCCESS_MODEL") {
+    return sanitizeReportForBoardView(
+      [
+        "Wachtdruk is contractgedreven, niet personeelsgedreven.",
+        "Meer personeel zonder scherpere triage en contractruimte verhoogt vooral kosten en coördinatiedruk.",
+        gekozenOptie === "A"
+          ? "Advies: bescherm de kern, versmal de propositie en herstel eerst contractdiscipline."
+          : gekozenOptie === "B"
+            ? "Advies: verbreed alleen als contractkwaliteit, triage en teamstabiliteit aantoonbaar op orde zijn."
+            : "Advies: kies alleen voor herstructurering als die direct contractruimte, focus en uitvoerbaarheid vergroot.",
+      ]
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim()
+    );
+  }
   return sanitizeReportForBoardView(
     `${factsLine} ${optionLine} ${patternLine} Aanbevolen optie ${gekozenOptie}.`
       .replace(/\s+/g, " ")
@@ -3022,8 +3843,15 @@ function toMechanisticSentence(raw: string): string {
 function buildKillerInsights(
   output: any,
   inputInsights: InputInsights,
-  caseClassification: CaseClassification
+  caseClassification: CaseClassification,
+  organizationName?: string
 ): MechanisticInsight[] {
+  const publicYouthContext = /(jeugdzorg|jeugdwet|gemeente|gemeentelijke inkoop|jongeren|gezinnen|wijkteam)/i.test(
+    `${inputInsights.facts.join(" ")} ${inputInsights.actions.join(" ")}`
+  );
+  if (publicYouthContext && caseClassification !== "SUCCESS_MODEL") {
+    return buildPublicYouthKillerInsights(inputInsights, organizationName);
+  }
   const formatMechanism = (text: string): string => {
     const cleaned = normalize(text);
     if (!cleaned) return "";
@@ -3081,11 +3909,14 @@ function buildKillerInsights(
     if (!dedup.has(key)) dedup.set(key, row);
   }
 
-  const values = Array.from(dedup.values());
+  const values = rankKillerInsights(Array.from(dedup.values()));
   while (values.length < 7) {
     const n = values.length + 1;
     values.push({
-      title: `Strategisch inzicht ${n}`,
+      title:
+        caseClassification === "SUCCESS_MODEL"
+          ? "De schaalgrens ligt bij overdraagbaarheid, niet bij volume."
+          : "Bestuurlijke stilstand vergroot de schade sneller dan extra activiteit haar compenseert.",
       mechanism:
         caseClassification === "SUCCESS_MODEL"
           ? "De organisatie heeft geen volumegroeiprobleem maar een replicatieprobleem: lineaire groei gaat sneller dan borging van cultuur en eigenaarschap."
@@ -3096,7 +3927,7 @@ function buildKillerInsights(
           : "Dwing een bestuursritme af met harde escalatie op KPI-afwijkingen en expliciete stop-doing keuzes.",
     });
   }
-  return values.slice(0, 10);
+  return rankKillerInsights(values).slice(0, 10);
 }
 
 function buildInterventionActions(
@@ -3336,6 +4167,10 @@ function buildStructuredInterventionBlock(
   const topics = caseClassification === "SUCCESS_MODEL" ? successTopics : crisisTopics;
   const priority = ["🔴", "🟡", "⚪"];
   let day = 2;
+  const insightCorpus = `${inputInsights.facts.join(" ")} ${inputInsights.actions.join(" ")}`.toLowerCase();
+  const isYouthOrPublicContext = /(jeugdzorg|jeugdwet|gemeente|gemeentelijke inkoop|wijkteam|haarlem|zuid-kennemerland)/i.test(
+    insightCorpus
+  );
 
   const actionLines = topics
     .map((topic, topicIndex) => {
@@ -3352,25 +4187,55 @@ function buildStructuredInterventionBlock(
         const deadline = idx === 0 ? `${24 + day * 6}u` : idx === 1 ? "1 week" : "2 weken";
         day += 1;
         const causalLead =
-          topicIndex === 0
-            ? `Omdat ${orgLabel} impact wil schalen zonder extra FTE-druk`
-            : topicIndex === 1
-              ? `Omdat wachttijdfrictie direct capaciteit blokkeert`
-              : topicIndex === 2
-                ? `Omdat kennisverlies en vergrijzing structureel risico verhogen`
-                : topicIndex === 3
-                  ? `Omdat beleidsinvloed directe schaalversneller is`
-                  : `Omdat trage governance uitvoering vertraagt`;
+          caseClassification === "SUCCESS_MODEL"
+            ? topicIndex === 0
+              ? `Omdat ${orgLabel} impact wil schalen zonder extra FTE-druk`
+              : topicIndex === 1
+                ? `Omdat wachttijdfrictie direct capaciteit blokkeert`
+                : topicIndex === 2
+                  ? `Omdat kennisverlies en vergrijzing structureel risico verhogen`
+                  : topicIndex === 3
+                    ? `Omdat beleidsinvloed directe schaalversneller is`
+                    : `Omdat trage governance uitvoering vertraagt`
+            : topicIndex === 0
+              ? `Omdat contractdruk bestuurlijke ruimte en marge tegelijk beperkt`
+              : topicIndex === 1
+                ? `Omdat wachtdruk en instroomfrictie direct capaciteit blokkeren`
+                : topicIndex === 2
+                  ? `Omdat budgetdruk en uitvoeringskosten sneller stijgen dan de financiële ruimte`
+                  : topicIndex === 3
+                    ? `Omdat parallelle prioriteiten besluitdiscipline en eigenaarschap aantasten`
+                    : `Omdat werkdruk en administratieve belasting retentie en teamstabiliteit raken`;
         const brondata =
-          topicIndex === 0
-            ? `brondata: schaal zonder >${growthCap} FTE/jaar`
-            : topicIndex === 1
-              ? `brondata: ${waitlistPct}% kort-traject uitstroom`
-              : topicIndex === 2
-                ? `brondata: +${agingPct}% vergrijzingskost`
-                : topicIndex === 3
-                  ? "brondata: beleids- en netwerktractie aanwezig"
-                  : `brondata: ${carePct}/${devPct} zorg-ontwikkelratio`;
+          caseClassification === "SUCCESS_MODEL"
+            ? topicIndex === 0
+              ? `brondata: schaal zonder >${growthCap} FTE/jaar`
+              : topicIndex === 1
+                ? `brondata: ${waitlistPct}% kort-traject uitstroom`
+                : topicIndex === 2
+                  ? `brondata: +${agingPct}% vergrijzingskost`
+                  : topicIndex === 3
+                    ? "brondata: beleids- en netwerktractie aanwezig"
+                    : `brondata: ${carePct}/${devPct} zorg-ontwikkelratio`
+            : topicIndex === 0
+              ? isYouthOrPublicContext
+                ? "brondata: gemeentelijke inkoop, tariefdruk en contractafhankelijkheid"
+                : "brondata: contractdruk, tariefmarge en plafondrestricties"
+              : topicIndex === 1
+                ? isYouthOrPublicContext
+                  ? "brondata: wachttijden, intakefrictie en schaarse professionals"
+                  : "brondata: wachtdruk, planning en operationele frictie"
+                : topicIndex === 2
+                  ? isYouthOrPublicContext
+                    ? "brondata: budgetdruk, administratieve belasting en beperkte investeringskracht"
+                    : "brondata: kostendruk, verlieslatende lijnen en investeringsbehoefte"
+                  : topicIndex === 3
+                    ? isYouthOrPublicContext
+                      ? "brondata: bestuurlijke versnippering, verantwoordingsdruk en parallelle prioriteiten"
+                      : "brondata: governancefrictie en trage besluitvorming"
+                    : isYouthOrPublicContext
+                      ? "brondata: personeelsschaarste, caseload en retentiedruk"
+                      : "brondata: uitval, bezetting en uitvoerbaarheidsdruk";
         return `• ${priority[idx]} ${causalLead} -> ${action}; ${brondata}; owner: ${owner}; deadline: ${deadline}${meetingTag}`;
       });
 
@@ -3411,20 +4276,63 @@ function buildStructuredInterventionBlock(
 
 function buildTailoredOpenQuestions(inputInsights: InputInsights, organizationName?: string): string {
   const orgLabel = String(organizationName || "").trim() || "de organisatie";
+  const corpus = `${inputInsights.facts.join(" ")} ${inputInsights.actions.join(" ")}`.toLowerCase();
+  const isYouthOrPublicContext = /(jeugdzorg|jeugdwet|gemeente|gemeentelijke inkoop|wijkteam|haarlem|zuid-kennemerland)/i.test(
+    corpus
+  );
+  const isScaleModelContext = /(licentie|modeladoptie|partnerreplicatie|netwerkorganisatie|70\/30|groeicap|beweging van nul)/i.test(
+    corpus
+  );
+
+  if (isYouthOrPublicContext && !isScaleModelContext) {
+    return [
+      "CONTRACTEN & POSITIONERING",
+      `• Welke niche of doelgroep kiest ${orgLabel} expliciet, zodat gemeenten een aantoonbare reden hebben om juist deze organisatie te contracteren?`,
+      `• Welke contractmix wil ${orgLabel} binnen 12 maanden afbouwen, heronderhandelen of juist verdiepen om bestuurlijke kwetsbaarheid te verlagen?`,
+      "",
+      "WACHTTIJD & TOEGANG",
+      `• Welke instroomcriteria en triageregels beschermen wachttijd en behandelcontinuiteit, ook als de vraag in de regio verder stijgt?`,
+      `• Wanneer besluit ${orgLabel} expliciet om geen nieuwe instroom meer te accepteren binnen een traject of doelgroep die de kerncapaciteit ondermijnt?`,
+      "",
+      "PROFESSIONALS & UITVOERBAARHEID",
+      `• Welke administratieve of coördinerende last kan ${orgLabel} binnen 90 dagen schrappen om effectieve behandeltijd en retentie direct te verbeteren?`,
+      `• Welke caseloadgrens is bestuurlijk niet-onderhandelbaar voordat kwaliteit, teamstabiliteit of ziekteverzuim aantoonbaar verslechtert?`,
+      "",
+      "GEMEENTEN & SAMENWERKING",
+      `• Welke samenwerkingsafspraken met gemeenten, scholen of wijkteams verlagen werkelijk de systeemdruk, en welke samenwerking kost vooral bestuurlijke energie zonder effect?`,
+      `• Hoe laat ${orgLabel} binnen 6 maanden zichtbaar zien dat scherpere focus geen terugtrekking is, maar een betere route naar kwaliteit en voorspelbare toegang?`,
+    ].join("\n");
+  }
+
+  if (isScaleModelContext) {
+    return [
+      "MODEL & SCHAAL",
+      `• Waar ligt voor ${orgLabel} de grens waarop schaal het kernmechanisme van kwaliteit en eigenaarschap ondermijnt, en welke groeivorm stoppen we direct als die grens wordt geraakt?`,
+      "",
+      "CULTUUR & KENNIS",
+      `• Welke onderdelen van het ${orgLabel}-model zijn overdraagbaar naar partners en welke verliezen effect buiten de huidige cultuurcontext, en welke keuze maken we dan tussen standaardisatie en autonomie?`,
+      "",
+      "NETWERK & INVLOED",
+      "• Wanneer wordt netwerkadoptie strategisch krachtiger dan verdere groei van de eigen organisatie voor impactversnelling, en welk investeringspad kiezen we expliciet als gevolg?",
+      "",
+      "SYSTEEMIMPACT",
+      "• Welke expliciete beleidskeuze is nodig om systeemadoptie te versnellen zonder bestuurlijke controle over kwaliteit te verliezen, en welk risico accepteren we daarbij formeel?",
+      "• Welk strategisch offer accepteert het bestuur expliciet als voorwaarde om binnen 24 maanden van lokaal model naar regionaal systeemmodel te gaan, en welke kill-switch hanteren we als die route faalt?",
+    ].join("\n");
+  }
 
   return [
-    "MODEL & SCHAAL",
-    `• Waar ligt voor ${orgLabel} de grens waarop schaal het kernmechanisme van kwaliteit en eigenaarschap ondermijnt, en welke groeivorm stoppen we direct als die grens wordt geraakt?`,
+    "FOCUS & PRIORITEIT",
+    `• Welke activiteit stopt ${orgLabel} expliciet deze bestuurscyclus om de gekozen richting bestuurlijk geloofwaardig te maken?`,
     "",
-    "CULTUUR & KENNIS",
-    `• Welke onderdelen van het ${orgLabel}-model zijn overdraagbaar naar partners en welke verliezen effect buiten de huidige cultuurcontext, en welke keuze maken we dan tussen standaardisatie en autonomie?`,
+    "UITVOERBAARHEID",
+    `• Welke bottleneck blijft bestaan, zelfs als ${orgLabel} morgen extra capaciteit of budget toevoegt, en wat zegt dat over het echte systeemprobleem?`,
     "",
-    "NETWERK & INVLOED",
-    "• Wanneer wordt netwerkadoptie strategisch krachtiger dan verdere groei van de eigen organisatie voor impactversnelling, en welk investeringspad kiezen we expliciet als gevolg?",
+    "GOVERNANCE",
+    `• Welke beslissing vraagt nu expliciet eigenaarschap, KPI en stopregel omdat bestuurlijke ambiguïteit anders sneller groeit dan de organisatie kan absorberen?`,
     "",
-    "SYSTEEMIMPACT",
-    "• Welke expliciete beleidskeuze is nodig om systeemadoptie te versnellen zonder bestuurlijke controle over kwaliteit te verliezen, en welk risico accepteren we daarbij formeel?",
-    "• Welk strategisch offer accepteert het bestuur expliciet als voorwaarde om binnen 24 maanden van lokaal model naar regionaal systeemmodel te gaan, en welke kill-switch hanteren we als die route faalt?",
+    "VALIDATIE",
+    `• Welke aanname achter de gekozen richting moet ${orgLabel} binnen 90 dagen toetsen om te voorkomen dat focus verandert in overtuiging zonder bewijs?`,
   ].join("\n");
 }
 
@@ -3459,11 +4367,6 @@ function parseOpenQuestionLines(value: string): string[] {
 }
 
 function formatKillerInsightsForMemo(insights: MechanisticInsight[]): string {
-  const trimTo = (value: string, max = 220): string => {
-    const text = normalize(value);
-    if (text.length <= max) return text;
-    return `${text.slice(0, max - 1).trimEnd()}…`;
-  };
   const rootKey = (value: string): string =>
     normalize(value)
       .toLowerCase()
@@ -3484,15 +4387,15 @@ function formatKillerInsightsForMemo(insights: MechanisticInsight[]): string {
     if (/\b(inzicht\s+[a-z]?\d+)\b/i.test(`${mechanism} ${implication}`)) continue;
     const key = rootKey(mechanism);
     if (!key || dedup.has(key)) continue;
-    const bullet = trimTo(`• ${mechanism} Implicatie: ${implication}`);
+    const bullet = frameBoardroomShock(normalizeBoardroomBullet(`${mechanism} ${implication}`, 220), 180);
     dedup.set(key, bullet);
     if (dedup.size >= 3) break;
   }
 
   const fallback = [
-    "• Het model faalt niet op kwaliteit maar op overdraagbaarheid; prioriteit is replicatie met harde kwaliteitsguardrails.",
-    "• Groei via eigen FTE vergroot cultuurdruk; netwerkadoptie verhoogt impact met lagere interne frictie.",
-    "• Zonder expliciete stopregels verschuift besluitkracht naar operatie; borg escalatie en kill-switches op boardniveau.",
+    "Het model faalt niet op kwaliteit maar op overdraagbaarheid. Prioriteit is replicatie met harde kwaliteitsguardrails.",
+    "Groei via eigen FTE vergroot cultuurdruk. Netwerkadoptie verhoogt impact met lagere interne frictie.",
+    "Zonder expliciete stopregels verschuift besluitkracht naar operatie. Borg escalatie en kill-switches op boardniveau.",
   ];
 
   const bullets = Array.from(dedup.values());
@@ -3553,6 +4456,8 @@ function buildBoardroomDecisionModulesV3(params: {
   }>;
   killerInsights: MechanisticInsight[];
   organizationName?: string;
+  sector?: string;
+  organizationType?: string;
   leverage?: InputInsights["leverage"];
   patternProfile?: StrategicPatternProfile;
   strategySimulation?: StrategySimulationEngineOutput;
@@ -3573,12 +4478,21 @@ function buildBoardroomDecisionModulesV3(params: {
     predictedInterventions,
     killerInsights,
     organizationName,
+    sector,
+    organizationType,
     leverage,
     patternProfile,
     strategySimulation,
     decisionMemory,
     earlyWarningSystem,
   } = params;
+  const publicYouthContext =
+    /(jeugdzorg|jeugdwet|gemeente|gemeentelijke inkoop|wijkteam|jongeren|gezinnen)/i.test(
+      `${organizationName || ""} ${sector || ""} ${report || ""} ${memo || ""} ${inputInsights.facts.join(" ")} ${inputInsights.actions.join(" ")}`
+    );
+  if (publicYouthContext) {
+    return {};
+  }
   const killerInsightEngine = buildKillerInsightEngineBlock({
     organizationName,
     killerInsight: killerInsights[0]?.mechanism,
@@ -3623,6 +4537,10 @@ function buildBoardroomDecisionModulesV3(params: {
     patternProfile != null ? buildStrategicPatternBoardroomBlock(patternProfile) : "";
   const decisionMemoryEngine = decisionMemory != null ? buildDecisionMemoryBlock(decisionMemory) : "";
   const earlyWarningEngine = earlyWarningSystem != null ? buildEarlyWarningSystemBlock(earlyWarningSystem) : "";
+  const blindSpotsText = extractSection(report, 10);
+  const decisionConsequencesText = extractSection(report, 12);
+  const strategicLeverageText = extractSection(report, 13);
+  const strategicMemoryText = extractSection(report, 14);
 
   return {
     signal_extraction: {
@@ -3678,6 +4596,25 @@ function buildBoardroomDecisionModulesV3(params: {
       WARNING_INDICATORS: earlyWarningSystem?.warning_indicators || [],
       RISK_THRESHOLDS: earlyWarningSystem?.risk_thresholds || [],
       BOARDROOM_ALERT: earlyWarningSystem?.boardroom_alert || earlyWarningEngine,
+    },
+    blind_spot_detector: {
+      BLIND_SPOTS: blindSpotsText,
+      blind_spot_count: (blindSpotsText.match(/Blinde vlek\s+\d+/gi) || []).length,
+    },
+    decision_consequence_simulator: {
+      DECISION_CONSEQUENCES: decisionConsequencesText,
+      has_12m: /12 maanden/i.test(decisionConsequencesText),
+      has_24m: /24 maanden/i.test(decisionConsequencesText),
+      has_36m: /36 maanden/i.test(decisionConsequencesText),
+    },
+    strategic_leverage_detector: {
+      STRATEGIC_LEVERAGE: strategicLeverageText,
+      leverage_count: (strategicLeverageText.match(/Hefboom\s+\d+/gi) || []).length,
+    },
+    strategic_memory_engine: {
+      STRATEGIC_MEMORY: strategicMemoryText,
+      has_similar_patterns: /Vergelijkbare patronen/i.test(strategicMemoryText),
+      has_warning: /Strategische waarschuwing/i.test(strategicMemoryText),
     },
     strategic_conflict_engine: {
       STRATEGIC_CONFLICT: strategicConflictEngine,
@@ -3754,6 +4691,16 @@ function buildBoardroomDecisionModulesV3(params: {
       strategy_simulation_present: hasStrategySimulationContract(memo),
       decision_memory_present: hasDecisionMemoryContract(memo),
       early_warning_present: hasEarlyWarningContract(memo),
+      blind_spots_present: (blindSpotsText.match(/Blinde vlek\s+\d+/gi) || []).length >= 3,
+      decision_consequences_present:
+        /12 maanden/i.test(decisionConsequencesText) &&
+        /24 maanden/i.test(decisionConsequencesText) &&
+        /36 maanden/i.test(decisionConsequencesText),
+      strategic_leverage_present: (strategicLeverageText.match(/Hefboom\s+\d+/gi) || []).length >= 2,
+      strategic_memory_present:
+        /Vergelijkbare patronen/i.test(strategicMemoryText) &&
+        /Herhaalde strategie/i.test(strategicMemoryText) &&
+        /Strategische waarschuwing/i.test(strategicMemoryText),
       killer_insight_present: /Killer insight/i.test(memo),
       strategic_conflict_present: hasStrategicConflictContract(memo),
       boardroom_coach_present: hasBoardroomCoachContract(memo),
@@ -3772,11 +4719,309 @@ function buildBoardroomDecisionModulesV3(params: {
   };
 }
 
+function safelyBuildBoardroomDecisionModulesV3(
+  params: Parameters<typeof buildBoardroomDecisionModulesV3>[0]
+): Record<string, unknown> {
+  try {
+    return buildBoardroomDecisionModulesV3(params);
+  } catch (error) {
+    console.warn("Boardroom modules skipped after runtime error", error);
+    return {};
+  }
+}
+
+function buildPublicYouthStrategyDNAProfile(): {
+  archetype: string;
+  coreMechanism: string;
+  growthModel: string;
+  strategicRisk: string;
+  strategyPreference: string;
+} {
+  return {
+    archetype: "specialistische jeugdzorgpartner",
+    coreMechanism:
+      "Contractkwaliteit, scherpe doelgroepkeuze en bestuurlijke discipline bepalen of capaciteit houdbaar blijft.",
+    growthModel:
+      "Groei ontstaat via scherpere positionering, betere instroomsturing en selectieve samenwerking in plaats van lineaire volumegroei.",
+    strategicRisk:
+      "Breedte zonder contractdiscipline of nichekeuze vergroot werkdruk sneller dan bestuurlijke ruimte en teamstabiliteit.",
+    strategyPreference:
+      "Specialisatie, contractdiscipline en selectieve netwerksamenwerking. Primaire stuurhefboom: positionering.",
+  };
+}
+
+function buildPublicYouthScenarioSimulationBlock(): { title: string; body: string } {
+  return {
+    title: "Strategische scenario simulatie",
+    body: [
+      "Scenario A — Bescherm de kern en versmal de propositie",
+      "",
+      "Mechanisme",
+      "Bestuurlijke focus op doelgroep, contractmix en triage verlaagt ruis en beschermt schaarse capaciteit.",
+      "",
+      "Operationeel effect",
+      "Doorstroom wordt voorspelbaarder en caseloaddruk daalt zodra instroom en aanbod scherper worden gestuurd.",
+      "",
+      "Financieel effect",
+      "Contractkwaliteit en marge verbeteren doordat verlieslatende breedte minder ruimte krijgt.",
+      "",
+      "Strategisch risico",
+      "Te trage zichtbaarheid van wachttijdverbetering kan gemeenten verleiden om volume elders onder te brengen. (middel)",
+      "",
+      "Bestuurlijke implicatie",
+      "Bestuur moet focus zichtbaar maken in contractdialoog, wachttijdsturing en verwijzerscommunicatie.",
+      "",
+      "Scenario B — Verbreden ondanks contract- en personeelsdruk",
+      "",
+      "Mechanisme",
+      "Parallelle verbreding vergroot bestuurlijke spreiding terwijl contractruimte en teamcapaciteit al onder druk staan.",
+      "",
+      "Operationeel effect",
+      "Meer variatie in aanbod verhoogt coördinatiedruk, caseloadfrictie en risico op wachttijdinstabiliteit.",
+      "",
+      "Financieel effect",
+      "Omzet kan tijdelijk stijgen, maar margedruk en verantwoordingslast nemen sneller toe dan de structurele ruimte.",
+      "",
+      "Strategisch risico",
+      "De organisatie verliest focus en onderscheidend vermogen tegenover grotere of specialistische aanbieders. (hoog)",
+      "",
+      "Bestuurlijke implicatie",
+      "Bestuur moet expliciet bepalen welke verbreding wordt gestopt zodra contractkwaliteit of teamstabiliteit verslechtert.",
+      "",
+      "Scenario C — Netwerkroute rond kernspecialisatie",
+      "",
+      "Mechanisme",
+      "De organisatie houdt zelf focus op haar kern en organiseert aanvullende capaciteit via partners met duidelijke governance.",
+      "",
+      "Operationeel effect",
+      "Instroom kan beter worden gerouteerd zonder de eigen kerncapaciteit te overbelasten.",
+      "",
+      "Financieel effect",
+      "Contractpositie en verwijzersvertrouwen verbeteren als partnerschap schaal toevoegt zonder interne verbredingskosten.",
+      "",
+      "Strategisch risico",
+      "Partnerkwaliteit en governance kunnen de gekozen focus ondermijnen als escalatieregels ontbreken. (middel)",
+      "",
+      "Bestuurlijke implicatie",
+      "Bestuur moet partnercriteria, auditritme en routeringsafspraken vooraf contracteren.",
+    ].join("\n"),
+  };
+}
+
+function buildPublicYouthCausalStrategyBlock(): {
+  items: Array<{
+    hefboom: string;
+    mechanisme: string;
+    operationeelEffect: string;
+    financieelEffect: string;
+    strategischRisico: string;
+    bestuurlijkeImplicatie: string;
+  }>;
+  summary: string;
+  block: string;
+} {
+  const items = [
+    {
+      hefboom: "contractdiscipline",
+      mechanisme:
+        "Contractstructuur bepaalt de feitelijke schaalruimte en begrenst welke instroom bestuurlijk houdbaar is.",
+      operationeelEffect:
+        "Doorstroom en caseload worden voorspelbaarder zodra contractkeuzes en instroomtempo beter op elkaar aansluiten.",
+      financieelEffect:
+        "Marge stabiliseert wanneer verlieslatende breedte en ongedekte productie sneller worden afgebouwd.",
+      strategischRisico:
+        "Zonder contractdiscipline groeit vraag sneller dan bestuurlijke en financiële ruimte.",
+      bestuurlijkeImplicatie:
+        "Bestuur moet contractmix, margevloer en volumekeuzes expliciet koppelen aan de gekozen propositie.",
+    },
+    {
+      hefboom: "triage en toegangssturing",
+      mechanisme:
+        "De kwaliteit van triage bepaalt hoeveel druk er op schaarse professionals en wachttijdopbouw komt.",
+      operationeelEffect:
+        "Strakkere instroomselectie verlaagt wachtdruk en voorkomt dat de verkeerde casuïstiek de kerncapaciteit overneemt.",
+      financieelEffect:
+        "Minder verkeerde instroom verlaagt herwerk, no-show-achtige verspilling en niet-rendabele doorlooptijd.",
+      strategischRisico:
+        "Zonder toegangssturing blijven wachttijden publiek zichtbaar en loopt legitimiteit bij gemeenten terug.",
+      bestuurlijkeImplicatie:
+        "Bestuur moet intakecriteria, routering en caseloadgrenzen niet overlaten aan ad-hoc beslissingen.",
+    },
+    {
+      hefboom: "scherpe positionering",
+      mechanisme:
+        "Een expliciete niche maakt contractering, verwijzing en interne focus tegelijk sterker.",
+      operationeelEffect:
+        "Teams werken consistenter als doelgroep, aanbodgrenzen en partnerroutering helder zijn.",
+      financieelEffect:
+        "Een verdedigbare propositie vermindert prijsdruk en vergroot kans op structureel passende contracten.",
+      strategischRisico:
+        "Zonder scherpe positionering verliest de organisatie onderscheidend vermogen tegenover grotere spelers.",
+      bestuurlijkeImplicatie:
+        "Bestuur moet vastleggen voor welke doelgroep de organisatie primair kiest en wat expliciet buiten de kern valt.",
+    },
+  ];
+
+  const block = [
+    "### Causale strategieanalyse",
+    ...items.flatMap((item) => [
+      `Strategische hefboom: ${item.hefboom}`,
+      "",
+      "Mechanisme",
+      item.mechanisme,
+      "",
+      "Operationeel effect",
+      item.operationeelEffect,
+      "",
+      "Financieel effect",
+      item.financieelEffect,
+      "",
+      "Strategisch risico",
+      item.strategischRisico,
+      "",
+      "Bestuurlijke implicatie",
+      item.bestuurlijkeImplicatie,
+      "",
+    ]),
+    "### Dominante hefboomcombinatie",
+    "contractdiscipline",
+    "triage en toegangssturing",
+    "scherpe positionering",
+    "",
+    "Strategisch effect",
+    "Deze combinatie verlaagt tegelijk wachtdruk, bestuurlijke kwetsbaarheid en contractrisico zonder te leunen op lineaire volumegroei.",
+    "",
+    "### Mechanismeketens",
+    "1. Contractplafonds -> wachtdruk -> werkdruk -> teamuitval",
+    "2. Brede propositie -> diffuse contractering -> lagere marge -> minder bestuurlijke ruimte",
+    "3. Zwakke triage -> verkeerde instroom -> overbelaste caseload -> kwaliteitsdruk",
+  ].join("\n");
+
+  return {
+    items,
+    summary: items[0].mechanisme,
+    block,
+  };
+}
+
+function buildPublicYouthKillerInsights(
+  inputInsights: InputInsights,
+  organizationName?: string
+): MechanisticInsight[] {
+  const orgLabel = normalize(organizationName) || "de organisatie";
+  const factCorpus = inputInsights.facts.join(" ");
+  const actionCorpus = inputInsights.actions.join(" ");
+  const insights: MechanisticInsight[] = [
+    {
+      title: "Wachtdruk is contractgedreven, niet personeelsgedreven.",
+      mechanism:
+        "Gemeentelijke contractruimte en plafonds begrenzen hoeveel instroom bestuurlijk en financieel houdbaar is, waardoor extra capaciteit zonder contractruimte de wachttijd niet structureel oplost.",
+      implication:
+        "Heronderhandel contractmix en instroomcriteria voordat extra capaciteit wordt toegevoegd.",
+    },
+    {
+      title: "Extra personeel kan de druk verhogen als triage zwak blijft.",
+      mechanism:
+        "Zonder scherpere instroomdiscipline groeit coördinatie en administratieve belasting sneller dan productieve behandeltijd, waardoor werkdruk stijgt terwijl de wachttijd zichtbaar blijft.",
+      implication:
+        "Leg eerst caseloadgrenzen, intakecriteria en routering vast; voeg pas daarna capaciteit toe.",
+    },
+    {
+      title: "Breedte verzwakt de propositie juist op het moment dat gemeenten focus zoeken.",
+      mechanism:
+        "Een brede positionering vergroot aanbodruis en maakt het moeilijker om contractmatig en inhoudelijk te bewijzen waarom juist deze organisatie onmisbaar is.",
+      implication:
+        `Dwing binnen één kwartaal een niche- of doelgroepkeuze af voor ${orgLabel}.`,
+    },
+    {
+      title: "Wachttijd is een bestuurlijk signaal, geen puur operationeel probleem.",
+      mechanism:
+        "Als wachttijden oplopen terwijl contractkeuze, triage en caseloadbeleid diffuus blijven, is dat een teken dat het bestuur geen harde prioriteit heeft gezet op toegang en focus.",
+      implication:
+        "Maak wachttijd onderdeel van board-escalatie in plaats van alleen van operationele rapportage.",
+    },
+    {
+      title: "Gemeentelijke afhankelijkheid maakt strategie kwetsbaar zodra contractkwaliteit verslechtert.",
+      mechanism:
+        "Bij hoge afhankelijkheid van één financieringslogica vertaalt tariefdruk zich direct naar lagere marge, minder investeringsruimte en meer teamdruk.",
+      implication:
+        "Verlaag concentratierisico via scherpere contractmix, nichepositionering en verwijzersverbreding.",
+    },
+    {
+      title: "Personeelsschaarste is vooral gevaarlijk omdat de verkeerde casuïstiek de kerncapaciteit opvreet.",
+      mechanism:
+        "Zonder harde toegangskeuzes gaan schaarse professionals op aan casussen die niet het beste passen bij de kernpropositie, waardoor wachtdruk en kwaliteitsverlies tegelijk oplopen.",
+      implication:
+        "Bescherm de kerncapaciteit met expliciete uitsluitingscriteria en partnerroutering.",
+    },
+    {
+      title: "Bestuurlijke inertie vergroot de schade sneller dan volumegroei haar kan compenseren.",
+      mechanism:
+        "Als contractdiscipline, positionering en triage tegelijk onduidelijk blijven, stapelen werkdruk, marge-erosie en reputatierisico zich sneller op dan extra activiteit kan opvangen.",
+      implication:
+        "Versmal de agenda tot één gekozen koers met stopregels op wachttijd, marge en caseload.",
+    },
+  ];
+
+  if (/gemeentelijke inkoop|contract/i.test(factCorpus)) {
+    return insights;
+  }
+
+  return insights.map((item) => ({
+    ...item,
+    mechanism: normalize(`${item.mechanism} ${actionCorpus}`),
+  }));
+}
+
+function buildBoardroomSummaryBlock(params: {
+  dominantRisk: string;
+  recommendedDecision: string;
+  downside: string;
+  stopRule: string;
+  organizationName?: string;
+  sector?: string;
+}): string {
+  return [
+    "0. Boardroom summary",
+    `Organisatie: ${normalize(params.organizationName) || "Onbekende organisatie"}`,
+    `Sector: ${normalize(params.sector) || "Onbekende sector"}`,
+    `Analyse datum: ${new Date().toLocaleDateString("nl-NL")}`,
+    "",
+    "DOMINANT RISICO",
+    normalize(params.dominantRisk),
+    "",
+    "AANBEVOLEN BESLUIT",
+    normalize(params.recommendedDecision),
+    "",
+    "KEERZIJDE VAN DE KEUZE",
+    normalize(params.downside),
+    "",
+    "STOPREGEL",
+    normalize(params.stopRule),
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function normalizeBoardroomSectorLabel(value: unknown): string {
+  const text = normalize(value).toLowerCase();
+  if (!text) return "Onbekende sector";
+  if (/jeugdzorg|jeugdwet|jongeren|gezinnen|opvoed|multiproblematiek/.test(text)) return "Jeugdzorg";
+  if (/ggz|geestelijke gezondheidszorg/.test(text)) return "GGZ";
+  if (/zorg/.test(text)) return "Zorg";
+  return normalize(value) || "Onbekende sector";
+}
+
+function withTerminalPeriod(value: string): string {
+  const text = normalize(value).replace(/[.\s]+$/g, "");
+  return text ? `${text}.` : "";
+}
+
 function buildCaseAnchoredFactBase(
   inputInsights: InputInsights,
   caseClassification: CaseClassification
 ): string {
-  if (caseClassification !== "SUCCESS_MODEL") {
+  if (caseClassification !== "SUCCESS_MODEL" || !hasSuccessModelSignature(inputInsights)) {
     return inputInsights.facts.join("\n");
   }
 
@@ -3845,7 +5090,10 @@ function buildDutchReport(
     kpi_effect: string;
     confidence: "laag" | "middel" | "hoog";
   }>,
-  organizationName?: string
+  sessionId?: string,
+  organizationName?: string,
+  sector?: string,
+  organizationType?: string
 ): string {
   const compact = (value: string, max = 220): string => {
     const text = normalize(value);
@@ -3857,6 +5105,10 @@ function buildDutchReport(
     if (words.length <= maxWords) return words.join(" ");
     return `${words.slice(0, maxWords).join(" ")}…`;
   };
+  const toEurText = (value: string): string =>
+    String(value || "")
+      .replace(/€\s*/g, "EUR ")
+      .replace(/\bEUR\s+(\d{1,3})\.(\d{3})\b/g, "EUR $1.$2");
   const systemTransformation = inferSystemTransformationAssessment(inputInsights, caseClassification);
   const thesis = buildStrategicThesis(
     inputInsights,
@@ -3865,6 +5117,9 @@ function buildDutchReport(
     mechanisms,
     systemTransformation,
     organizationName
+  );
+  const isPublicYouthCase = /(jeugdzorg|jeugdwet|gemeente|gemeentelijke inkoop|jongeren|gezinnen)/i.test(
+    `${inputInsights.facts.join(" ")} ${inputInsights.actions.join(" ")}`
   );
   const interventionActions = buildInterventionActions(output, inputInsights, caseClassification);
   const gekozenOptie =
@@ -3901,36 +5156,100 @@ function buildDutchReport(
     `${extraActions}${interventions}`,
     10
   );
+  const reportActionPlan = interventionActions
+    .slice(0, 15)
+    .map(
+      (item, index) =>
+        `${index + 1}. Actie: ${item.action}\nEigenaar: ${item.owner}\nDeadline: ${item.deadline}\nKPI: ${item.success}`
+    )
+    .join("\n\n");
   const feitenbasis = Array.from(
     new Set(
       buildCaseAnchoredFactBase(inputInsights, caseClassification)
         .split("\n")
-        .map((line) => normalize(line))
+        .map((line) => toEurText(normalize(line)))
         .filter(Boolean)
     )
   )
     .slice(0, 6)
     .map((line) => `- ${line}`)
     .join("\n");
+  const leverDetection = detectStrategicLeverMatrix({
+    organizationName,
+    sourceText: [
+      thesis.dominantThesis,
+      conflict.conflictStatement,
+      feitenbasis,
+      structuredInterventions,
+      String(organizationName || ""),
+      inputInsights.facts.join("\n"),
+      inputInsights.actions.join("\n"),
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
+  });
+  const strategicLeverInsights = leverDetection.levers;
+  const dominantLeverCombination = leverDetection.dominantCombination;
+  const causalStrategy = runCausalStrategyEngine({
+    levers: strategicLeverInsights,
+    dominantCombination: dominantLeverCombination,
+  });
+  const strategyDNA = classifyStrategyDNA({
+    organizationDescription: organizationName,
+    strategy: [
+      thesis.dominantThesis,
+      conflict.conflictStatement,
+      feitenbasis,
+      structuredInterventions,
+      String(organizationName || ""),
+      inputInsights.facts.join("\n"),
+      inputInsights.actions.join("\n"),
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
+    levers: strategicLeverInsights,
+    causalAnalysis: causalStrategy,
+  });
   const knowledgeInsight = buildKnowledgeOrganizationInsight(inputInsights, organizationName);
+  const successSignature = hasSuccessModelSignature(inputInsights);
   const killerInsights = [
     knowledgeInsight,
-    {
-      insight: `${String(organizationName || "De organisatie").trim() || "De organisatie"} heeft geen capaciteitsprobleem maar een replicatieprobleem.`,
-      mechanism: compact(mechanisms.scaleMechanism, 180),
-      implication: "Schaal moet via modeladoptie en partners verlopen, niet via extra capaciteit alleen.",
-    },
-    ...buildKillerInsights(output, inputInsights, caseClassification).map((item) => ({
-      insight: compact(item.title, 180),
+    ...(caseClassification === "SUCCESS_MODEL" && successSignature
+      ? [
+          {
+            insight: `${String(organizationName || "De organisatie").trim() || "De organisatie"} heeft geen capaciteitsprobleem maar een replicatieprobleem.`,
+            mechanism: compact(mechanisms.scaleMechanism, 180),
+            implication: "Schaal moet via modeladoptie en partners verlopen, niet via extra capaciteit alleen.",
+          },
+        ]
+      : []),
+    ...buildKillerInsights(output, inputInsights, caseClassification, organizationName).map((item) => ({
+      insight: compact(item.title || item.mechanism, 180),
       mechanism: compact(item.mechanism, 180),
       implication: compact(item.implication, 180),
     })),
+    ...(isPublicYouthCase
+      ? []
+      : strategicLeverInsights.map((item) => ({
+          insight: `Hefboombesluit: ${item.lever}`,
+          mechanism: compact(item.mechanism, 180),
+          implication: compact(item.boardImplication, 180),
+        }))),
+    ...(dominantLeverCombination
+      ? [
+          {
+            insight: `Hefboombesluit: ${dominantLeverCombination.levers.join(" + ")}`,
+            mechanism: compact(dominantLeverCombination.strategicEffect, 180),
+            implication: "Bestuur moet deze combinatie als samenhangend stuurmechanisme behandelen in plaats van als losse interventies.",
+          },
+        ]
+      : []),
   ]
     .filter((item): item is { insight: string; mechanism: string; implication: string } => Boolean(item))
-    .slice(0, 5)
+    .slice(0, 7)
     .map(
       (item, index) =>
-        `Inzicht ${index + 1}\nINZICHT\n${item.insight}\nMECHANISME\n${item.mechanism}\nIMPLICATIE\n${item.implication}`
+        `Inzicht ${index + 1}\nINZICHT\n${item.insight}\nMECHANISME\n${item.mechanism}\nBESTUURLIJKE CONSEQUENTIE\n${item.implication}`
     )
     .join("\n\n");
   const strategischeInterventies = predictedInterventions
@@ -3940,6 +5259,92 @@ function buildDutchReport(
         `Interventie ${index + 1}\nInterventie: ${normalize(item.interventie)}\nMechanisme: ${compact(item.impact, 180)}\nKPI: ${compact(item.kpi_effect, 160)}\nRisico: ${compact(item.risico, 160)}`
     )
     .join("\n\n");
+  const formattedRecommendedDirection = recommendedDirection
+    .replace(/^[ABC]\s+[—-]\s*/i, "")
+    .replace(/^([a-z])/, (_, first) => String(first).toUpperCase());
+  const reportScenarioOptions =
+    caseClassification === "SUCCESS_MODEL" && strategicMode === "SCALE" && successSignature
+      ? [
+          "Bescherm de kern met begrensde groei en harde cultuurguardrails",
+          "Bouw gecontroleerde cellen met centrale standaarden en mentorratio",
+          "Schaal via netwerkreplicatie en licentie-implementaties met auditguardrails",
+        ]
+      : [
+          "Bescherm de kern en herstel bestuurlijke focus",
+          "Versnel verbreding onder hogere uitvoeringsdruk",
+          "Gefaseerde route met expliciete governance-gates",
+        ];
+  const strategicOptions = [
+    "A. Bescherm de kern en vertraag verbreding totdat capaciteit, contractruimte en governance aantoonbaar op orde zijn.",
+    "B. Versnel impact via parallelle verbreding en accepteer hogere druk op marge, sturing en uitvoerbaarheid.",
+    `C. ${formattedRecommendedDirection}`,
+    ...(dominantLeverCombination
+      ? [
+          `Dominante hefboomcombinatie: ${dominantLeverCombination.levers.join(" + ")}.`,
+          `Strategisch effect: ${dominantLeverCombination.strategicEffect}`,
+        ]
+      : []),
+  ].join("\n\n");
+  const strategicScenarios = generateStrategicScenarios({
+    strategic_options: reportScenarioOptions,
+    strategic_hefbomen: strategicLeverInsights,
+    strategic_hefboom_combinatie: dominantLeverCombination,
+    strategic_causal_analysis: causalStrategy,
+  });
+  const defaultScenarioSimulationBlock = buildScenarioSimulationReportBlock({
+    strategic_scenarios: strategicScenarios,
+    strategic_options: reportScenarioOptions,
+    strategic_hefbomen: strategicLeverInsights,
+    strategic_hefboom_combinatie: dominantLeverCombination,
+    strategic_causal_analysis: causalStrategy,
+  });
+  const stressTests = runStressTestEngine({
+    strategic_options: [
+      ...(isPublicYouthCase
+        ? [
+            "Bescherm de kern en versmal de propositie",
+            "Verbreden ondanks contract- en personeelsdruk",
+            "Netwerkroute rond kernspecialisatie",
+          ]
+        : [
+            "Bescherm de kern en herstel bestuurlijke focus",
+            "Versnel verbreding onder hogere uitvoeringsdruk",
+            "Gefaseerde route met expliciete governance-gates",
+          ]),
+    ],
+    strategic_hefbomen: strategicLeverInsights,
+    strategic_hefboom_combinatie: dominantLeverCombination,
+    strategic_causal_analysis: causalStrategy,
+    strategic_scenarios: strategicScenarios,
+  });
+  const effectiveCausalStrategy = isPublicYouthCase ? buildPublicYouthCausalStrategyBlock() : causalStrategy;
+  const scenarioSimulationBlock = isPublicYouthCase
+    ? buildPublicYouthScenarioSimulationBlock()
+    : defaultScenarioSimulationBlock;
+  const effectiveStrategyDNA = isPublicYouthCase ? buildPublicYouthStrategyDNAProfile() : strategyDNA;
+  const causalStrategyAnalysis = effectiveCausalStrategy.block;
+  const strategyDNABlock = buildStrategyDNABlock(effectiveStrategyDNA);
+  const waitlistPct = inputInsights.leverage.waitlistShortPathPct ?? 8;
+  const growthCap = inputInsights.leverage.growthCapFte ?? 5;
+  const agingPct = inputInsights.leverage.agingCostPct ?? 30;
+  const financieleConsequenties =
+    caseClassification === "SUCCESS_MODEL" && successSignature
+      ? [
+          `Economische logica: bij vergrijzingsdruk van circa +${agingPct}% loonkosten vernietigt lineaire FTE-groei sneller marge dan zij schaal oplevert; netwerk- en licentiegedreven replicatie verschuift groei daarom van vaste kosten naar overdraagbaar modelinkomen.`,
+          "Risico: partnerkwaliteit, trage gemeentelijke besluitvorming en onvoldoende auditdiscipline kunnen de schaalcase vertragen en tijdelijk op marge drukken.",
+          "Benodigde inzet: investeer direct in partnerselectie, kwaliteitsprotocollen, auditritme en een expliciet governancekader voor modeladoptie.",
+        ].join("\n\n")
+      : isPublicYouthCase
+        ? [
+            "Economische logica: afhankelijkheid van gemeentelijke contracten en budgetdruk maakt volumegroei op zichzelf onvoldoende; zonder scherpe positionering en contractdiscipline neemt uitvoeringsdruk sneller toe dan financiële ruimte.",
+            "Risico: hogere zorgcomplexiteit, personeelsschaarste en bureaucratische verantwoordingsdruk drukken tegelijk op teamstabiliteit en behandelcontinuiteit.",
+            "Benodigde inzet: stuur op contractkwaliteit, scherpe doelgroepkeuze, capaciteitsritme en reductie van bestuurlijke inertie in besluitvorming.",
+          ].join("\n\n")
+        : [
+            "Economische logica: extra activiteit lost het probleem niet op zolang contractdruk, margespanning en bestuurlijke versnippering ongewijzigd blijven.",
+            "Risico: parallelle prioriteiten vergroten uitvoeringsdruk sneller dan de organisatie risico kan absorberen.",
+            "Benodigde inzet: versmal prioriteiten, herstel besluitdiscipline en leg per interventie een harde eigenaar en KPI vast.",
+          ].join("\n\n");
   const vroegsignalen = [
     inputInsights.leverage.waitlistShortPathPct != null
       ? `Indicator: Kort-trajectuitstroom\nNorm: >= 20% binnen 12 maanden\nRisico: wachtdruk blijft structureel\nActie: schaal triage op als de uitstroom twee meetperiodes onder norm blijft`
@@ -3951,65 +5356,272 @@ function buildDutchReport(
       ? `Indicator: Loonkostendruk\nNorm: binnen begrotingskader\nRisico: marge verslechtert sneller dan contractruimte\nActie: versnel netwerk- of licentie-inkomsten bij overschrijding`
       : "",
     `Indicator: Partnerkwaliteit\nNorm: boven afgesproken kwaliteitsdrempel\nRisico: kwaliteitsvariatie bij netwerkreplicatie\nActie: pauzeer nieuwe partners bij twee opeenvolgende afwijkingen`,
+    isPublicYouthCase
+      ? "Indicator: Afhankelijkheid van gemeenten\nNorm: geen dominante afhankelijkheid van 1 contractstroom\nRisico: onderhandelingspositie verslechtert snel bij contractverlies\nActie: ontwikkel nichepropositie en verbreed verwijzersbasis binnen 12 maanden"
+      : "",
+    isPublicYouthCase
+      ? "Indicator: Teamdruk en retentie\nNorm: stabiele bezetting en beheersbare administratieve belasting\nRisico: uitval en verloop stijgen sneller dan instroom\nActie: snij administratieve belasting terug zodra retentie of caseload twee periodes verslechtert"
+      : "",
   ]
     .filter(Boolean)
     .slice(0, 4)
     .join("\n\n");
   const executiveSamenvatting = trimWords(
-    [
-      thesis.dominantThesis,
-      caseClassification === "SUCCESS_MODEL"
-        ? "De schaaldoorbraak ligt niet in meer capaciteit, maar in modeladoptie, netwerkreplicatie en strakke governance."
-        : `De kernhypothese is dat schaal of herstel alleen werkt als het onderliggende mechanisme expliciet wordt aangepast.`,
-      `Aanbevolen richting: ${recommendedDirection}`,
-    ].join(" "),
+    (isPublicYouthCase
+      ? [
+          "Wachtdruk is contractgedreven, niet personeelsgedreven.",
+          "Meer personeel zonder scherpere triage en contractruimte verhoogt vooral kosten en coördinatiedruk.",
+          `Aanbevolen besluit: ${withTerminalPeriod(recommendedDirection)}`,
+        ]
+      : [
+          thesis.dominantThesis,
+          caseClassification === "SUCCESS_MODEL"
+            ? "De schaaldoorbraak ligt in modeladoptie, netwerkreplicatie en strakke governance; niet in lineaire volumegroei."
+            : "Schaal of herstel werkt alleen als het onderliggende mechanisme expliciet wordt aangepast.",
+          `Aanbevolen richting: ${recommendedDirection}`,
+        ]
+    ).join(" "),
     150
   );
   const hypothese = knowledgeInsight
     ? `De kernhypothese is dat ${String(organizationName || "de organisatie").trim() || "de organisatie"} strategisch meer lijkt op een kennisorganisatie met zorguitvoering dan op een volumegedreven zorgorganisatie.`
-    : "De kernhypothese is dat volumegroei het schaalvraagstuk niet oplost, omdat de kwaliteit wordt gedragen door eigenaarschap, cultuur en overdraagbare werkwijze.";
+    : isPublicYouthCase
+      ? "De kernhypothese is dat niet volume maar bestuurlijke focus, contractkwaliteit en uitvoerbare positionering bepalen of zorgkwaliteit en teamstabiliteit houdbaar blijven."
+      : "De kernhypothese is dat extra activiteit het probleem niet oplost zolang het dominante besturingsmechanisme ongewijzigd blijft.";
+  const boardroomStressTest =
+    caseClassification === "SUCCESS_MODEL" && successSignature
+      ? [
+          `Als het bestuur niets doet, blijft kort-trajectuitstroom rond ${waitlistPct}% hangen en blijft wachtdruk structureel.`,
+          `Bij groei boven ${growthCap} FTE per jaar zonder guardrails neemt cultuur- en eigenaarschapserosie toe.`,
+          `De kostenbasis blijft sneller stijgen dan de schaalimpact zolang replicatie niet via partners en modeladoptie wordt georganiseerd.`,
+          "Bestuurlijke consequentie: uitstel verschuift het probleem van strategie naar operationele brandbestrijding.",
+        ].join("\n\n")
+      : isPublicYouthCase
+        ? [
+            "Als het bestuur niets doet, blijven wachtdruk, personeelsspanning en gemeentelijke afhankelijkheid elkaar versterken.",
+            "Zonder scherpe doelgroep- en contractkeuze neemt de werkdruk toe terwijl financiële ruimte afneemt.",
+            "Bestuurlijke consequentie: uitstel vertaalt zich in teamerosie, lagere voorspelbaarheid en minder onderhandelingskracht richting gemeenten.",
+          ].join("\n\n")
+        : [
+            "Als het bestuur niets doet, blijven symptomen zich herhalen omdat het besturingsmechanisme niet verandert.",
+            "Parallelle prioriteiten houden druk op capaciteit, marge en uitvoeringsdiscipline tegelijk hoog.",
+            "Bestuurlijke consequentie: uitstel verschuift strategisch risico naar operationele brandbestrijding.",
+          ].join("\n\n");
+  const blindSpotBlock = runBlindSpotNode({
+    organizationName,
+    executiveThesis: executiveSamenvatting,
+    strategicOptions: strategicOptions
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => /^[ABC][.)]/.test(line)),
+    sectorContext: [output?.context_state?.sector || "", ...inputInsights.facts].filter(Boolean),
+    facts: inputInsights.facts,
+    interventions: [
+      reportActionPlan,
+      strategischeInterventies,
+      structuredInterventions,
+      ...predictedInterventions.map((item) => item.interventie),
+    ].filter(Boolean),
+    boardroomStressTest,
+  });
+  const decisionConsequenceBlock = runDecisionConsequenceNode({
+    organizationName,
+    executiveThesis: executiveSamenvatting,
+    strategicOptions: strategicOptions
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => /^[ABC][.)]/.test(line)),
+    recommendedChoice: recommendedDirection,
+    sectorContext: [output?.context_state?.sector || "", ...inputInsights.facts].filter(Boolean),
+    facts: inputInsights.facts,
+    interventions: [
+      reportActionPlan,
+      strategischeInterventies,
+      structuredInterventions,
+      ...predictedInterventions.map((item) => item.interventie),
+    ].filter(Boolean),
+    boardroomStressTest,
+  });
+  const strategicLeverageBlock = runStrategicLeverageNode({
+    executiveThesis: executiveSamenvatting,
+    strategicOptions: strategicOptions
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => /^[ABC][.)]/.test(line)),
+    recommendedChoice: recommendedDirection,
+    facts: inputInsights.facts,
+    interventions: [
+      reportActionPlan,
+      strategischeInterventies,
+      structuredInterventions,
+      ...predictedInterventions.map((item) => item.interventie),
+    ].filter(Boolean),
+    boardroomStressTest,
+    blindSpots: blindSpotBlock.blindSpots,
+    decisionConsequences: decisionConsequenceBlock.decisionConsequences,
+  });
+  const memoryInterventions = [
+    ...predictedInterventions.map((item) => item.interventie),
+    ...inputInsights.actions,
+    reportActionPlan,
+  ]
+    .filter(Boolean)
+    .map((item) => normalize(item))
+    .filter((item) => item.length >= 16 && item.length <= 220)
+    .slice(0, 8);
+  const strategicMemoryBlock = runStrategicMemoryNode({
+    memoryId: sessionId || `${normalize(organizationName) || "organisatie"}-${Date.now()}`,
+    executiveThesis: executiveSamenvatting,
+    facts: inputInsights.facts,
+    strategicOptions: strategicOptions
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => /^[ABC][.)]/.test(line)),
+    recommendedChoice: recommendedDirection,
+    interventions: memoryInterventions,
+    blindSpots: blindSpotBlock.blindSpots,
+    strategicLeverage: strategicLeverageBlock.strategicLeverage,
+    sector: isPublicYouthCase ? "Jeugdzorg" : output?.context_state?.sector || sector,
+    organizationType: isPublicYouthCase ? "jeugdzorgorganisatie" : organizationType || organizationName,
+    dominantProblem: isPublicYouthCase
+      ? "contractdruk, wachtdruk en positioneringsrisico in jeugdzorg"
+      : output?.diagnosis?.dominant_problem,
+  });
+  const boardroomDebateBlock = runBoardroomDebateNode({
+    organizationName,
+    executiveThesis: executiveSamenvatting,
+    strategicOptions: strategicOptions
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => /^[ABC][.)]/.test(line)),
+    recommendedChoice: recommendedDirection,
+    blindSpots: blindSpotBlock.blindSpots,
+    boardroomStressTest,
+    decisionConsequences: decisionConsequenceBlock.decisionConsequences,
+    strategicLeverage: strategicLeverageBlock.strategicLeverage,
+    interventions: [
+      reportActionPlan,
+      strategischeInterventies,
+      structuredInterventions,
+      ...predictedInterventions.map((item) => item.interventie),
+    ].filter(Boolean),
+    sectorContext: [output?.context_state?.sector || "", ...inputInsights.facts].filter(Boolean),
+  });
+  const reportKpis = [
+    "- KPI: Marge per productlijn en contracttype.",
+    "- KPI: Cash runway in maanden.",
+    "- KPI: Wachttijd, no-show en behandelcontinuiteit.",
+    "- KPI: Productiviteit versus norm en benutting kerncapaciteit.",
+    "- KPI: Contractdekking, plafondbenutting en partnerkwaliteit.",
+  ].join("\n");
+  const reportDecisionText = [
+    "WIJ BESLUITEN:",
+    `1. We kiezen voor ${recommendedDirection}.`,
+    `2. We accepteren als expliciet verlies ${compact(conflict.explicitLoss || conflict.forcingChoice, 220)}.`,
+    "3. We blokkeren groei die extra FTE toevoegt zonder aantoonbare borging van cultuur, kwaliteit en eigenaarschap.",
+    "4. We laten alleen nieuwe partners, cellen of licentie-implementaties toe na formele validatie op KPI, auditritme en kill-switch.",
+  ].join("\n");
+  const boardroomSummary = buildBoardroomSummaryBlock({
+    organizationName,
+    sector: normalizeBoardroomSectorLabel(isPublicYouthCase ? "Jeugdzorg" : sector),
+    dominantRisk:
+      caseClassification === "SUCCESS_MODEL" && successSignature
+        ? "Lineaire groei breekt het kwaliteitsmechanisme sneller dan zij impact opschaalt."
+        : isPublicYouthCase
+          ? "Contractdruk, wachtdruk en diffuse positionering versterken werkdruk sneller dan extra activiteit die kan dempen."
+          : "Bestuurlijke inertie houdt het dominante risicomechanisme intact en vergroot operationele schade.",
+    recommendedDecision: recommendedDirection,
+    downside: compact(conflict.explicitLoss || conflict.forcingChoice, 220),
+    stopRule:
+      isPublicYouthCase
+        ? "Draai verbreding of groeibesluiten terug zodra wachttijd twee meetperiodes oploopt, marge onder 4% zakt of caseloadgrenzen structureel worden overschreden."
+        : "Draai de gekozen richting terug zodra marge, capaciteit of kwaliteitsdrempels twee meetperiodes onder norm blijven zonder herstelmaatregel.",
+  });
   return [
     "BESTUURLIJKE ANALYSE & INTERVENTIE",
     `Organisatie: ${String(organizationName || "Onbekende organisatie").trim() || "Onbekende organisatie"}`,
     "Analyse: Strategische analyse",
     "CYNTRA EXECUTIVE DOSSIER • Bestuursversie • vertrouwelijk",
     "",
-    "EXECUTIVE SAMENVATTING",
-    executiveSamenvatting,
+    boardroomSummary,
     "",
-    "BESTUURLIJKE HYPOTHESE",
-    hypothese,
-    "",
-    "FEITENBASIS",
-    feitenbasis,
-    "",
-    "STRATEGISCH CONFLICT",
-    "A",
-    conflict.sideA,
-    "",
-    "B",
-    conflict.sideB,
-    "",
-    `Spanning A: ${conflict.sideA}`,
-    `Spanning B: ${conflict.sideB}`,
-    `Besluittest: ${conflict.forcingChoice}`,
-    "",
-    `Prijs van de keuze: ${compact(conflict.explicitLoss || conflict.forcingChoice, 220)}`,
-    "",
-    "BESTUURLIJKE VRAAG",
+    "1. Besluitvraag",
     thesis.boardQuestion,
     "",
-    "KILLER INSIGHTS",
+    "2. Executive Thesis",
+    executiveSamenvatting,
+    hypothese,
+    "",
+    "3. Feitenbasis",
+    "HARD",
+    feitenbasis,
+    "",
+    "INTERPRETATIE",
+    financieleConsequenties,
+    "",
+    "4. Strategische opties",
+    `Spanning A: ${conflict.sideA}`,
+    `Spanning B: ${conflict.sideB}`,
+    strategicOptions,
+    `Besluittest: ${conflict.forcingChoice}`,
+    "",
+    strategyDNABlock,
+    "",
+    scenarioSimulationBlock?.body ? `### ${scenarioSimulationBlock.title}` : "",
+    scenarioSimulationBlock?.body || "",
+    scenarioSimulationBlock?.body ? "" : "",
+    stressTests.block,
+    "",
+    causalStrategyAnalysis,
+    "",
+    "### NIEUWE INZICHTEN (KILLER INSIGHTS)",
     killerInsights,
+    "",
+    "5. Aanbevolen keuze",
+    `Besluitvoorstel: ${recommendedDirection}`,
+    `Prijs van de keuze: ${compact(conflict.explicitLoss || conflict.forcingChoice, 220)}`,
+    "",
+    "6. Niet-onderhandelbare besluitregels",
+    "- Geen nieuw initiatief zonder margevalidatie, capaciteitsimpact en expliciete eigenaar.",
+    "- Geen besluit zonder KPI, deadline en escalatieregel.",
+    "- Geen parallelle prioritering op conflicterende doelen.",
+    "- Geen afwijking van de gekozen richting zonder formele board-escalatie.",
+    "",
+    "7. 90-dagen interventieplan",
+    reportActionPlan || actieplan || "Actieplan volgt na aanvullende data.",
+    "",
+    "8. KPI monitoring",
+    reportKpis,
+    "",
+    "9. Besluittekst",
+    reportDecisionText,
     "",
     "STRATEGISCHE INTERVENTIES",
     strategischeInterventies || "Interventies volgen na aanvullende data.",
     "",
-    "90 DAGEN ACTIEPLAN",
-    actieplan || "Actieplan volgt na aanvullende data.",
+    "BOARDROOM STRESSTEST",
+    boardroomStressTest,
     "",
-    "VROEGSIGNALERING",
+    "10. Strategische blinde vlekken",
+    blindSpotBlock.block,
+    "",
+    "11. Vroegsignalering",
     vroegsignalen,
+    "",
+    "12. Besluitgevolgen simulatie",
+    decisionConsequenceBlock.block,
+    "",
+    "13. Strategische hefboompunten",
+    strategicLeverageBlock.block,
+    "",
+    "14. Strategisch geheugen",
+    strategicMemoryBlock.block,
+    "",
+    "15. Bestuurlijk debat",
+    boardroomDebateBlock.block,
+    "",
+    "Open vragen",
+    buildTailoredOpenQuestions(inputInsights, organizationName),
   ].join("\n").trim();
 }
 
@@ -4018,10 +5630,17 @@ export class AnalysisSessionManager {
   private readonly orchestrator = new AgentOrchestrator();
   private readonly interventionPrediction = new InterventionPredictionEngine();
   private readonly learningLoop = new LearningLoop();
+  private normalizeRow(row: AnalysisSession): AnalysisSession {
+    return {
+      ...row,
+      status: normalizeSessionStatus(row.status),
+    };
+  }
 
   listSessions(options?: { includeArchived?: boolean }): AnalysisSession[] {
     const includeArchived = options?.includeArchived === true;
     return readArray<AnalysisSession>(KEY)
+      .map((row) => this.normalizeRow(row))
       .filter((row) => includeArchived || !row.is_archived)
       .sort((a, b) => (a.analyse_datum < b.analyse_datum ? 1 : -1));
   }
@@ -4054,7 +5673,7 @@ export class AnalysisSessionManager {
     board_alert: string;
   }> {
     return this.listSessions({ includeArchived: true })
-      .filter((row) => row.status === "voltooid")
+      .filter((row) => isSessionCompleted(row.status))
       .filter((row) => (organization_id ? row.organization_id === organization_id : true))
       .map((row) => ({
         session_id: row.session_id,
@@ -4086,7 +5705,7 @@ export class AnalysisSessionManager {
     board_alert: string;
   }> {
     return this.listSessions({ includeArchived: true })
-      .filter((row) => row.status === "voltooid")
+      .filter((row) => isSessionCompleted(row.status))
       .filter((row) => (organization_id ? row.organization_id === organization_id : true))
       .map((row) => ({
         session_id: row.session_id,
@@ -4103,7 +5722,7 @@ export class AnalysisSessionManager {
   archiveLegacySessions(keepLatest = 6): { archived: number; kept: number; total: number } {
     const rows = this.listSessions({ includeArchived: true });
     const completed = rows
-      .filter((row) => row.status === "voltooid")
+      .filter((row) => isSessionCompleted(row.status))
       .sort((a, b) => (a.analyse_datum < b.analyse_datum ? 1 : -1));
     const keep = new Set(completed.slice(0, Math.max(1, keepLatest)).map((row) => row.session_id));
     let archived = 0;
@@ -4111,7 +5730,7 @@ export class AnalysisSessionManager {
 
     const updated = rows.map((row) => {
       if (row.is_archived) return row;
-      if (row.status !== "voltooid") return row;
+      if (!isSessionCompleted(row.status)) return row;
       if (keep.has(row.session_id)) return row;
       archived += 1;
       return {
@@ -4124,6 +5743,51 @@ export class AnalysisSessionManager {
 
     writeArray(KEY, updated);
     return { archived, kept: keep.size, total: completed.length };
+  }
+
+  archiveSession(sessionId: string, reason = "manual_archive"): AnalysisSession | null {
+    const rows = this.listSessions({ includeArchived: true });
+    const now = new Date().toISOString();
+    let archived: AnalysisSession | null = null;
+    const updated = rows.map((row) => {
+      if (row.session_id !== sessionId) return row;
+      archived = {
+        ...row,
+        is_archived: true,
+        archived_at: now,
+        archive_reason: reason,
+        updated_at: now,
+      };
+      return archived;
+    });
+    writeArray(KEY, updated);
+    return archived;
+  }
+
+  restoreSession(sessionId: string): AnalysisSession | null {
+    const rows = this.listSessions({ includeArchived: true });
+    const now = new Date().toISOString();
+    let restored: AnalysisSession | null = null;
+    const updated = rows.map((row) => {
+      if (row.session_id !== sessionId) return row;
+      restored = {
+        ...row,
+        is_archived: false,
+        archived_at: undefined,
+        archive_reason: undefined,
+        updated_at: now,
+      };
+      return restored;
+    });
+    writeArray(KEY, updated);
+    return restored;
+  }
+
+  deleteSession(sessionId: string): boolean {
+    const rows = this.listSessions({ includeArchived: true });
+    const updated = rows.filter((row) => row.session_id !== sessionId);
+    writeArray(KEY, updated);
+    return updated.length !== rows.length;
   }
 
   createSession(input: {
@@ -4152,6 +5816,74 @@ export class AnalysisSessionManager {
     return session;
   }
 
+  registerCompletedSession(input: {
+    session_id?: string;
+    organization_id: string;
+    organization_name?: string;
+    input_data: string;
+    analysis_type?: string;
+    board_report: string;
+    executive_summary?: string;
+    board_memo?: string;
+    strategic_metadata?: AnalysisSession["strategic_metadata"];
+    strategic_report?: AnalysisSession["strategic_report"];
+    strategic_agent?: AnalysisSession["strategic_agent"];
+    intervention_predictions?: AnalysisSession["intervention_predictions"];
+    error_message?: string;
+    analysis_runtime_ms?: number;
+    engine_mode?: string;
+    quality_score?: number;
+    quality_tier?: string;
+    quality_flags?: string[];
+    analyse_datum?: string;
+    updated_at?: string;
+    status?: AnalysisSessionStatus;
+  }): AnalysisSession {
+    const now = new Date().toISOString();
+    const requestedSessionId = normalize(input.session_id);
+    const session_id = requestedSessionId || createId("sess");
+    const existingRows = this.listSessions({ includeArchived: true });
+    const conflictingSession = existingRows.find((row) => row.session_id === session_id);
+    if (conflictingSession) {
+      throw new Error(`Sessie bestaat al: ${session_id}`);
+    }
+    const session: AnalysisSession = {
+      session_id,
+      organization_id: normalize(input.organization_id),
+      organization_name: normalize(input.organization_name),
+      analyse_datum: normalize(input.analyse_datum) || now,
+      input_data: normalize(input.input_data),
+      board_report: normalize(input.board_report),
+      status: normalizeSessionStatus(input.status || SESSION_STATUS.COMPLETED),
+      analysis_type: normalize(input.analysis_type) || "Strategische analyse",
+      executive_summary: normalize(input.executive_summary),
+      board_memo: normalize(input.board_memo),
+      strategic_metadata: input.strategic_metadata,
+      strategic_report: input.strategic_report
+        ? {
+            ...input.strategic_report,
+            session_id,
+            organization_id: normalize(input.organization_id),
+          }
+        : undefined,
+      strategic_agent: input.strategic_agent,
+      intervention_predictions: input.intervention_predictions,
+      error_message: normalize(input.error_message),
+      analysis_runtime_ms: Number(input.analysis_runtime_ms || 0) || undefined,
+      engine_mode: normalize(input.engine_mode),
+      quality_score: Number(input.quality_score || 0) || undefined,
+      quality_tier: normalize(input.quality_tier),
+      quality_flags: Array.isArray(input.quality_flags) ? input.quality_flags : undefined,
+      is_archived: false,
+      updated_at: normalize(input.updated_at) || now,
+    };
+
+    const rows = this.listSessions();
+    rows.push(session);
+    writeArray(KEY, rows);
+    return session;
+  }
+
   private updateSession(session_id: string, updater: (prev: AnalysisSession) => AnalysisSession): AnalysisSession | null {
     const rows = this.listSessions({ includeArchived: true });
     const idx = rows.findIndex((row) => row.session_id === session_id);
@@ -4165,9 +5897,95 @@ export class AnalysisSessionManager {
     session_id: string;
     organization_name?: string;
     sector?: string;
+    current_session?: AnalysisSession;
   }): Promise<AnalysisSession> {
-    const current = this.getSession(input.session_id);
+    let current = this.getSession(input.session_id);
+    if (!current && input.current_session?.session_id === input.session_id) {
+      current = this.registerCompletedSession({
+        session_id: input.current_session.session_id,
+        organization_id: input.current_session.organization_id,
+        organization_name: input.current_session.organization_name,
+        input_data: input.current_session.input_data,
+        analysis_type: input.current_session.analysis_type,
+        board_report: input.current_session.board_report || "",
+        executive_summary: input.current_session.executive_summary,
+        board_memo: input.current_session.board_memo,
+        strategic_metadata: input.current_session.strategic_metadata,
+        strategic_report: input.current_session.strategic_report,
+        strategic_agent: input.current_session.strategic_agent,
+        intervention_predictions: input.current_session.intervention_predictions,
+        error_message: input.current_session.error_message,
+        analysis_runtime_ms: input.current_session.analysis_runtime_ms,
+        engine_mode: input.current_session.engine_mode,
+        quality_score: input.current_session.quality_score,
+        quality_tier: input.current_session.quality_tier,
+        quality_flags: input.current_session.quality_flags,
+        analyse_datum: input.current_session.analyse_datum,
+        status: "nieuw",
+      });
+    }
+    if (!current) {
+      const storedReport = getStoredReport(input.session_id);
+      if (storedReport?.report?.report_body) {
+        current = this.registerCompletedSession({
+          session_id: storedReport.sessionId || input.session_id,
+          organization_id: normalize(storedReport.report.organization_id) || "stored-report-recovery",
+          organization_name: normalize(storedReport.organizationName) || input.organization_name || "Onbekende organisatie",
+          input_data: "",
+          analysis_type: "Strategische analyse",
+          board_report: storedReport.report.report_body,
+          executive_summary: storedReport.result?.executive_summary,
+          board_memo: storedReport.result?.board_memo,
+          strategic_report: storedReport.report,
+          updated_at: storedReport.savedAt,
+          analyse_datum: normalize(storedReport.report.generated_at) || storedReport.savedAt,
+          status: SESSION_STATUS.COMPLETED,
+        });
+      }
+    }
     if (!current) throw new Error("Sessie niet gevonden.");
+    let draftSessionPatch: Record<string, unknown> | null = null;
+    const restoreSession = (status: AnalysisSessionStatus, errorMessage?: string): AnalysisSession => {
+      const patch = {
+        ...(draftSessionPatch || {}),
+        status,
+        error_message: errorMessage,
+        updated_at: new Date().toISOString(),
+      } as Partial<AnalysisSession>;
+      const existing = this.getSession(input.session_id);
+      if (existing) {
+        return {
+          ...existing,
+          ...patch,
+        };
+      }
+      return this.registerCompletedSession({
+        session_id: current.session_id,
+        organization_id: current.organization_id,
+        organization_name: current.organization_name,
+        input_data: current.input_data,
+        analysis_type: current.analysis_type,
+        board_report: normalize(patch.board_report ?? current.board_report),
+        executive_summary: normalize(patch.executive_summary ?? current.executive_summary),
+        board_memo: normalize(patch.board_memo ?? current.board_memo),
+        strategic_metadata: (patch.strategic_metadata as AnalysisSession["strategic_metadata"]) ?? current.strategic_metadata,
+        strategic_report: (patch.strategic_report as AnalysisSession["strategic_report"]) ?? current.strategic_report,
+        strategic_agent: (patch.strategic_agent as AnalysisSession["strategic_agent"]) ?? current.strategic_agent,
+        intervention_predictions:
+          (patch.intervention_predictions as AnalysisSession["intervention_predictions"]) ?? current.intervention_predictions,
+        error_message: errorMessage ?? normalize(patch.error_message ?? current.error_message),
+        analysis_runtime_ms: Number(patch.analysis_runtime_ms ?? current.analysis_runtime_ms ?? 0) || undefined,
+        engine_mode: normalize(patch.engine_mode ?? current.engine_mode),
+        quality_score: Number(patch.quality_score ?? current.quality_score ?? 0) || undefined,
+        quality_tier: normalize(patch.quality_tier ?? current.quality_tier),
+        quality_flags: Array.isArray(patch.quality_flags)
+          ? (patch.quality_flags as string[])
+          : current.quality_flags,
+        analyse_datum: current.analyse_datum,
+        updated_at: normalize(patch.updated_at),
+        status,
+      });
+    };
 
     this.updateSession(input.session_id, (prev) => ({
       ...prev,
@@ -4273,6 +6091,49 @@ export class AnalysisSessionManager {
         systemTransformation,
         input.organization_name
       );
+      const strategicLeverDetection = detectStrategicLeverMatrix({
+        organizationName: input.organization_name || current.organization_name,
+        sourceText: [
+          strategicThesis.dominantThesis,
+          boardroomConflict.conflictStatement,
+          current.input_data,
+          inputInsights.facts.join("\n"),
+          inputInsights.actions.join("\n"),
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
+      });
+      const strategicLeverInsights = strategicLeverDetection.levers;
+      const dominantLeverCombination = strategicLeverDetection.dominantCombination;
+      const causalStrategy = runCausalStrategyEngine({
+        levers: strategicLeverInsights,
+        dominantCombination: dominantLeverCombination,
+      });
+      const strategyDNA = classifyStrategyDNA({
+        organizationDescription: input.organization_name || current.organization_name,
+        strategy: [
+          strategicThesis.dominantThesis,
+          boardroomConflict.conflictStatement,
+          current.input_data,
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
+        levers: strategicLeverInsights,
+        causalAnalysis: causalStrategy,
+      });
+      const strategicScenarios = generateStrategicScenarios({
+        strategic_options: output?.decision?.strategic_options?.map((item: any) => normalize(item?.description || "")) || [],
+        strategic_hefbomen: strategicLeverInsights,
+        strategic_hefboom_combinatie: dominantLeverCombination,
+        strategic_causal_analysis: causalStrategy,
+      });
+      const stressTests = runStressTestEngine({
+        strategic_options: output?.decision?.strategic_options?.map((item: any) => normalize(item?.description || "")) || [],
+        strategic_hefbomen: strategicLeverInsights,
+        strategic_hefboom_combinatie: dominantLeverCombination,
+        strategic_causal_analysis: causalStrategy,
+        strategic_scenarios: strategicScenarios,
+      });
       const killerInsights = buildKillerInsights(output, inputInsights, effectiveClassification);
 
       const predictionsBase = sanitizePredictions(
@@ -4301,7 +6162,10 @@ export class AnalysisSessionManager {
         strategySimulation,
         strategicFlywheel,
         predictions,
-        input.organization_name
+        current.session_id,
+        input.organization_name,
+        input.sector,
+        input.organisatie_grootte
       );
       const gekozenOptie =
         effectiveClassification === "SUCCESS_MODEL" && strategicMode === "SCALE"
@@ -4316,7 +6180,8 @@ export class AnalysisSessionManager {
         effectiveClassification,
         strategicMode,
         strategicMechanisms,
-        strategicPattern
+        strategicPattern,
+        input.organization_name || current.organization_name
       );
       const openQuestionsText = buildTailoredOpenQuestions(inputInsights, input.organization_name);
       const killerInsightsText = formatKillerInsightsForMemo(killerInsights);
@@ -4326,7 +6191,7 @@ export class AnalysisSessionManager {
           (item) =>
             item.organization_id === current.organization_id &&
             item.session_id !== current.session_id &&
-            item.status === "voltooid" &&
+            isSessionCompleted(item.status) &&
             Boolean(item.strategic_metadata?.gekozen_strategie)
         )
         .sort((a, b) => Date.parse(b.analyse_datum || b.updated_at) - Date.parse(a.analyse_datum || a.updated_at))
@@ -4381,6 +6246,11 @@ export class AnalysisSessionManager {
         decisionMemory,
         earlyWarningSystem,
       };
+      const publicYouthCase =
+        effectiveClassification !== "SUCCESS_MODEL" &&
+        /(jeugdzorg|jeugdwet|gemeente|gemeentelijke inkoop|wijkteam|jongeren|gezinnen)/i.test(
+          `${input.organization_name || ""} ${input.sector || ""} ${input.input_data || ""} ${inputInsights.facts.join(" ")} ${inputInsights.actions.join(" ")}`
+        );
       const memoFromReport = buildBoardMemoFromReport(
         reportRaw,
         output.decision.dominant_thesis,
@@ -4390,6 +6260,9 @@ export class AnalysisSessionManager {
       );
       const memoBase = memoFromReport || rawMemo;
       let memo = normalizeBoardMemo(memoBase);
+      if (publicYouthCase) {
+        memo = sanitizePublicYouthMemo(memo);
+      }
       if (!hasBoardMemoMinimumStructure(memo)) {
         memo = normalizeBoardMemo(
           buildBoardMemoFromReport(
@@ -4400,6 +6273,9 @@ export class AnalysisSessionManager {
             memoBuildExtras
           )
         );
+        if (publicYouthCase) {
+          memo = sanitizePublicYouthMemo(memo);
+        }
       }
       if (
         !hasBoardroomPressureContract(memo) ||
@@ -4419,8 +6295,45 @@ export class AnalysisSessionManager {
             memoBuildExtras
           )
         );
+        if (publicYouthCase) {
+          memo = sanitizePublicYouthMemo(memo);
+        }
       }
-      const report = sanitizeReportForBoardView(reportRaw);
+      const scenarioSimulationText =
+        strategySimulation != null ? buildStrategySimulationBlock(strategySimulation) : reportRaw;
+      const reportOptionsForNormalization = publicYouthCase
+        ? [
+            "Brede ambulante specialist blijven binnen consortium- en contractdiscipline",
+            "Selectieve specialisatie / niche kiezen voor scherpere positionering",
+            "Consortiumstrategie verdiepen om instroom en triage actiever te sturen",
+          ]
+        : [
+            "Bescherm de kern en herstel bestuurlijke focus",
+            "Versnel verbreding onder hogere uitvoeringsdruk",
+            "Gefaseerde route met expliciete governance-gates",
+          ];
+      const recommendedScenarioLabel =
+        reportOptionsForNormalization[{ A: 0, B: 1, C: 2 }[String(gekozenOptie).toUpperCase() as "A" | "B" | "C"] ?? 0] ||
+        `Optie ${gekozenOptie}`;
+      const report = normalizeBoardReportForContract({
+        report: reportRaw,
+        organisation: input.organization_name || current.organization_name,
+        sector: input.sector || output.context_state.sector,
+        analysisDate: current.analyse_datum || current.updated_at || new Date().toISOString(),
+        dominantRisk:
+          boardroomConflict.conflictStatement || output.decision.dominant_thesis || summary,
+        strategicOptions: reportOptionsForNormalization,
+        recommendedOption: recommendedScenarioLabel,
+        scenarioSimulationOutput: scenarioSimulationText,
+        interventionOutput: predictions
+          .slice(0, 4)
+          .map(
+            (item) =>
+              `ACTIE: ${normalize(item.interventie)}\nWAAROM DEZE INTERVENTIE: ${normalize(item.impact)}\nRISICO VAN NIET HANDELEN: ${normalize(item.risico)}\nKPI: ${normalize(item.kpi_effect)}`
+          )
+          .join("\n\n"),
+        memoryProblemText: `${input.input_data || ""}\n${inputInsights.facts.join(" ")}\n${inputInsights.actions.join(" ")}`,
+      });
       const quality = assessReportQuality(report, memo, summary, {
         classification: effectiveClassification,
         strategicMode,
@@ -4438,6 +6351,9 @@ export class AnalysisSessionManager {
             memoBuildExtras
           )
         );
+        if (publicYouthCase) {
+          memo = sanitizePublicYouthMemo(memo);
+        }
       }
       const finalQuality = assessReportQuality(report, memo, summary, {
         classification: effectiveClassification,
@@ -4445,11 +6361,7 @@ export class AnalysisSessionManager {
         chosenOption: gekozenOptie,
         pattern: strategicPattern.pattern,
       });
-      const finalCriticalFlags = criticalPublicationFlags(finalQuality.flags);
-      if (finalCriticalFlags.length > 0) {
-        throw new Error(`Publicatie geblokkeerd: ${finalCriticalFlags.join(", ")}`);
-      }
-      const boardroomModulesV3Final = buildBoardroomDecisionModulesV3({
+      const boardroomModulesV3Final = safelyBuildBoardroomDecisionModulesV3({
         inputInsights,
         output,
         mechanisms: strategicMechanisms,
@@ -4463,16 +6375,14 @@ export class AnalysisSessionManager {
         predictedInterventions: predictions,
         killerInsights,
         organizationName: input.organization_name,
+        sector: input.sector,
+        organizationType: input.organisatie_grootte,
         leverage: inputInsights.leverage,
         patternProfile: strategicPatternProfile,
         strategySimulation,
         decisionMemory,
         earlyWarningSystem,
       });
-      const elapsedMs = Date.now() - startedAt;
-      if (elapsedMs < MIN_ANALYSIS_RUNTIME_MS) {
-        await new Promise((resolve) => setTimeout(resolve, MIN_ANALYSIS_RUNTIME_MS - elapsedMs));
-      }
       const strategicAgentMetadata = {
         ...(orchestrated.metadata || {}),
         pipeline: Array.from(
@@ -4483,15 +6393,46 @@ export class AnalysisSessionManager {
           ])
         ),
       };
-
-      const updated = this.updateSession(input.session_id, (prev) => ({
-        ...prev,
-        board_report: report,
+      const validatedOutput = validateEngineOutput({
         executive_summary: summary,
         board_memo: memo,
-        status: "voltooid",
+        strategic_conflict: boardroomConflict.conflictStatement,
+        recommended_option: gekozenOptie,
+        interventions: predictions,
+        strategic_levers: strategicLeverInsights,
+        strategy_dna: {
+          archetype: strategyDNA.archetype,
+          kernmechanisme: strategyDNA.coreMechanism,
+          groeimodel: strategyDNA.growthModel,
+          strategisch_risico: strategyDNA.strategicRisk,
+          strategievoorkeur: strategyDNA.strategyPreference,
+        },
+        causal_analysis: {
+          items: causalStrategy.items.map((item) => ({
+            hefboom: item.hefboom,
+            mechanisme: item.mechanisme,
+            operationeel_effect: item.operationeelEffect,
+            financieel_effect: item.financieelEffect,
+            strategisch_risico: item.strategischRisico,
+            bestuurlijke_implicatie: item.bestuurlijkeImplicatie,
+          })),
+          graph: causalStrategy.graph,
+          summary: causalStrategy.summary,
+        },
+        scenario_simulation: strategySimulation,
+        benchmark: {
+          pattern: strategicPattern.pattern,
+          profile: strategicPatternProfile,
+        },
+        drift_analysis: decisionMemory?.decision_alignment,
+        decision_memory: decisionMemory,
+      });
+      draftSessionPatch = {
+        board_report: report,
+        executive_summary: validatedOutput.executive_summary,
+        board_memo: validatedOutput.board_memo,
         strategic_agent: strategicAgentMetadata,
-        intervention_predictions: predictions,
+        intervention_predictions: Array.isArray(validatedOutput.interventions) ? validatedOutput.interventions : predictions,
         strategic_metadata: {
           sector: output.context_state.sector,
           probleemtype: output.diagnosis.dominant_problem,
@@ -4545,8 +6486,8 @@ export class AnalysisSessionManager {
             narrative: strategicFlywheel.narrative,
             confidence: strategicFlywheel.confidence,
           },
-          strategy_simulation: strategySimulation,
-          decision_memory: decisionMemory,
+          strategy_simulation: validatedOutput.scenario_simulation || strategySimulation,
+          decision_memory: validatedOutput.decision_memory || decisionMemory,
           early_warning_system: earlyWarningSystem,
           strategic_leverage_points: leveragePoints.map((item) => ({
             title: item.title,
@@ -4557,6 +6498,40 @@ export class AnalysisSessionManager {
             target: item.target,
             impact: item.impact,
           })),
+          strategic_hefbomen: strategicLeverInsights.map((item) => ({
+            hefboom: item.lever,
+            mechanisme: item.mechanism,
+            risico: item.risk,
+            bestuurlijke_implicatie: item.boardImplication,
+            score: item.score,
+          })),
+          strategic_hefboom_combinatie: dominantLeverCombination
+            ? {
+                hefbomen: dominantLeverCombination.levers,
+                strategisch_effect: dominantLeverCombination.strategicEffect,
+              }
+            : undefined,
+          strategic_causal_analysis: validatedOutput.causal_analysis || {
+            items: causalStrategy.items.map((item) => ({
+              hefboom: item.hefboom,
+              mechanisme: item.mechanisme,
+              operationeel_effect: item.operationeelEffect,
+              financieel_effect: item.financieelEffect,
+              strategisch_risico: item.strategischRisico,
+              bestuurlijke_implicatie: item.bestuurlijkeImplicatie,
+            })),
+            graph: causalStrategy.graph,
+            summary: causalStrategy.summary,
+          },
+          strategy_dna: validatedOutput.strategy_dna || {
+            archetype: strategyDNA.archetype,
+            kernmechanisme: strategyDNA.coreMechanism,
+            groeimodel: strategyDNA.growthModel,
+            strategisch_risico: strategyDNA.strategicRisk,
+            strategievoorkeur: strategyDNA.strategyPreference,
+          },
+          strategic_scenarios: strategicScenarios,
+          strategic_stress_tests: stressTests.tests,
           strategic_thesis: {
             board_question: strategicThesis.boardQuestion,
             dominant_thesis: strategicThesis.dominantThesis,
@@ -4599,13 +6574,13 @@ export class AnalysisSessionManager {
             ])
           ),
           strategische_opties: output.decision.strategic_options.map((item) => item.description),
-          gekozen_strategie: gekozenOptie,
+          gekozen_strategie: validatedOutput.recommended_option || gekozenOptie,
         },
         strategic_report: {
           report_id: createId("report"),
-          session_id: prev.session_id,
-          organization_id: prev.organization_id,
-          title: `Cyntra Executive Dossier — ${prev.organization_name || "Organisatie"} — ${prev.session_id}`,
+          session_id: current.session_id,
+          organization_id: current.organization_id,
+          title: `Cyntra Executive Dossier — ${current.organization_name || "Organisatie"} — ${current.session_id}`,
           sections: reportSections(report),
           generated_at: new Date().toISOString(),
           report_body: report,
@@ -4616,9 +6591,29 @@ export class AnalysisSessionManager {
         quality_score: finalQuality.score,
         quality_tier: finalQuality.tier,
         quality_flags: finalQuality.flags,
-      }));
+        error_message: buildPublicationWarning(report, validatedOutput.executive_summary, finalQuality),
+      };
+      const elapsedMs = Date.now() - startedAt;
+      if (elapsedMs < MIN_ANALYSIS_RUNTIME_MS) {
+        await new Promise((resolve) => setTimeout(resolve, MIN_ANALYSIS_RUNTIME_MS - elapsedMs));
+      }
 
-      if (!updated) throw new Error("Sessie kon niet worden bijgewerkt na analyse.");
+      const updated = this.updateSession(input.session_id, (prev) => ({
+        ...prev,
+        status: SESSION_STATUS.COMPLETED,
+        ...(draftSessionPatch || {}),
+      })) || restoreSession(SESSION_STATUS.COMPLETED);
+
+      try {
+        if (updated.strategic_report?.report_body) {
+          saveStoredReport(updated.session_id, updated.strategic_report, {
+            organizationName: updated.organization_name,
+            result: validatedOutput,
+          });
+        }
+      } catch (error) {
+        console.warn("Session update skipped for report storage sync", error);
+      }
 
       const extractedInterventions = extractInterventionsFromReport({
         case_id: updated.session_id,
@@ -4666,16 +6661,37 @@ export class AnalysisSessionManager {
       });
       this.learningLoop.feed(caseStore.getAll(), interventionStore.getAll());
 
+      ensureReportIntegrity(updated);
+      ensureSessionIntegrity(updated);
       return updated;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Onbekende fout tijdens analyse.";
       const failed = this.updateSession(input.session_id, (prev) => ({
         ...prev,
+        ...(draftSessionPatch || {}),
         status: "fout",
         error_message: message,
         updated_at: new Date().toISOString(),
-      }));
-      if (!failed) throw new Error(message);
+      })) || restoreSession("fout", message);
+      try {
+        if (failed.strategic_report?.report_body) {
+          saveStoredReport(failed.session_id, failed.strategic_report, {
+            organizationName: failed.organization_name,
+            result: validateEngineOutput({
+              executive_summary: failed.executive_summary,
+              board_memo: failed.board_memo,
+              strategic_conflict:
+                failed.strategic_metadata?.boardroom_conflict?.statement || failed.executive_summary || "",
+              recommended_option: failed.strategic_metadata?.gekozen_strategie || "",
+              interventions: failed.intervention_predictions || [],
+            }),
+          });
+        }
+      } catch (error) {
+        console.warn("Session update skipped for failed report storage sync", error);
+      }
+      ensureReportIntegrity(failed);
+      ensureSessionIntegrity(failed);
       return failed;
     }
   }

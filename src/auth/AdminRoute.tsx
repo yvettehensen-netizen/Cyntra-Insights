@@ -1,6 +1,7 @@
 import { Navigate } from "react-router-dom";
 import { supabase } from "@/lib/supabaseClient";
 import { useEffect, useState } from "react";
+import { AUTH_LOGIN_PATH } from "./authPaths";
 
 export default function AdminRoute({ children }: { children: JSX.Element }) {
   const [allowed, setAllowed] = useState<boolean | null>(null);
@@ -28,7 +29,7 @@ export default function AdminRoute({ children }: { children: JSX.Element }) {
   }
 
   if (!allowed) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to={AUTH_LOGIN_PATH} replace />;
   }
 
   return children;

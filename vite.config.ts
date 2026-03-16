@@ -61,7 +61,12 @@ export default defineConfig(({ mode }) => {
       "import.meta.env.VITE_SUPABASE_ANON_KEY": JSON.stringify(supabaseAnonKey),
     },
     server: {
-      host: "127.0.0.1",
+      host: "0.0.0.0",
+      port: 5173,
+      strictPort: true,
+    },
+    preview: {
+      host: "0.0.0.0",
       port: 5173,
       strictPort: true,
     },
@@ -73,23 +78,99 @@ export default defineConfig(({ mode }) => {
     build: {
       rollupOptions: {
         output: {
-          manualChunks: {
-            react: ["react", "react-dom", "react-router-dom"],
-            supabase: [
-              "@supabase/supabase-js",
-              "@supabase/auth-helpers-react",
-              "@supabase/postgrest-js",
-              "@supabase/realtime-js",
-            ],
-            pdf: [
-              "jspdf",
-              "jspdf-autotable",
-              "html2canvas",
-              "html2pdf.js",
-              "@react-pdf/renderer",
-            ],
-            charts: ["chart.js", "react-chartjs-2", "recharts"],
-            ui: ["framer-motion", "lucide-react"],
+          manualChunks(id) {
+            if (id.includes("node_modules")) {
+              if (
+                id.includes("/react/") ||
+                id.includes("/react-dom/") ||
+                id.includes("/react-router-dom/")
+              ) {
+                return "react";
+              }
+              if (
+                id.includes("@supabase/supabase-js") ||
+                id.includes("@supabase/auth-helpers-react") ||
+                id.includes("@supabase/postgrest-js") ||
+                id.includes("@supabase/realtime-js")
+              ) {
+                return "supabase";
+              }
+              if (id.includes("@react-pdf/renderer")) {
+                return "react-pdf-renderer";
+              }
+              if (id.includes("@react-pdf/layout") || id.includes("@react-pdf/textkit")) {
+                return "react-pdf-layout";
+              }
+              if (
+                id.includes("@react-pdf/font")
+              ) {
+                return "react-pdf-font";
+              }
+              if (
+                id.includes("/fontkit/") ||
+                id.includes("/unicode-properties/") ||
+                id.includes("/unicode-trie/") ||
+                id.includes("/linebreak/")
+              ) {
+                return "react-pdf-fontkit";
+              }
+              if (id.includes("@react-pdf/pdfkit")) {
+                return "react-pdf-pdfkit";
+              }
+              if (id.includes("@react-pdf/render")) {
+                return "react-pdf-render";
+              }
+              if (id.includes("@react-pdf/reconciler")) {
+                return "react-pdf-reconciler";
+              }
+              if (id.includes("@react-pdf/image")) {
+                return "react-pdf-image";
+              }
+              if (id.includes("@react-pdf/stylesheet")) {
+                return "react-pdf-stylesheet";
+              }
+              if (id.includes("@react-pdf/primitives")) {
+                return "react-pdf-primitives";
+              }
+              if (id.includes("@react-pdf/fns")) {
+                return "react-pdf-fns";
+              }
+              if (id.includes("@react-pdf/png-js")) {
+                return "react-pdf-png";
+              }
+              if (id.includes("@react-pdf/types")) {
+                return "react-pdf-types";
+              }
+              if (id.includes("/yoga-layout/")) {
+                return "react-pdf-yoga";
+              }
+              if (
+                id.includes("/jspdf/") ||
+                id.includes("jspdf-autotable")
+              ) {
+                return "pdf-jspdf";
+              }
+              if (id.includes("/html2canvas/") || id.includes("/html2pdf.js/")) {
+                return "pdf-html";
+              }
+              if (
+                id.includes("/chart.js/") ||
+                id.includes("/react-chartjs-2/") ||
+                id.includes("/recharts/")
+              ) {
+                return "charts";
+              }
+              if (id.includes("/framer-motion/") || id.includes("/lucide-react/")) {
+                return "ui";
+              }
+            }
+
+            if (id.includes("/src/pages/marketing/")) return "marketing-pages";
+            if (id.includes("/src/aurelius/pages/analysis/")) return "aurelius-analysis";
+            if (id.includes("/src/aurelius/pdf/")) return "aurelius-pdf";
+            if (id.includes("/src/components/reports/")) return "report-components";
+
+            return undefined;
           },
         },
       },

@@ -2,35 +2,19 @@
 // AURELIUS — CORE ANALYSIS ENGINE CLIENT
 // ROUTE: src/aurelius/runAureliusEngine.ts
 // ============================================================
-
-export interface AureliusResult {
-  executive_summary: string;
-  insights: string[];
-  risks: string[];
-  opportunities: string[];
-  killer_insights?: string[];
-  killer_insights_meta?: {
-    score: number;
-    failed_checks: string[];
-    evidence_used: number;
-  };
-  roadmap_90d: {
-    month1: string[];
-    month2: string[];
-    month3: string[];
-  };
-  decision_pressure?: {
-    explicit_decision_required: boolean;
-    execution_risk_high: boolean;
-    governance_blocking: boolean;
-  };
-  execution_risks?: string[];
-  confidence_score?: number;
-  decision_card_id?: string;
-  strategic_depth_score?: number;
-  strategic_reasoning_gate_passed?: boolean;
-  strategic_warnings?: string[];
-}
+import { getAureliusStrategicPipeline } from "@/aurelius/engine/runAureliusEngine";
+import { validateReport } from "@/aurelius/engine/quality/validateReport";
+import { runCausalStrategyEngine } from "@/aurelius/causal/CausalStrategyEngine";
+import {
+  detectStrategicLeverMatrix,
+} from "@/aurelius/strategy/StrategicLeverDetector";
+import {
+  normalizeAureliusResultContract,
+  type AureliusResult,
+} from "@/aurelius/types/aureliusResult";
+import { validateEngineOutput } from "@/aurelius/validation/EngineOutputValidator";
+import { scoreBoardMemoQuality } from "@/aurelius/core/BoardMemoQualityScorer";
+import { runImmediateAnalysis } from "@/api/analysisExecution";
 
 export type EngineSuccess = {
   success: true;
@@ -42,25 +26,18 @@ export type EngineFailure = {
   error: { message: string };
 };
 
-function extractResultPayload(analysis: Record<string, unknown> | null): AureliusResult | null {
-  if (!analysis) return null;
-
-  if (analysis.result_payload && typeof analysis.result_payload === "object") {
-    return analysis.result_payload as AureliusResult;
-  }
-
-  if (analysis.result && typeof analysis.result === "object") {
-    const legacy = analysis.result as Record<string, unknown>;
-    if ("input_payload" in legacy) {
-      const { input_payload: _discard, ...rest } = legacy;
-      if (Object.keys(rest).length) {
-        return rest as AureliusResult;
-      }
-    }
-    return legacy as AureliusResult;
-  }
-
-  return null;
+function extractNarrativeSource(result: AureliusResult): string {
+  const parts = [
+    result.executive_summary,
+    result.board_memo,
+    result.strategic_conflict,
+    ...(result.killer_insights || []),
+    ...(result.insights || []),
+    ...(result.roadmap_90d?.month1 || []),
+    ...(result.roadmap_90d?.month2 || []),
+    ...(result.roadmap_90d?.month3 || []),
+  ];
+  return parts.filter(Boolean).join("\n");
 }
 
 export async function runAureliusEngine(input: {
@@ -69,66 +46,68 @@ export async function runAureliusEngine(input: {
   document_data?: string;
 }): Promise<EngineSuccess | EngineFailure> {
   try {
-    const response = await fetch("/api/analyses", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
+    const { resultPayload } = await runImmediateAnalysis({
+      organization: "Organisatie",
+      description: input.company_context,
+      context: {
+        analysis_type: input.analysis_type,
+        document_data: input.document_data ?? "",
+        pipeline: getAureliusStrategicPipeline(),
       },
-      body: JSON.stringify({
-        organization: "Organisatie",
-        description: input.company_context,
-        context: {
-          analysis_type: input.analysis_type,
-          document_data: input.document_data ?? "",
-          pipeline: [
-            "Context Engine",
-            "StrategicMemoryRetriever",
-            "KnowledgeGraphQuery",
-            "HypothesisGenerator",
-            "HypothesisCompetition",
-            "CausalMechanismDetector",
-            "BlindSpotDetector",
-            "StrategicThinkingPatterns",
-            "Structurele Diagnose Engine",
-            "Strategic Insight Engine",
-            "Organisatiedynamiek Engine",
-            "Boardroom Intelligence Node",
-            "Killer Insight Node",
-            "Strategische Hypothese Engine",
-            "StrategicForesightEngine",
-            "Scenario Simulation Node",
-            "Interventie Engine",
-            "DecisionOptionGenerator",
-            "DecisionTradeoffAnalyzer",
-            "DecisionPressureEngine",
-            "OrganizationalSimulationEngine",
-            "MetaReasoningEngine",
-            "Decision Quality Node",
-            "StrategicReasoningGate",
-            "NarrativeStructureEngine",
-            "NarrativeCausalityValidator",
-            "BoardroomNarrativeComposer",
-          ],
-        },
-        runImmediately: true,
-      }),
+      runImmediately: true,
     });
+    const result = normalizeAureliusResultContract(resultPayload);
 
-    const body = (await response.json()) as {
-      analysis?: Record<string, unknown>;
-      error?: string;
-    };
+    const validation = validateReport(extractNarrativeSource(result));
+    result.thesis = validation.sections.thesis;
+    result.conflict = validation.sections.conflict;
+    result.decision = validation.sections.decision;
+    result.boardQuestion = validation.sections.boardQuestion;
+    result.stressTest = validation.sections.stressTest;
+    result.killer_insights = validation.sections.killerInsights;
+    result.intervention_actions = validation.sections.interventionActions;
+    result.strategic_conflict = result.strategic_conflict || validation.sections.conflict || result.conflict || "";
+    result.recommended_option = result.recommended_option || validation.sections.decision || result.decision || "C";
+    const leverDetection = detectStrategicLeverMatrix({
+      sourceText: [
+        result.executive_summary,
+        result.board_memo,
+        validation.sections.thesis,
+        validation.sections.conflict,
+        validation.sections.decision,
+        validation.sections.boardQuestion,
+        validation.sections.stressTest,
+        ...validation.sections.killerInsights,
+      ].join("\n\n"),
+      killerInsights: validation.sections.killerInsights,
+    });
+    result.strategic_levers = leverDetection.levers;
+    result.strategic_lever_combination = leverDetection.dominantCombination;
+    result.causal_strategy = runCausalStrategyEngine({
+      levers: result.strategic_levers,
+      dominantCombination: result.strategic_lever_combination,
+    });
+    result.causal_analysis = result.causal_analysis || result.causal_strategy;
+    result.killer_insights = [
+      ...validation.sections.killerInsights,
+      ...result.strategic_levers.map(
+        (item) => `Strategische hefboom: ${item.lever}\nMECHANISME\n${item.mechanism}\nRISICO\n${item.risk}\nBESTUURLIJKE IMPLICATIE\n${item.boardImplication}`
+      ),
+      ...(result.strategic_lever_combination
+        ? [
+            `Dominante hefboomcombinatie\n${result.strategic_lever_combination.levers.join("\n")}\nSTRATEGISCH EFFECT\n${result.strategic_lever_combination.strategicEffect}`,
+          ]
+        : []),
+      ...(result.causal_strategy?.items?.length
+        ? [
+            `Belangrijkste causale mechanisme\n${result.causal_strategy.items[0].mechanisme}\nOPERATIONEEL EFFECT\n${result.causal_strategy.items[0].operationeelEffect}`,
+          ]
+        : []),
+    ].slice(0, 8);
+    result.strategic_depth_score = validation.score;
+    result.strategic_reasoning_gate_passed = validation.gatePassed;
 
-    if (!response.ok) {
-      throw new Error(body.error || "Analyse engine fout");
-    }
-
-    const result = extractResultPayload(body.analysis ?? null);
-    if (!result) {
-      throw new Error("Analyse afgerond zonder resultaat payload");
-    }
-
-    const warnings: string[] = [];
+    const warnings: string[] = [...validation.warnings];
     const score = Number(result.strategic_depth_score ?? NaN);
     const gatePassed = result.strategic_reasoning_gate_passed;
     if (gatePassed === false || (Number.isFinite(score) && score < 70)) {
@@ -139,7 +118,23 @@ export async function runAureliusEngine(input: {
       result.strategic_warnings = [...(result.strategic_warnings ?? []), ...warnings];
     }
 
-    return { success: true, result };
+    result.board_memo =
+      result.board_memo ||
+      [
+        "Bestuurlijke hypothese",
+        result.executive_summary,
+        "",
+        "Kernconflict (A/B keuze)",
+        result.strategic_conflict,
+        "",
+        "Besluitvoorstel",
+        `Aanbevolen optie: ${result.recommended_option}`,
+      ]
+        .join("\n")
+        .trim();
+    result.board_memo_quality = scoreBoardMemoQuality(result.board_memo);
+
+    return { success: true, result: validateEngineOutput(result) as AureliusResult };
   } catch (e: unknown) {
     return {
       success: false,

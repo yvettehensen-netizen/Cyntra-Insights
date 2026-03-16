@@ -84,6 +84,7 @@ import {
   runPowerPipeline,
   type PowerPipelineOutput,
 } from "../../engine/nodes/power/runPowerPipeline";
+import type { StrategicReport } from "@/platform/types";
 
 /* ============================================================
    CONSTANTS
@@ -118,6 +119,145 @@ type GuaranteedExecutiveReport = {
   decisionContract: string;
   interventionPlan90D: string;
 };
+
+function normalizePersistedAnalysisResult(
+  analysisRecord: Record<string, any> | null | undefined
+): RunCyntraResult | null {
+  if (!analysisRecord || typeof analysisRecord !== "object") return null;
+
+  const rawResult =
+    analysisRecord.result_payload && typeof analysisRecord.result_payload === "object"
+      ? analysisRecord.result_payload
+      : analysisRecord.result && typeof analysisRecord.result === "object"
+        ? analysisRecord.result
+        : null;
+
+  if (!rawResult) return null;
+
+  const result =
+    "input_payload" in rawResult
+      ? Object.fromEntries(
+          Object.entries(rawResult).filter(([key]) => key !== "input_payload")
+        )
+      : rawResult;
+
+  return {
+    report: result,
+    confidence:
+      typeof result.confidence === "string"
+        ? (result.confidence as RunCyntraResult["confidence"])
+        : "medium",
+    created_at:
+      typeof analysisRecord.finished_at === "string"
+        ? analysisRecord.finished_at
+        : typeof analysisRecord.created_at === "string"
+          ? analysisRecord.created_at
+          : undefined,
+    intelligence_layer: result.intelligence_layer as RunCyntraResult["intelligence_layer"],
+    decision_layer: result.decision_layer as RunCyntraResult["decision_layer"],
+    strategic_levers: result.strategic_levers as RunCyntraResult["strategic_levers"],
+    causal_strategy: result.causal_strategy as RunCyntraResult["causal_strategy"],
+  };
+}
+
+function extractStrategicOptions(reportSource: Record<string, unknown>): string[] {
+  const decision = asRecord(reportSource.decision);
+  const candidateLists = [
+    decision.strategic_options,
+    reportSource.strategic_options,
+    reportSource.options,
+  ];
+
+  for (const candidate of candidateLists) {
+    if (!Array.isArray(candidate)) continue;
+    const options = candidate
+      .map((item) => {
+        if (typeof item === "string") return item.trim();
+        if (item && typeof item === "object") {
+          const row = item as Record<string, unknown>;
+          return String(row.description || row.title || row.option || "").trim();
+        }
+        return "";
+      })
+      .filter(Boolean)
+      .slice(0, 3);
+    if (options.length) return options;
+  }
+
+  return [];
+}
+
+function extractRecommendedDirection(
+  reportSource: Record<string, unknown>,
+  executive: GuaranteedExecutiveReport
+): string {
+  const decision = asRecord(reportSource.decision);
+  const candidate = [
+    decision.recommended_option,
+    reportSource.recommended_option,
+    decision.dominant_thesis,
+    executive.tradeoffs,
+  ]
+    .map((value) => String(value ?? "").trim())
+    .find(Boolean);
+
+  return candidate || executive.dominantThesis;
+}
+
+function buildPlatformSessionBoardReport(
+  executive: GuaranteedExecutiveReport,
+  reportSource: Record<string, unknown>,
+  narrativeText: string
+): string {
+  const options = extractStrategicOptions(reportSource);
+  const recommendedDirection = extractRecommendedDirection(reportSource, executive);
+  const killerInsights = [
+    executive.opportunityCost,
+    executive.powerDynamics,
+    executive.executionRisk,
+  ]
+    .map((value) => stripSignatureWarningPrefix(value).trim())
+    .filter(Boolean)
+    .slice(0, 3);
+
+  const strategyOptionsText = options.length
+    ? options.map((option, index) => `${index + 1}. ${option}`).join("\n")
+    : [
+        `1. Stabiliseren rond de kernpropositie en verlieslatende complexiteit stoppen.`,
+        `2. Selectief versnellen waar mandaat, capaciteit en rendement aantoonbaar samenvallen.`,
+        `3. Huidige koers handhaven en stijgende uitvoeringsdruk accepteren.`,
+      ].join("\n");
+
+  return normalizeBoardDocumentForOutput(
+    [
+      "1. Dominante These",
+      stripSignatureWarningPrefix(executive.dominantThesis),
+      "",
+      "2. STRATEGISCH CONFLICT",
+      stripSignatureWarningPrefix(executive.coreConflict),
+      "",
+      "3. KILLER INSIGHTS",
+      killerInsights.length
+        ? killerInsights.map((item, index) => `${index + 1}. ${item}`).join("\n")
+        : stripSignatureWarningPrefix(narrativeText),
+      "",
+      "4. Strategische opties",
+      strategyOptionsText,
+      "",
+      "5. Aanbevolen keuze",
+      stripSignatureWarningPrefix(recommendedDirection),
+      "",
+      "6. Mandaat & Besluitrecht",
+      stripSignatureWarningPrefix(executive.governanceImpact),
+      "",
+      "7. 90-dagen interventieplan",
+      stripSignatureWarningPrefix(executive.interventionPlan90D),
+      "",
+      "8. Besluitkader",
+      stripSignatureWarningPrefix(executive.decisionContract),
+    ].join("\n")
+  );
+}
 
 const DEFAULT_POWER_METRICS: PowerPipelineOutput["metrics"] = {
   conflict_intensity_score_0_100: 0,
@@ -235,6 +375,18 @@ function safeJsonStringify(value: unknown, fallback = "{}"): string {
   } catch {
     return fallback;
   }
+}
+
+function extractBoardGateErrors(message: string | null): string[] {
+  const source = String(message ?? "").trim();
+  if (!/Board-grade contract fail/i.test(source)) return [];
+  const marker = source.indexOf(":");
+  const payload = marker >= 0 ? source.slice(marker + 1) : source;
+  return payload
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 8);
 }
 
 function decodeBase64Binary(base64: string): string {
@@ -1586,6 +1738,10 @@ export default function UnifiedAnalysisPage() {
   const analysisRunning =
     analysisStoreStatus === "running" || isBuilding || isPending;
   const runtimeErrorMessage = localError;
+  const boardGateErrorCodes = useMemo(
+    () => extractBoardGateErrors(runtimeErrorMessage),
+    [runtimeErrorMessage]
+  );
   const isSignatureViolation = Boolean(
     runtimeErrorMessage &&
       runtimeErrorMessage.includes(CYNTRA_SIGNATURE_LAYER_VIOLATION)
@@ -2032,11 +2188,6 @@ export default function UnifiedAnalysisPage() {
       const shouldForceFallbackFlowCompletion =
         usedSignatureFallback || nextExecutiveHasFallbackWarning;
       const nextReport = enrichDecisionSection(parsedWithPower, power);
-
-      const boardIndexSnapshot = await getBoardIndexSnapshot(
-        `org:${pending.sectorSelected || "unknown"}:board-evaluation`
-      );
-      const baliScore = boardIndexSnapshot?.baliScore ?? 0;
       const reliability =
         typeof power.metrics?.decision_certainty_0_1 === "number"
           ? power.metrics.decision_certainty_0_1 * 10
@@ -2049,33 +2200,23 @@ export default function UnifiedAnalysisPage() {
         typeof crypto.randomUUID === "function"
           ? crypto.randomUUID()
           : `report-${Date.now()}`;
-
-      await saveReport({
-        id: storedReportId,
-        analysisId: analysisId,
+      const platformBoardReport = buildPlatformSessionBoardReport(
+        nextExecutiveReport,
+        reportSource,
+        narrativeWithPower
+      );
+      const platformStrategicReport: StrategicReport = {
+        report_id: storedReportId,
+        session_id: "",
+        organization_id: "",
         title: `${analysis.title} · ${pending.clientName || "Organisatie"}`,
-        date: new Date().toISOString(),
-        baliScore,
-        betrouwbaarheid: Number(reliability.toFixed(2)),
-        interventionStatus,
-        pdfUrl: `/api/reports/pdf?analysisId=${encodeURIComponent(analysisId)}`,
-        analysisRoute,
-      }).catch(() => undefined);
-
-      await saveBoardIndexSnapshot({
-        baliScore,
-        classification: boardIndexSnapshot?.classification ?? "Kwetsbaar",
-        spread: boardIndexSnapshot?.spread ?? { min: baliScore, max: baliScore },
-        reliabilityBand:
-          boardIndexSnapshot?.reliabilityBand ??
-          {
-            low: Math.max(0, baliScore - 0.4),
-            high: Math.min(10, baliScore + 0.4),
-          },
-        analysisId,
-        organisationId: pending.sectorSelected || undefined,
-        createdAt: new Date().toISOString(),
-      }).catch(() => undefined);
+        sections: platformBoardReport
+          .split(/\n(?=\d+\.\s+)/)
+          .map((section) => section.trim())
+          .filter(Boolean),
+        generated_at: new Date().toISOString(),
+        report_body: platformBoardReport,
+      };
 
       const finalPayload: FinalizedAnalysisPayload = {
         kind: "final",
@@ -2105,12 +2246,52 @@ export default function UnifiedAnalysisPage() {
       useAnalysisStore.getState().completeRun(finalPayload);
       finalizedRunRef.current = activeRunId;
 
+      setIsBuilding(false);
       if (shouldForceFallbackFlowCompletion) {
-        setIsBuilding(false);
         forceAdvanceFlowAfterFallback();
       } else {
         setFlowStageIndex(FLOW_COMPLETION_STAGE);
       }
+
+      void (async () => {
+        const boardIndexSnapshot = await Promise.race<
+          Awaited<ReturnType<typeof getBoardIndexSnapshot>> | null
+        >([
+          getBoardIndexSnapshot(`org:${pending.sectorSelected || "unknown"}:board-evaluation`),
+          new Promise<null>((resolve) => {
+            window.setTimeout(() => resolve(null), 1500);
+          }),
+        ]).catch(() => null);
+        const baliScore = boardIndexSnapshot?.baliScore ?? 0;
+
+        void saveReport({
+          id: storedReportId,
+          analysisId: analysisId,
+          title: `${analysis.title} · ${pending.clientName || "Organisatie"}`,
+          date: new Date().toISOString(),
+          baliScore,
+          betrouwbaarheid: Number(reliability.toFixed(2)),
+          interventionStatus,
+          pdfUrl: `/api/reports/pdf?analysisId=${encodeURIComponent(analysisId)}`,
+          analysisRoute,
+        }).catch(() => undefined);
+
+        void saveBoardIndexSnapshot({
+          baliScore,
+          classification: boardIndexSnapshot?.classification ?? "Kwetsbaar",
+          spread: boardIndexSnapshot?.spread ?? { min: baliScore, max: baliScore },
+          reliabilityBand:
+            boardIndexSnapshot?.reliabilityBand ??
+            {
+              low: Math.max(0, baliScore - 0.4),
+              high: Math.min(10, baliScore + 0.4),
+            },
+          analysisId,
+          organisationId: pending.sectorSelected || undefined,
+          createdAt: new Date().toISOString(),
+        }).catch(() => undefined);
+
+      })();
     },
     [
       analysis.title,
@@ -2159,23 +2340,30 @@ export default function UnifiedAnalysisPage() {
 
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`/api/analyse/status/${encodeURIComponent(runId)}`);
+        const res = await fetch(`/api/analyses/${encodeURIComponent(runId)}`);
         if (!res.ok) return;
         const data = await res.json();
+        const analysisRecord =
+          data && typeof data === "object" && data.analysis && typeof data.analysis === "object"
+            ? (data.analysis as Record<string, any>)
+            : null;
 
-        if (data.status === "running") {
-          useAnalysisStore.getState().setProgress(data.progress ?? 0);
+        if (!analysisRecord) return;
+
+        if (String(analysisRecord.status || "").toLowerCase() === "running") {
+          useAnalysisStore.getState().setProgress(55);
           return;
         }
 
-        if (data.status === "error") {
+        if (String(analysisRecord.status || "").toLowerCase() === "failed") {
           useAnalysisStore.getState().failRun();
-          setLocalError(String(data.error || "Analyse mislukt"));
+          setLocalError(String(analysisRecord.error_message || "Analyse mislukt"));
           setIsBuilding(false);
           return;
         }
 
-        if (data.status === "completed") {
+        const normalizedResult = normalizePersistedAnalysisResult(analysisRecord);
+        if (String(analysisRecord.status || "").toLowerCase() === "done" && normalizedResult) {
           const state = useAnalysisStore.getState();
           const pending = state.result as PersistedAnalysisPayload | null;
           if (
@@ -2189,7 +2377,7 @@ export default function UnifiedAnalysisPage() {
 
           setIsBuilding(true);
           state.setProgress(65);
-          await finalizeAnalysis(data.result, pending, runId);
+          await finalizeAnalysis(normalizedResult, pending, runId);
         }
       } catch {
         // polling blijft proberen
@@ -2256,11 +2444,6 @@ export default function UnifiedAnalysisPage() {
       const contextualizedInput = [sourceContext, sectorLayer].filter(Boolean).join("\n\n");
       setFlowStageIndex(2);
 
-      const nextRunId =
-        typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-          ? crypto.randomUUID()
-          : `run-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-
       const pendingPayload: PendingAnalysisPayload = {
         kind: "pending",
         routeSlug,
@@ -2274,23 +2457,26 @@ export default function UnifiedAnalysisPage() {
         documents,
       };
 
-      const store = useAnalysisStore.getState();
-      store.startRun(nextRunId);
-      store.setResult(pendingPayload);
-      store.setProgress(10);
-
-      const response = await fetch("/api/analyse", {
+      const response = await fetch("/api/analyses", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          runId: nextRunId,
-          payload: {
+          organization: clientName || "Organisatie",
+          description: contextualizedInput,
+          context: {
             analysis_type: analysisType,
-            company_context: contextualizedInput,
             analysisContext: {
               sector_selected: sectorSelected,
             },
+            source_context: sourceContext,
+            sector_layer: sectorLayer,
+            documents: documents.map((document) => ({
+              id: document.id,
+              name: document.name,
+              mimeType: document.mimeType,
+            })),
           },
+          runImmediately: true,
         }),
       });
 
@@ -2299,7 +2485,34 @@ export default function UnifiedAnalysisPage() {
         throw new Error(`Analysejob starten mislukt: ${errorText}`);
       }
 
+      const responseJson = await response.json();
+      const analysisRecord =
+        responseJson &&
+        typeof responseJson === "object" &&
+        responseJson.analysis &&
+        typeof responseJson.analysis === "object"
+          ? (responseJson.analysis as Record<string, any>)
+          : null;
+      const nextRunId = String(
+        analysisRecord?.id ||
+          (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+            ? crypto.randomUUID()
+            : `run-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`)
+      );
+
+      const store = useAnalysisStore.getState();
+      store.startRun(nextRunId);
+      store.setResult(pendingPayload);
+      store.setProgress(25);
+
       setFlowStageIndex(3);
+
+      const normalizedResult = normalizePersistedAnalysisResult(analysisRecord);
+      if (String(analysisRecord?.status || "").toLowerCase() === "done" && normalizedResult) {
+        store.setProgress(65);
+        await finalizeAnalysis(normalizedResult, pendingPayload, nextRunId);
+        return;
+      }
     } catch (err) {
       useAnalysisStore.getState().failRun();
       setLocalError(err instanceof Error ? err.message : "Analyse mislukt");
@@ -2584,9 +2797,17 @@ export default function UnifiedAnalysisPage() {
       )}
 
       {runtimeErrorMessage && !isSignatureViolation && (
-        <div className="mb-8 flex items-center gap-2 text-red-500">
-          <AlertCircle className="h-4 w-4" />
-          {runtimeErrorMessage}
+        <div className="mb-8 rounded-xl border border-red-500/60 bg-red-950/40 p-4 text-red-200">
+          <div className="flex items-center gap-2 text-red-300">
+            <AlertCircle className="h-4 w-4" />
+            <span>{runtimeErrorMessage}</span>
+          </div>
+          {boardGateErrorCodes.length > 0 && (
+            <div className="mt-2 text-xs text-red-100/90">
+              <span className="font-semibold">Board-gate debug:</span>{" "}
+              <span className="font-mono">{boardGateErrorCodes.join(" | ")}</span>
+            </div>
+          )}
         </div>
       )}
 

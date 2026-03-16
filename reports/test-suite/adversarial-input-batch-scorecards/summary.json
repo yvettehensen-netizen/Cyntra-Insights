@@ -1,0 +1,121 @@
+{
+  "aggregate": {
+    "caseCount": 3,
+    "averageOverallScore": 84,
+    "averageMemoScore": 100,
+    "failures": 0
+  },
+  "results": [
+    {
+      "id": "misleidende-ggz",
+      "organizationName": "GGZ Schakel",
+      "sector": "GGZ",
+      "overallScore": 71,
+      "memoScore": 100,
+      "keywordHits": 2,
+      "keywordTarget": 4,
+      "memoArtifactPass": true,
+      "rawReportArtifactPass": true,
+      "pass": true,
+      "recommendedOption": "Kern beschermen en contractmix heronderhandelen",
+      "historicalOutcome": "Geen historisch outcome-signaal beschikbaar",
+      "boardIssueCodes": [
+        "incomplete_sentence",
+        "generic_scenario"
+      ],
+      "boardIssues": [
+        "Onvolledige of semantisch kapotte regel verwijderd.",
+        "Onvolledige of semantisch kapotte regel verwijderd.",
+        "Onvolledige of semantisch kapotte regel verwijderd.",
+        "Scenario niet onderscheidend: Parallel verbreden via nieuwe labels: voeg labels toe maar verhoogt operationele ruis.",
+        "Scenario niet onderscheidend: Partnermodel met strakke governance: deel capaciteit via partners met harde regie."
+      ],
+      "consistencyFindings": [
+        "Kernprobleem, kernstelling en aanbevolen keuze sluiten semantisch niet strak op elkaar aan.",
+        "Aanbevolen keuze is niet logisch verankerd in de strategische spanning van de analysekaart.",
+        "Scenario's verwijzen niet zichtbaar naar de centrale strategische spanning."
+      ],
+      "rawConsistencyFindings": [
+        "Kernprobleem, kernstelling en aanbevolen keuze sluiten semantisch niet strak op elkaar aan.",
+        "Aanbevolen keuze is niet logisch verankerd in de strategische spanning van de analysekaart.",
+        "Scenario's verwijzen niet zichtbaar naar de centrale strategische spanning."
+      ],
+      "scenarioIssues": [
+        "Scenario niet onderscheidend: Parallel verbreden via nieuwe labels: voeg labels toe maar verhoogt operationele ruis.",
+        "Scenario niet onderscheidend: Partnermodel met strakke governance: deel capaciteit via partners met harde regie."
+      ],
+      "boardMemoQualityFindings": []
+    },
+    {
+      "id": "tegenstrijdige-jeugdzorg",
+      "organizationName": "Jeugdkompas",
+      "sector": "Jeugdzorg",
+      "overallScore": 94,
+      "memoScore": 100,
+      "keywordHits": 4,
+      "keywordTarget": 4,
+      "memoArtifactPass": true,
+      "rawReportArtifactPass": true,
+      "pass": true,
+      "recommendedOption": "Brede ambulante specialist blijven",
+      "historicalOutcome": "Geen historisch outcome-signaal beschikbaar",
+      "boardIssueCodes": [
+        "incomplete_sentence",
+        "generic_scenario"
+      ],
+      "boardIssues": [
+        "Onvolledige of semantisch kapotte regel verwijderd.",
+        "Onvolledige of semantisch kapotte regel verwijderd.",
+        "Onvolledige of semantisch kapotte regel verwijderd.",
+        "Scenario niet onderscheidend: Selectieve specialisatie / niche kiezen: verlaag complexiteitsmix maar verlies lokale breedte.",
+        "Scenario niet onderscheidend: Consortiumstrategie verdiepen: deel capaciteit en contractpositie via partners."
+      ],
+      "consistencyFindings": [],
+      "rawConsistencyFindings": [
+        "Kernprobleem, kernstelling en aanbevolen keuze sluiten semantisch niet strak op elkaar aan."
+      ],
+      "scenarioIssues": [
+        "Scenario niet onderscheidend: Selectieve specialisatie / niche kiezen: verlaag complexiteitsmix maar verlies lokale breedte.",
+        "Scenario niet onderscheidend: Consortiumstrategie verdiepen: deel capaciteit en contractpositie via partners."
+      ],
+      "boardMemoQualityFindings": []
+    },
+    {
+      "id": "arme-saas",
+      "organizationName": "ThinCloud",
+      "sector": "SaaS",
+      "overallScore": 86,
+      "memoScore": 100,
+      "keywordHits": 3,
+      "keywordTarget": 4,
+      "memoArtifactPass": true,
+      "rawReportArtifactPass": true,
+      "pass": true,
+      "recommendedOption": "Retentie en unit economics eerst herstellen",
+      "historicalOutcome": "Geen historisch outcome-signaal beschikbaar",
+      "boardIssueCodes": [
+        "incomplete_sentence",
+        "generic_scenario"
+      ],
+      "boardIssues": [
+        "Onvolledige of semantisch kapotte regel verwijderd.",
+        "Onvolledige of semantisch kapotte regel verwijderd.",
+        "Onvolledige of semantisch kapotte regel verwijderd.",
+        "Scenario niet onderscheidend: Enterprise sales versnellen: verhoogt ACV maar vergroot implementatiedruk.",
+        "Scenario niet onderscheidend: Focus op selectieve verticale groei: scherpt ICP en retentie per segment aan."
+      ],
+      "consistencyFindings": [
+        "Aanbevolen keuze is niet logisch verankerd in de strategische spanning van de analysekaart."
+      ],
+      "rawConsistencyFindings": [
+        "Kernprobleem, kernstelling en aanbevolen keuze sluiten semantisch niet strak op elkaar aan.",
+        "Aanbevolen keuze is niet logisch verankerd in de strategische spanning van de analysekaart."
+      ],
+      "scenarioIssues": [
+        "Scenario niet onderscheidend: Enterprise sales versnellen: verhoogt ACV maar vergroot implementatiedruk.",
+        "Scenario niet onderscheidend: Focus op selectieve verticale groei: scherpt ICP en retentie per segment aan."
+      ],
+      "boardMemoQualityFindings": []
+    }
+  ]
+}

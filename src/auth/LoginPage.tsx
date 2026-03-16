@@ -2,11 +2,23 @@ import { useEffect, useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { supabase } from "@/lib/supabaseClient";
 import { Loader2, AlertTriangle, ArrowRight, Chrome } from "lucide-react";
+import {
+  AUTH_DEFAULT_AFTER_LOGIN_PATH,
+  AUTH_RESET_PASSWORD_PATH,
+  AUTH_SIGNUP_PATH,
+  toAuthAbsolute,
+} from "./authPaths";
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const redirectTo = (location.state as { from?: string } | null)?.from || "/portal/dashboard";
+  const redirectToRaw =
+    (location.state as { from?: string } | null)?.from ||
+    AUTH_DEFAULT_AFTER_LOGIN_PATH;
+  const redirectTo =
+    redirectToRaw.startsWith("/") && !redirectToRaw.startsWith("//")
+      ? redirectToRaw
+      : AUTH_DEFAULT_AFTER_LOGIN_PATH;
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -42,7 +54,7 @@ export default function LoginPage() {
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: window.location.origin + redirectTo },
+      options: { redirectTo: toAuthAbsolute(redirectTo) },
     });
 
     if (error) {
@@ -94,20 +106,26 @@ export default function LoginPage() {
 
           <form onSubmit={handleLogin} className="space-y-4">
             <input
+              id="login-email"
+              name="email"
               type="email"
               placeholder="E-mailadres"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              autoComplete="email"
               className="w-full rounded-xl border border-[#e8c670]/25 bg-[#0f1629] px-4 py-3 text-[#f8f9fc] placeholder:text-[#95a1b8] focus:outline-none focus:border-[#e8c670]"
             />
 
             <input
+              id="login-password"
+              name="password"
               type="password"
               placeholder="Wachtwoord"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              autoComplete="current-password"
               className="w-full rounded-xl border border-[#e8c670]/25 bg-[#0f1629] px-4 py-3 text-[#f8f9fc] placeholder:text-[#95a1b8] focus:outline-none focus:border-[#e8c670]"
             />
 
@@ -129,9 +147,17 @@ export default function LoginPage() {
 
           <div className="mt-6 flex flex-wrap items-center justify-between gap-3 text-sm">
             <p className="text-[#9ba5ba]">Alle activiteit wordt bestuurlijk gelogd. Mandaat is vereist.</p>
-            <Link to="/" className="text-[#e8c670] hover:text-[#f1d998]">
-              Terug naar homepage
-            </Link>
+            <div className="flex items-center gap-4">
+              <Link to={AUTH_RESET_PASSWORD_PATH} className="text-[#e8c670] hover:text-[#f1d998]">
+                Wachtwoord vergeten
+              </Link>
+              <Link to={AUTH_SIGNUP_PATH} className="text-[#e8c670] hover:text-[#f1d998]">
+                Account aanmaken
+              </Link>
+              <Link to="/" className="text-[#e8c670] hover:text-[#f1d998]">
+                Terug naar homepage
+              </Link>
+            </div>
           </div>
         </div>
       </div>

@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "@/lib/supabaseClient";
+import { AUTH_LOGIN_PATH, toAuthAbsolute } from "@/auth/authPaths";
 
 export default function SignupPage() {
   const navigate = useNavigate();
@@ -8,11 +10,13 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setMessage(null);
 
     if (password !== confirm) {
       setError("Wachtwoorden komen niet overeen.");
@@ -20,11 +24,26 @@ export default function SignupPage() {
     }
 
     setLoading(true);
-    // TODO: Voeg hier je Supabase signup logic toe
-    setTimeout(() => {
+    const { error: signupError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { full_name: name },
+        emailRedirectTo: toAuthAbsolute(AUTH_LOGIN_PATH),
+      },
+    });
+
+    if (signupError) {
+      setError(signupError.message);
       setLoading(false);
-      navigate("/login");
-    }, 1000);
+      return;
+    }
+
+    setLoading(false);
+    setMessage("Account aangemaakt. Controleer je e-mail om te bevestigen.");
+    window.setTimeout(() => {
+      navigate(AUTH_LOGIN_PATH);
+    }, 800);
   };
 
   return (
@@ -45,6 +64,7 @@ export default function SignupPage() {
         </div>
 
         {error && <p className="text-red-400 text-center mb-4">{error}</p>}
+        {message && <p className="text-green-400 text-center mb-4">{message}</p>}
 
         <form onSubmit={handleSignup} className="space-y-4">
           <input
@@ -90,7 +110,7 @@ export default function SignupPage() {
         </form>
 
         <div className="text-sm text-center mt-4">
-          <a href="/login" className="text-[#D6B48E] hover:underline">
+          <a href={AUTH_LOGIN_PATH} className="text-[#D6B48E] hover:underline">
             Al een account? Log in
           </a>
         </div>

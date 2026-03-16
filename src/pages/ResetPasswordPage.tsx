@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { AUTH_LOGIN_PATH, toAuthAbsolute } from "@/auth/authPaths";
 
 export default function ResetPasswordPage() {
   const [email, setEmail] = useState("");
@@ -14,7 +15,7 @@ export default function ResetPasswordPage() {
     setLoading(true);
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/login`,
+      redirectTo: toAuthAbsolute(AUTH_LOGIN_PATH),
     });
 
     setLoading(false);
@@ -51,7 +52,7 @@ export default function ResetPasswordPage() {
         </form>
 
         <div className="text-sm text-center mt-4">
-          <a href="/login" className="text-brand-accent hover:underline">
+          <a href={AUTH_LOGIN_PATH} className="text-brand-accent hover:underline">
             Terug naar inloggen
           </a>
         </div>

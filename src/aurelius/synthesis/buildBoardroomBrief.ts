@@ -11,6 +11,8 @@ import {
 } from "./outputIntegrity";
 import { ensureBoardroomOutputArtifacts } from "@/aurelius/narrative/BoardroomNarrativeComposer";
 import { assertBoardroomReportStructure } from "@/aurelius/narrative/BoardroomReportStructureValidator";
+import { validateBoardGradeOutput } from "@/aurelius/synthesis/validateBoardOutput";
+import { shouldEmitStabilityConsoleWarnings } from "@/aurelius/stability/OutputContractGuard";
 
 const SECTION_SLOT_MAP: Array<{ heading: RegExp; slot: SlotId }> = [
   { heading: /^\s*1\.\s+Dominante These\b/i, slot: "dominanteThese" },
@@ -73,6 +75,18 @@ const SLOT_DECISION_PRESSURE: Record<SlotId, string> = {
     "Zonder dag-30, dag-60 en dag-90 sluiting blijft het plan een intentie zonder executiekracht.",
   besluitkader:
     "Zonder expliciet verlies, mandaatverschuiving en stopregels is het besluit bestuurlijk niet afdwingbaar.",
+};
+
+const BRIEF_FALLBACKS = {
+  thesis: "Dominante these kon niet automatisch worden bepaald.",
+  conflict: "Strategisch conflict kon niet automatisch worden bepaald.",
+  boardQuestion: "Bestuurlijke vraag kon niet automatisch worden bepaald.",
+  stressTest:
+    "Boardroom stresstest kon niet automatisch worden bepaald. Zonder expliciete keuze neemt strategische frictie verder toe.",
+  insights: "Killer insights konden niet automatisch worden bepaald.",
+  interventionPlan: "Interventieplan kon niet automatisch worden bepaald.",
+  openQuestions:
+    "- Welke keuze wordt de komende 90 dagen expliciet niet meer gefinancierd?\n- Welke KPI dwingt herbesluit af als de gekozen koers niet werkt?\n- Welke bestuurlijke bottleneck moet binnen 30 dagen expliciet worden opgeheven?",
 };
 
 function splitSentences(text: string): string[] {
@@ -206,6 +220,49 @@ function buildSituationReconstruction(executiveText: string, narrativeText: stri
   ].join("\n");
 }
 
+function safeText(value: unknown, fallback: string): string {
+  const text = String(value ?? "").trim();
+  return text || fallback;
+}
+
+function ensureRequiredBoardSections(text: string, intelligence: RunCyntraResult): string {
+  const source = String(text ?? "").trim();
+  const lower = source.toLowerCase();
+  const additions: string[] = [];
+  const killerInsights = readKillerInsights(intelligence);
+  const interventionFallback = source.match(/90-dagen interventie(?:ontwerp|plan)[\s\S]*?(?=\n### |\n\d+\. |$)/i)?.[0] || "";
+
+  if (!/(dominante these|executive thesis|bestuurlijke these|bestuurlijke kernsamenvatting)/i.test(lower)) {
+    additions.push(`### EXECUTIVE THESIS\n${BRIEF_FALLBACKS.thesis}`);
+  }
+  if (!/kernconflict|strategisch kernconflict|strategische spanning/i.test(lower)) {
+    additions.push(`### STRATEGISCHE SPANNING\n${BRIEF_FALLBACKS.conflict}`);
+  }
+  if (!/boardroom question|bestuurlijke vraag|board vraag|besluitvraag/i.test(lower)) {
+    additions.push(`### BESTUURLIJKE VRAAG\n${BRIEF_FALLBACKS.boardQuestion}`);
+  }
+  if (!/stresstest|stress test|bestuurlijke stresstest/i.test(lower)) {
+    additions.push(`### BOARDROOM STRESSTEST\n${BRIEF_FALLBACKS.stressTest}`);
+  }
+  if (!/killer insights|nieuwe inzichten|doorbraakinzichten/i.test(lower)) {
+    additions.push(
+      `### DOORBRAAKINZICHTEN\n${
+        killerInsights.length ? killerInsights.slice(0, 5).join("\n") : BRIEF_FALLBACKS.insights
+      }`
+    );
+  }
+  if (!/90-dagen interventie|interventieplan|bestuurlijk actieplan/i.test(lower)) {
+    additions.push(
+      `### BESTUURLIJK ACTIEPLAN\n${safeText(interventionFallback, BRIEF_FALLBACKS.interventionPlan)}`
+    );
+  }
+  if (!/open questions|open vragen|open strategische vragen/i.test(lower)) {
+    additions.push(`### OPEN STRATEGISCHE VRAGEN\n${BRIEF_FALLBACKS.openQuestions}`);
+  }
+
+  return additions.length ? [source, ...additions].filter(Boolean).join("\n\n") : source;
+}
+
 function extractNumberedSections(text: string): Partial<Record<SlotId, string>> {
   const source = String(text ?? "").trim();
   if (!source) return {};
@@ -236,11 +293,216 @@ function readKillerInsights(intelligence: RunCyntraResult): string[] {
     .filter(Boolean);
 }
 
+type BriefCaseStructureItem = {
+  theme: string;
+  description?: string;
+  signals?: string[];
+};
+
+type BriefStrategicConflict = {
+  tensionA: string;
+  tensionB: string;
+  explanation: string;
+};
+
+function normalizeTheme(theme: string): string {
+  return String(theme ?? "").replace(/\s+/g, " ").trim();
+}
+
+function inferCaseStructure(source: string): BriefCaseStructureItem[] {
+  const catalog: Array<{ theme: string; description: string; patterns: RegExp[] }> = [
+    {
+      theme: "Cultuur & Eigenaarschap",
+      description: "Retentie, betrokkenheid en professionele verantwoordelijkheid als kwaliteitsmotor.",
+      patterns: [/\bcultuur\b/i, /\beigenaarschap\b/i, /\bziekteverzuim\b/i, /\bmede-?eigenaar\b/i],
+    },
+    {
+      theme: "Netwerkstrategie",
+      description: "Impactvergroting via partners, kennisdeling en licenties.",
+      patterns: [/\bnetwerk\b/i, /\bpartners?\b/i, /\blicentie\b/i, /\bkennisdeling\b/i],
+    },
+    {
+      theme: "Wachttijdinnovatie",
+      description: "Triage en kortdurende interventies als capaciteitshefboom.",
+      patterns: [/\bwachttijd\b/i, /\btriage\b/i, /\bwachtlijst\b/i, /\bkort traject\b/i, /\bintake\b/i],
+    },
+    {
+      theme: "Beleidsinvloed",
+      description: "Systeembeinvloeding via gemeenten, VWS/VNG en sectornetwerken.",
+      patterns: [/\bbeleid\b/i, /\bgemeente\b/i, /\bvng\b/i, /\bvws\b/i, /\bbeweging van nul\b/i],
+    },
+    {
+      theme: "Financiele Druk",
+      description: "Tariefdruk en loonkosten vragen expliciete margelogica.",
+      patterns: [/\bmarge\b/i, /\btarief\b/i, /\bloonkosten?\b/i, /\bcontract\b/i, /\bvergrijzing\b/i],
+    },
+  ];
+
+  const lines = String(source ?? "")
+    .replace(/\r\n/g, "\n")
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const inferred = catalog
+    .map((item) => {
+      const signals = lines
+        .filter((line) => item.patterns.some((pattern) => pattern.test(line)))
+        .slice(0, 3);
+      return {
+        theme: item.theme,
+        description: item.description,
+        signals,
+      };
+    })
+    .filter((item) => item.signals.length > 0)
+    .slice(0, 5);
+
+  if (inferred.length > 0) return inferred;
+
+  return [
+    {
+      theme: "Capaciteit & Kwaliteit",
+      description: "Balans tussen zorgkwaliteit en uitvoerbare groei.",
+      signals: lines.slice(0, 2),
+    },
+  ];
+}
+
+function readCaseStructure(intelligence: RunCyntraResult, source: string): BriefCaseStructureItem[] {
+  const payload = intelligence as RunCyntraResult & {
+    caseStructure?: unknown;
+    state?: { caseStructure?: unknown };
+  };
+  const fromPayload = payload.caseStructure ?? payload.state?.caseStructure;
+  if (Array.isArray(fromPayload)) {
+    const mapped = fromPayload
+      .map((item) => {
+        if (!item || typeof item !== "object") return null;
+        const record = item as Record<string, unknown>;
+        const theme = normalizeTheme(String(record.theme ?? ""));
+        if (!theme) return null;
+        const description =
+          typeof record.description === "string" ? record.description.trim() : undefined;
+        const signals = Array.isArray(record.signals)
+          ? record.signals.map((signal) => String(signal ?? "").trim()).filter(Boolean).slice(0, 3)
+          : [];
+        return { theme, description, signals };
+      })
+      .filter(Boolean) as BriefCaseStructureItem[];
+    if (mapped.length > 0) {
+      const padded = [...mapped];
+      const fallback = inferCaseStructure(source);
+      for (const item of fallback) {
+        if (padded.some((existing) => existing.theme === item.theme)) continue;
+        padded.push(item);
+        if (padded.length >= 3) break;
+      }
+      return padded.slice(0, 5);
+    }
+  }
+  const inferred = inferCaseStructure(source);
+  if (inferred.length >= 3) return inferred.slice(0, 5);
+  const paddingCatalog: BriefCaseStructureItem[] = [
+    {
+      theme: "Governance & Besluitritme",
+      description: "Mandaat, escalatie en prioritering bepalen of keuzes uitvoerbaar blijven.",
+      signals: [],
+    },
+    {
+      theme: "Capaciteit & Continuiteit",
+      description: "Instroom, werkdruk en uitvoerbaarheid lopen vast zonder harde toegangskeuzes.",
+      signals: [],
+    },
+    {
+      theme: "Positionering & Contractruimte",
+      description: "Contractkwaliteit en scherpe propositie bepalen of groei bestuurlijk houdbaar is.",
+      signals: [],
+    },
+  ];
+  const padded = [...inferred];
+  for (const item of paddingCatalog) {
+    if (padded.some((existing) => existing.theme === item.theme)) continue;
+    padded.push(item);
+    if (padded.length >= 3) break;
+  }
+  return padded.slice(0, 5);
+}
+
+function inferStrategicConflict(source: string): BriefStrategicConflict {
+  const low = source.toLowerCase();
+  if (/\bkwaliteit|cultuur|behandelrelatie|eigenaarschap\b/.test(low)) {
+    return {
+      tensionA: "Behandelkwaliteit beschermen",
+      tensionB: "Maatschappelijke impact vergroten",
+      explanation:
+        "Groei wordt begrensd om kwaliteit en eigenaarschap te borgen, waardoor impactgroei vooral via netwerkadoptie en modelverspreiding moet plaatsvinden.",
+    };
+  }
+  if (/\bmarge|tarief|kostprijs|loonkosten|contract\b/.test(low)) {
+    return {
+      tensionA: "Financiele weerbaarheid borgen",
+      tensionB: "Innovatieruimte behouden",
+      explanation:
+        "Kostendruk vraagt directe margecontrole, terwijl toekomstige impact afhankelijk blijft van doorlopende innovatie en overdraagbare modellen.",
+    };
+  }
+  return {
+    tensionA: "Autonomie behouden",
+    tensionB: "Standaardisatie verhogen",
+    explanation:
+      "Lokale ruimte versnelt maatwerk, maar zonder standaardkaders daalt voorspelbaarheid van kwaliteit en uitvoerbaarheid.",
+  };
+}
+
+function readStrategicConflict(
+  intelligence: RunCyntraResult,
+  source: string
+): BriefStrategicConflict {
+  const payload = intelligence as RunCyntraResult & {
+    strategicConflict?: unknown;
+    state?: { strategicConflict?: unknown };
+  };
+  const fromPayload = payload.strategicConflict ?? payload.state?.strategicConflict;
+  if (fromPayload && typeof fromPayload === "object") {
+    const record = fromPayload as Record<string, unknown>;
+    const tensionA = String(record.tensionA ?? "").trim();
+    const tensionB = String(record.tensionB ?? "").trim();
+    const explanation = String(record.explanation ?? "").trim();
+    if (tensionA && tensionB && explanation) {
+      return { tensionA, tensionB, explanation };
+    }
+  }
+  return inferStrategicConflict(source);
+}
+
+function renderCaseStructureSection(caseStructure: BriefCaseStructureItem[]): string {
+  const lines = caseStructure.slice(0, 5).map((item) => {
+    const signals = (item.signals ?? []).filter(Boolean).slice(0, 2).join(" | ");
+    const description = item.description ? ` — ${item.description}` : "";
+    const signalText = signals ? ` (signals: ${signals})` : "";
+    return `- ${item.theme}${description}${signalText}`;
+  });
+  return ["### CASE STRUCTURE", ...lines].join("\n").trim();
+}
+
+function renderStrategicConflictSection(conflict: BriefStrategicConflict): string {
+  return [
+    "### STRATEGISCH KERNCONFLICT",
+    "Strategisch spanningsveld:",
+    `A: ${conflict.tensionA}`,
+    `B: ${conflict.tensionB}`,
+    "",
+    "Interpretatie:",
+    conflict.explanation,
+  ].join("\n");
+}
+
 export function buildBoardroomBrief(
   intelligence: RunCyntraResult,
   context: string
 ): BoardroomBrief {
-  const finalText = intelligence.report ?? "Geen executive thesis gegenereerd.";
+  const finalText = intelligence.report ?? BRIEF_FALLBACKS.thesis;
   const processedExecutiveText = runBoardOutputGuard(finalText, {
     fullDocument: false,
   });
@@ -323,30 +585,73 @@ export function buildBoardroomBrief(
     }
     const candidate = enforceNarrativeSectionFlow(slotId, candidateRaw);
     writeCount[slotId] += 1;
-    console.info("[slot_write_trace]", {
-      sectionId: slotId,
-      hash: traceHash(candidate),
-      writeCount: writeCount[slotId],
-    });
+    if (shouldEmitStabilityConsoleWarnings()) {
+      console.info("[slot_write_trace]", {
+        sectionId: slotId,
+        hash: traceHash(candidate),
+        writeCount: writeCount[slotId],
+      });
+    }
     kernel.writeSlot(slotId, candidate);
   }
 
   kernel.freeze();
   const stabilizedNarrative = kernel.assembleDocument();
   assertOutputIntegrity(stabilizedNarrative);
+  const caseStructure = readCaseStructure(
+    intelligence,
+    `${processedExecutiveText}\n${processedNarrative}`
+  );
+  const strategicConflict = readStrategicConflict(
+    intelligence,
+    `${processedExecutiveText}\n${processedNarrative}`
+  );
+  const strategySections = [
+    renderCaseStructureSection(caseStructure),
+    renderStrategicConflictSection(strategicConflict),
+  ]
+    .filter(Boolean)
+    .join("\n\n");
   const situationReconstruction = buildSituationReconstruction(
     processedExecutiveText,
     processedNarrative
   );
-  const narrativeWithSituation = `${situationReconstruction}\n\n${stabilizedNarrative}`.trim();
-  const narrativeWithArtifacts = ensureBoardroomOutputArtifacts(narrativeWithSituation);
+  const narrativeWithSituation = [situationReconstruction, strategySections, stabilizedNarrative]
+    .filter(Boolean)
+    .join("\n\n")
+    .trim();
+  let narrativeWithArtifacts = ensureBoardroomOutputArtifacts(narrativeWithSituation);
+  narrativeWithArtifacts = ensureRequiredBoardSections(narrativeWithArtifacts, intelligence);
   assertBoardroomReportStructure(narrativeWithArtifacts);
+  const boardGrade = validateBoardGradeOutput(narrativeWithArtifacts, { minScore: 85 });
+  if (!boardGrade.pass) {
+    narrativeWithArtifacts = [
+      narrativeWithArtifacts,
+      "### BOARD-GRADE VALIDATIE",
+      `Status: SOFT_FAIL (score ${boardGrade.score}/${boardGrade.minScore})`,
+      `Errors: ${boardGrade.errors.join(" | ")}`,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+  }
+  if (!boardGrade.pass) {
+    if (shouldEmitStabilityConsoleWarnings()) {
+      console.warn("[BoardGrade][SOFT_FAIL]", {
+        score: boardGrade.score,
+        minScore: boardGrade.minScore,
+        errors: boardGrade.errors,
+        warnings: boardGrade.warnings,
+      });
+    }
+  }
 
   return {
-    executive_thesis: processedExecutiveText,
+    executive_thesis: safeText(processedExecutiveText, BRIEF_FALLBACKS.thesis),
 
-    central_tension:
-      "Spanning tussen huidige operationele realiteit en strategische noodzaak.",
+    central_tension: safeText(
+      strategicConflict.explanation,
+      "Spanning tussen huidige operationele realiteit en strategische noodzaak."
+    ),
 
     strategic_narrative: narrativeWithArtifacts,
 

@@ -1,0 +1,37 @@
+{
+  "id": "arme-saas",
+  "organizationName": "ThinCloud",
+  "sector": "SaaS",
+  "overallScore": 86,
+  "memoScore": 100,
+  "keywordHits": 3,
+  "keywordTarget": 4,
+  "memoArtifactPass": true,
+  "rawReportArtifactPass": true,
+  "pass": true,
+  "recommendedOption": "Retentie en unit economics eerst herstellen",
+  "historicalOutcome": "Geen historisch outcome-signaal beschikbaar",
+  "boardIssueCodes": [
+    "incomplete_sentence",
+    "generic_scenario"
+  ],
+  "boardIssues": [
+    "Onvolledige of semantisch kapotte regel verwijderd.",
+    "Onvolledige of semantisch kapotte regel verwijderd.",
+    "Onvolledige of semantisch kapotte regel verwijderd.",
+    "Scenario niet onderscheidend: Enterprise sales versnellen: verhoogt ACV maar vergroot implementatiedruk.",
+    "Scenario niet onderscheidend: Focus op selectieve verticale groei: scherpt ICP en retentie per segment aan."
+  ],
+  "consistencyFindings": [
+    "Aanbevolen keuze is niet logisch verankerd in de strategische spanning van de analysekaart."
+  ],
+  "rawConsistencyFindings": [
+    "Kernprobleem, kernstelling en aanbevolen keuze sluiten semantisch niet strak op elkaar aan.",
+    "Aanbevolen keuze is niet logisch verankerd in de strategische spanning van de analysekaart."
+  ],
+  "scenarioIssues": [
+    "Scenario niet onderscheidend: Enterprise sales versnellen: verhoogt ACV maar vergroot implementatiedruk.",
+    "Scenario niet onderscheidend: Focus op selectieve verticale groei: scherpt ICP en retentie per segment aan."
+  ],
+  "boardMemoQualityFindings": []
+}
