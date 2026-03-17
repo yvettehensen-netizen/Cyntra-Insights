@@ -25,6 +25,16 @@ function buildDecisionPressure(report: StrategicBrainReport): BoardDecisionPress
 }
 
 function buildGovernanceInterventions(report: StrategicBrainReport): GovernanceIntervention[] {
+  if (report.execution_layer?.strategic_actions?.length) {
+    return report.execution_layer.strategic_actions.slice(0, 3).map((item) => ({
+      action: item.action,
+      mechanism: report.board_analysis?.structural_tension || report.strategisch_rapport.strategische_paradox,
+      boardDecision: `Het bestuur besluit ${item.action.toLowerCase()} en volgt dit op ${item.timeline.toLowerCase()}.`,
+      owner: item.owner,
+      deadline: item.timeline,
+      kpi: item.kpi,
+    }));
+  }
   return report.scenario_simulatie.strategische_stresstest.slice(0, 3).map((item, index) => ({
     action: item.herstelactie,
     mechanism: item.mechanisme,
@@ -36,14 +46,33 @@ function buildGovernanceInterventions(report: StrategicBrainReport): GovernanceI
 }
 
 function buildKillerInsights(report: StrategicBrainReport): StructuredKillerInsight[] {
-  return report.strategisch_rapport.doorbraakinzichten.slice(0, 5).map((insight) => ({
-    insight,
-    mechanism: report.strategisch_rapport.strategische_paradox,
-    implication: report.strategisch_rapport.strategisch_narratief.bestuurlijke_opgave,
-  }));
+  return report.strategisch_rapport.doorbraakinzichten.slice(0, 5).map((insight, index) => {
+    const source = String(insight || "");
+    return {
+      insight: (source.match(/KERNINZICHT\s*[—:-]\s*(.+)/i)?.[1] || source).trim(),
+      mechanism: (
+        source.match(/ONDERLIGGENDE OORZAAK\s*[—:-]\s*(.+)/i)?.[1]
+        || report.board_analysis?.mechanism_analysis?.[index]
+        || report.board_analysis?.structural_tension
+        || report.strategisch_rapport.strategische_paradox
+      ).trim(),
+      implication: (
+        source.match(/BESTUURLIJK GEVOLG\s*[—:-]\s*(.+)/i)?.[1]
+        || report.strategisch_rapport.strategisch_narratief.bestuurlijke_opgave
+      ).trim(),
+    };
+  });
 }
 
 function buildScenarios(report: StrategicBrainReport): CompactScenario[] {
+  if (report.board_analysis?.scenario_comparison?.length) {
+    return report.board_analysis.scenario_comparison.slice(0, 3).map((item) => ({
+      title: `Scenario ${item.code} — ${item.title}`,
+      mechanism: item.mechanism,
+      risk: item.risk,
+      boardImplication: item.strategic_implication,
+    }));
+  }
   return report.scenario_simulatie.strategische_stresstest.slice(0, 3).map((item, index) => ({
     title: item.stressfactor || `Stressfactor ${index + 1}`,
     mechanism: item.mechanisme,
@@ -63,100 +92,55 @@ function buildBoardCard(report: StrategicBrainReport): BestuurlijkeBesliskaart {
     whyReasons: report.bestuurlijk_overzicht.waarom_deze_keuze,
     riskIfDelayed: report.bestuurlijk_overzicht.grootste_risico_bij_uitstel,
     stopRules: report.bestuurlijk_overzicht.stopregels,
+    decisionConfidence: report.bestuurlijk_overzicht.decision_confidence || report.executive_decision_card?.decision_confidence,
   };
 }
 
 function buildStrategySections(report: StrategicBrainReport): ReportSection[] {
   const governance = buildGovernanceInterventions(report);
-  const decisionPressure = buildDecisionPressure(report);
-
   return [
     {
-      title: "Bestuurlijke kernsamenvatting",
+      title: "Besluit",
       body: [
-        `Organisatie: ${report.meta.organization}`,
-        `Sector: ${report.meta.sector}`,
-        `Analyse datum: ${report.meta.analysis_date_label}`,
-        "",
-        `Besluit: ${asSentence(report.bestuurlijk_overzicht.aanbevolen_keuze)}`,
-        asSentence(report.bestuurlijk_overzicht.kernstelling),
-        asSentence(report.bestuurlijk_overzicht.grootste_risico_bij_uitstel),
-      ]
-        .filter(Boolean)
-        .join("\n"),
-    },
-    {
-      title: "Strategische signalen",
-      body: report.strategisch_rapport.strategische_signalen
-        .map(
-          (item, index) => [
-            `Signaal ${index + 1} — ${item.signaal}`,
-            `BETEKENIS — ${item.betekenis}`,
-            `MOGELIJKE ONTWIKKELING — ${item.mogelijke_ontwikkeling}`,
-          ].join("\n\n")
-        )
-        .join("\n\n"),
-    },
-    {
-      title: "Strategisch patroon",
-      body: [
-        `PATROON — ${report.strategisch_rapport.strategisch_patroon.patroon}`,
-        `HERKENNING — ${report.strategisch_rapport.strategisch_patroon.herkenning}`,
-        `RISICO — ${report.strategisch_rapport.strategisch_patroon.risico}`,
-        `STRATEGISCHE LES — ${report.strategisch_rapport.strategisch_patroon.strategische_les}`,
+        `KERNPROBLEEM\n${report.executive_decision_card?.core_problem || report.bestuurlijk_overzicht.kernprobleem}`,
+        `KERNSTELLING\n${report.executive_decision_card?.strategic_tension || report.bestuurlijk_overzicht.kernstelling}`,
+        `AANBEVOLEN KEUZE\n${report.executive_decision_card?.recommended_decision || report.bestuurlijk_overzicht.aanbevolen_keuze}`,
       ].join("\n\n"),
     },
     {
-      title: "Strategische ervaring",
-      body: [
-        `PATROON — ${report.strategisch_rapport.strategische_ervaring.patroon}`,
-        `VERGELIJKBARE SITUATIES — ${report.strategisch_rapport.strategische_ervaring.vergelijkbare_situaties}`,
-        `STRATEGISCHE LES — ${report.strategisch_rapport.strategische_ervaring.strategische_les}`,
-      ].join("\n\n"),
+      title: "Spanning",
+      body: report.board_analysis?.structural_tension || report.strategisch_rapport.strategische_paradox,
     },
     {
-      title: "Strategische paradox",
-      body: report.strategisch_rapport.strategische_paradox,
-    },
-    {
-      title: "Paradox kwaliteitscontrole",
-      body: [
-        `SCORE — ${report.strategisch_rapport.paradox_kwaliteitscontrole.score}/5`,
-        `BEOORDELING — ${report.strategisch_rapport.paradox_kwaliteitscontrole.beoordeling}`,
-        `VERBETERDE PARADOX — ${report.strategisch_rapport.paradox_kwaliteitscontrole.verbeterde_paradox}`,
-      ].join("\n\n"),
-    },
-    {
-      title: "Ongemakkelijke waarheid",
+      title: "Waarom dit gebeurt",
       body: [
         `WAARHEID — ${report.strategisch_rapport.ongemakkelijke_waarheid.waarheid}`,
         `UITLEG — ${report.strategisch_rapport.ongemakkelijke_waarheid.uitleg}`,
         `BESTUURLIJKE IMPLICATIE — ${report.strategisch_rapport.ongemakkelijke_waarheid.bestuurlijke_implicatie}`,
+        ...report.board_analysis.mechanism_analysis.map((item) => `MECHANISME — ${item}`),
       ].join("\n\n"),
+    },
+    {
+      title: "Scenario's",
+      body: report.board_analysis?.scenario_comparison?.length
+        ? report.board_analysis.scenario_comparison
+            .map(
+              (item) => [
+                `Scenario ${item.code} — ${item.title}`,
+                `MECHANISME — ${item.mechanism}`,
+                `RISICO — ${item.risk}`,
+                `STRATEGISCHE IMPLICATIE — ${item.strategic_implication}`,
+              ].join("\n")
+            )
+            .join("\n\n")
+        : report.strategisch_rapport.keuzerichtingen.join("\n"),
     },
     {
       title: "Doorbraakinzichten",
-      body: report.strategisch_rapport.doorbraakinzichten.join("\n"),
+      body: report.strategisch_rapport.doorbraakinzichten.join("\n\n"),
     },
     {
-      title: "Keuzerichtingen",
-      body: report.strategisch_rapport.keuzerichtingen.join("\n"),
-    },
-    {
-      title: "Aanbevolen keuze",
-      body: report.strategisch_rapport.besluit,
-    },
-    {
-      title: "Boardroom debat",
-      body: [
-        `CFO — ${report.strategisch_rapport.boardroom_debat.cfo}`,
-        `BESTUURDER — ${report.strategisch_rapport.boardroom_debat.bestuurder}`,
-        `STRATEGISCH ADVISEUR — ${report.strategisch_rapport.boardroom_debat.strategisch_adviseur}`,
-        `KERNVRAAG VOOR HET BESTUUR — ${report.strategisch_rapport.boardroom_debat.kernvraag_voor_het_bestuur}`,
-      ].join("\n\n"),
-    },
-    {
-      title: "Bestuurlijk actieplan",
+      title: "Bestuurlijke acties",
       body: governance
         .map(
           (item, index) => [
@@ -171,38 +155,8 @@ function buildStrategySections(report: StrategicBrainReport): ReportSection[] {
         .join("\n\n"),
     },
     {
-      title: "Vroegsignalering",
-      body: report.scenario_simulatie.strategische_stresstest
-        .map((item) => `Indicator: ${item.stressfactor}\nActie: ${item.signalen}`)
-        .join("\n\n"),
-    },
-    {
-      title: "Besluitgevolgen",
-      body: [
-        `OPERATIONEEL GEVOLG — ${decisionPressure.operational}`,
-        `FINANCIEEL GEVOLG — ${decisionPressure.financial}`,
-        `ORGANISATORISCH GEVOLG — ${decisionPressure.organizational}`,
-      ].join("\n\n"),
-    },
-    {
-      title: "Strategisch narratief",
-      body: [
-        `SITUATIE — ${report.strategisch_rapport.strategisch_narratief.situatie}`,
-        `SPANNING — ${report.strategisch_rapport.strategisch_narratief.spanning}`,
-        `DYNAMIEK — ${report.strategisch_rapport.strategisch_narratief.dynamiek}`,
-        `KEUZE — ${report.strategisch_rapport.strategisch_narratief.keuze}`,
-        `BESTUURLIJKE OPGAVE — ${report.strategisch_rapport.strategisch_narratief.bestuurlijke_opgave}`,
-      ].join("\n\n"),
-    },
-    {
-      title: "Board Decision Brief",
-      body: [
-        `KERNPROBLEEM — ${report.strategisch_rapport.board_decision_brief.kernprobleem}`,
-        `STRATEGISCHE KEUZE — ${report.strategisch_rapport.board_decision_brief.strategische_keuze}`,
-        `WAAROM DEZE KEUZE — ${report.strategisch_rapport.board_decision_brief.waarom_deze_keuze}`,
-        `BELANGRIJKSTE RISICO — ${report.strategisch_rapport.board_decision_brief.belangrijkste_risico}`,
-        `BESTUURLIJKE ACTIE — ${report.strategisch_rapport.board_decision_brief.bestuurlijke_actie}`,
-      ].join("\n\n"),
+      title: "Stopregels",
+      body: report.bestuurlijk_overzicht.stopregels.map((item) => `- ${item}`).join("\n"),
     },
   ];
 }

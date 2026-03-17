@@ -1,7 +1,7 @@
 import type { StrategicReport, AnalysisSession } from "@/platform/types";
 import { CyntraDesignTokens } from "@/design/cyntraDesignTokens";
 import { reportDesignSystem } from "@/design/reportDesignSystem";
-import { parseContactLines } from "@/services/reportText";
+import { parseContactLines as parseRawContactLines } from "@/services/reportText";
 
 type ReportMeta = {
   organizationName: string;
@@ -32,8 +32,23 @@ type ActionRow = {
 };
 
 const BOARDROOM_CORE_TITLES = new Set([
+  "BESLUIT",
+  "SPANNING",
+  "BESLUITPAGINA",
+  "STRATEGISCHE SPANNING",
+  "EXECUTIVE DECISION CARD",
+  "STRATEGISCH VERHAAL",
+  "SCENARIOVERGELIJKING",
+  "MECHANISME ANALYSE",
+  "WAAROM DIT GEBEURT",
+  "SCENARIO'S",
+  "DOORBRAAKINZICHTEN",
+  "BESTUURLIJKE ACTIES",
+  "STOPREGELS",
+  "VERDIEPING",
   "BESTUURLIJKE BESLISKAART",
   "HGBCO VERHAALLIJN",
+  "BESTUURLIJKE VERHAALLIJN",
   "BESTUURLIJKE KERNSAMENVATTING",
   "HOE CYNTRA KAN HELPEN",
   "STRATEGISCH SPEELVELD",
@@ -73,8 +88,31 @@ const BOARDROOM_CORE_TITLES = new Set([
 ]);
 
 const SECTION_ORDER = [
+  "BESLUIT",
+  "SPANNING",
+  "WAAROM DIT GEBEURT",
+  "SCENARIO'S",
+  "DOORBRAAKINZICHTEN",
+  "BESTUURLIJKE ACTIES",
+  "STOPREGELS",
+  "BESLUITPAGINA",
+  "STRATEGISCHE SPANNING",
+  "BESTUURLIJKE VERHAALLIJN",
+  "MECHANISME ANALYSE",
+  "WAAROM DIT GEBEURT",
+  "SCENARIO'S",
+  "DOORBRAAKINZICHTEN",
+  "BESTUURLIJKE ACTIES",
+  "STOPREGELS",
+  "EXECUTIVE DECISION CARD",
+  "STRATEGISCH VERHAAL",
+  "SCENARIOVERGELIJKING",
+  "MECHANISME ANALYSE",
+  "BESTUURLIJKE ACTIES",
+  "VERDIEPING",
   "BESTUURLIJKE BESLISKAART",
   "HGBCO VERHAALLIJN",
+  "BESTUURLIJKE VERHAALLIJN",
   "BESTUURLIJKE KERNSAMENVATTING",
   "HOE CYNTRA KAN HELPEN",
   "STRATEGISCH SPEELVELD",
@@ -95,21 +133,30 @@ const SECTION_ORDER = [
 ];
 
 const ABDF_PAGE_BREAK_TITLES = new Set([
-  "BESTUURLIJKE KERNSAMENVATTING",
-  "BESTUURLIJKE BESLISKAART",
-  "HGBCO VERHAALLIJN",
-  "STRATEGISCH SPEELVELD",
-  "HOE CYNTRA KAN HELPEN",
-  "DOORBRAAKINZICHTEN",
-  "STRATEGISCHE BREUKPUNTEN",
-  "BESTUURLIJK ACTIEPLAN",
-  "SCENARIO'S",
-  "BESTUURLIJKE STRESSTEST",
-  "BESLUITGEVOLGEN",
+  "VERDIEPING",
+  "TECHNISCHE ANALYSE",
 ]);
 
 function normalize(value: unknown): string {
   return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+const isNoise = (line: string): boolean => {
+  const value = String(line || "").trim();
+  if (!value) return true;
+  return [
+    /^\[UPLOAD_CONTEXT\]/i,
+    /^preview:/i,
+    /^bestand:/i,
+    /^notes?$/i,
+    /^bron:/i,
+    /^samenvatting\b/i,
+    /^fireflies\b/i,
+  ].some((pattern) => pattern.test(value));
+};
+
+function parseContactLines(source: unknown): string[] {
+  return parseRawContactLines(source).filter((line) => !isNoise(line));
 }
 
 function looksLikeInternalOrganizationId(value: string): boolean {
@@ -194,13 +241,36 @@ function canonicalizeSectionTitle(value: string): string {
   if (title === "STRATEGISCHE HEFBOOMPUNTEN") {
     return "STRATEGISCHE KEUZES MET MEESTE EFFECT";
   }
+  if (title === "HGBCO VERHAALLIJN") {
+    return "BESTUURLIJKE VERHAALLIJN";
+  }
+  if (title === "MECHANISME ANALYSE") {
+    return "WAAROM DIT GEBEURT";
+  }
+  if (title === "BESTUURLIJK ACTIEPLAN") {
+    return "BESTUURLIJKE ACTIES";
+  }
   return title;
 }
 
 function titleCaseHeading(value: string): string {
   const map: Record<string, string> = {
+    "BESLUIT": "Besluit",
+    "SPANNING": "Spanning",
+    "BESLUITPAGINA": "Besluitpagina",
+    "STRATEGISCHE SPANNING": "De echte strategische spanning",
+    "EXECUTIVE DECISION CARD": "Executive Decision Card",
+    "STRATEGISCH VERHAAL": "Strategisch Verhaal",
+    "SCENARIOVERGELIJKING": "Scenariovergelijking",
+    "MECHANISME ANALYSE": "Waarom dit gebeurt",
+    "WAAROM DIT GEBEURT": "Waarom dit gebeurt",
+    "SCENARIO'S": "Scenario's",
+    "STOPREGELS": "Stopregels",
+    "BESTUURLIJKE ACTIES": "Bestuurlijke Acties",
+    "VERDIEPING": "Verdieping",
     "BESTUURLIJKE BESLISKAART": "Bestuurlijke Besliskaart",
-    "HGBCO VERHAALLIJN": "Bestuurlijke logica (HGBCO)",
+    "HGBCO VERHAALLIJN": "Bestuurlijke verhaallijn",
+    "BESTUURLIJKE VERHAALLIJN": "Bestuurlijke verhaallijn",
     "BESTUURLIJKE KERNSAMENVATTING": "Kernsamenvatting voor bestuur",
     "HOE CYNTRA KAN HELPEN": "Waar Cyntra van betekenis kan zijn",
     "STRATEGISCH SPEELVELD": "Strategisch speelveld",
@@ -215,7 +285,6 @@ function titleCaseHeading(value: string): string {
     "BESTUURLIJK ACTIEPLAN": "Bestuurlijke acties",
     "90-DAGEN INTERVENTIEPLAN": "Bestuurlijke acties",
     "STRATEGISCHE BREUKPUNTEN": "Strategische breukpunten",
-    "SCENARIO'S": "Scenario-overzicht",
     "BESTUURLIJKE STRESSTEST": "Stressproef",
     "STRATEGISCHE SCENARIO SIMULATIE": "Scenarioanalyse",
     "SCENARIO SIMULATIE": "Scenarioanalyse",
@@ -301,11 +370,46 @@ function resolveContactLines(meta: ReportMeta): string[] {
   return ["Geen contactgegevens gevonden in de broninput"];
 }
 
+function wrapTextToCharacterLimit(text: string, maxChars = 80): string {
+  const lines = String(text || "").split("\n");
+  const wrapped: string[] = [];
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd();
+    if (!line) {
+      wrapped.push("");
+      continue;
+    }
+    let remaining = line;
+    while (remaining.length > maxChars) {
+      const slice = remaining.slice(0, maxChars + 1);
+      const breakpoint = Math.max(slice.lastIndexOf(" "), slice.lastIndexOf("-"));
+      const cut = breakpoint > 20 ? breakpoint : maxChars;
+      wrapped.push(remaining.slice(0, cut).trim());
+      remaining = remaining.slice(cut).trim();
+    }
+    if (remaining) wrapped.push(remaining);
+  }
+  return wrapped.join("\n");
+}
+
 export function parseReportSections(text: string): ParsedSection[] {
   const source = cleanText(text);
   if (!source) return [];
   const headings = [
+    "BESLUIT",
+    "SPANNING",
+    "BESLUITPAGINA",
+    "STRATEGISCHE SPANNING",
+    "EXECUTIVE DECISION CARD",
+    "STRATEGISCH VERHAAL",
+    "SCENARIOVERGELIJKING",
+    "MECHANISME ANALYSE",
+    "WAAROM DIT GEBEURT",
+    "BESTUURLIJKE ACTIES",
+    "STOPREGELS",
+    "VERDIEPING",
     "BESTUURLIJKE BESLISKAART",
+    "BESTUURLIJKE VERHAALLIJN",
     "BESTUURLIJKE KERNSAMENVATTING",
     "STRATEGISCH SPEELVELD",
     "BESLUITVRAAG",
@@ -432,7 +536,7 @@ function splitParagraphs(text: string): string[] {
   const source = cleanText(text)
     .split(/\n\s*\n/g)
     .map((part) => part.trim())
-    .flatMap((part) => part.split(/\n(?=(?:INZICHT|MECHANISME|BESTUURLIJKE CONSEQUENTIE|IMPLICATIE|ACTIE|EIGENAAR|DEADLINE|KPI|RISICO|NORM|BESTUURLIJKE IMPLICATIE|SYMPTOOM|OORZAAK|GEVOLG|SYSTEEMDRUK|STOPREGEL)\b)/g))
+    .flatMap((part) => part.split(/\n(?=(?:Scenario\s+[A-C]\b|INZICHT|MECHANISME|BESTUURLIJKE CONSEQUENTIE|IMPLICATIE|ACTIE|EIGENAAR|DEADLINE|KPI|RISICO|NORM|BESTUURLIJKE IMPLICATIE|SYMPTOOM|OORZAAK|GEVOLG|SYSTEEMDRUK|STOPREGEL)\b)/g))
     .map((part) => part.trim())
     .filter((part) => part && !/^Geen inhoud beschikbaar\.?$/i.test(part));
 
@@ -441,7 +545,7 @@ function splitParagraphs(text: string): string[] {
     if (
       merged.length &&
       /^(?:ONDERLIGGENDE OORZAAK|BESTUURLIJK GEVOLG|MECHANISME|RISICO|BESTUURLIJKE IMPLICATIE|OPERATIONEEL GEVOLG|FINANCIEEL GEVOLG|ORGANISATORISCH GEVOLG)$/i.test(merged[merged.length - 1]) &&
-      !/^(?:INZICHT|MECHANISME|IMPLICATIE|BESTUURLIJKE CONSEQUENTIE|BESTUURLIJKE IMPLICATIE|RISICO|NORM|ACTIE|SYMPTOOM|OORZAAK|GEVOLG|SYSTEEMDRUK|STOPREGEL)\b/i.test(part)
+      !/^(?:Scenario\s+[A-C]\b|INZICHT|MECHANISME|IMPLICATIE|BESTUURLIJKE CONSEQUENTIE|BESTUURLIJKE IMPLICATIE|RISICO|NORM|ACTIE|SYMPTOOM|OORZAAK|GEVOLG|SYSTEEMDRUK|STOPREGEL)\b/i.test(part)
     ) {
       merged[merged.length - 1] = `${merged[merged.length - 1]} — ${part}`;
       continue;
@@ -464,14 +568,18 @@ function parseActionRows(text: string): ActionRow[] {
   ).map((match) => `${match[1]}\n${match[2]}`.trim());
   const blocks = (exactBlocks.length ? exactBlocks : [source])
     .map((block) => block.trim())
-    .filter((block) => /ACTIE\s+—/i.test(block));
+    .filter((block) => /(?:ACTIE\s+—|ACTIE\s*\n)/i.test(block));
   return blocks.map((block, index) => ({
     action: normalize(
-      block.match(/ACTIE\s+—\s*(.+?)(?=\n(?:MECHANISME|Bestuurlijk besluit|BESTUURLIJK BESLUIT|Eigenaar|VERANTWOORDELIJKE|Deadline|KPI)\b|$)/i)?.[1]
+      block.match(/ACTIE\s+—\s*(.+?)(?=\n(?:MECHANISME|WAAROM|Bestuurlijk besluit|BESTUURLIJK BESLUIT|Eigenaar|VERANTWOORDELIJKE|Deadline|DEADLINE|KPI)\b|$)/i)?.[1]
+        || block.match(/ACTIE\s*\n(.+?)(?=\n(?:MECHANISME|WAAROM|Bestuurlijk besluit|BESTUURLIJK BESLUIT|Eigenaar|VERANTWOORDELIJKE|Deadline|DEADLINE|KPI)\b|$)/i)?.[1]
         || `Actie ${index + 1}`
     ),
     mechanism: normalize(
-      block.match(/MECHANISME\s*(?::|—)\s*(.+?)(?=\n(?:Bestuurlijk besluit|BESTUURLIJK BESLUIT|Eigenaar|VERANTWOORDELIJKE|Deadline|KPI)\b|$)/i)?.[1] || ""
+      block.match(/MECHANISME\s*(?::|—)\s*(.+?)(?=\n(?:WAAROM|Bestuurlijk besluit|BESTUURLIJK BESLUIT|Eigenaar|VERANTWOORDELIJKE|Deadline|DEADLINE|KPI)\b|$)/i)?.[1]
+      || block.match(/WAAROM\s*\n(.+?)(?=\n(?:Bestuurlijk besluit|BESTUURLIJK BESLUIT|Eigenaar|VERANTWOORDELIJKE|Deadline|DEADLINE|KPI)\b|$)/i)?.[1]
+      || block.match(/WAAROM\s*(?::|—)\s*(.+?)(?=\n(?:Bestuurlijk besluit|BESTUURLIJK BESLUIT|Eigenaar|VERANTWOORDELIJKE|Deadline|DEADLINE|KPI)\b|$)/i)?.[1]
+      || ""
     ),
     boardDecision: normalize(
       block.match(/(?:Bestuurlijk besluit|BESTUURLIJK BESLUIT)\s*(?::|—)\s*(.+?)(?=\n(?:Eigenaar|VERANTWOORDELIJKE|Deadline|KPI)\b|$)/i)?.[1] || ""
@@ -479,14 +587,20 @@ function parseActionRows(text: string): ActionRow[] {
     owner: normalize(
       block.match(/VERANTWOORDELIJKE\s*—\s*(.+?)(?:\s*•\s*.+)?(?=\nKPI\b|$)/i)?.[1]
       || block.match(/(?:Eigenaar|VERANTWOORDELIJKE)\s*(?::|—)\s*(.+?)(?=\n(?:Deadline|KPI)\b|$)/i)?.[1]
+      || block.match(/EIGENAAR\s*\n(.+?)(?=\n(?:Deadline|DEADLINE|KPI)\b|$)/i)?.[1]
       || "Bestuur"
     ),
     deadline: normalize(
       block.match(/Deadline\s*(?::|—)\s*(.+?)(?=\nKPI\b|$)/i)?.[1]
+      || block.match(/DEADLINE\s*\n(.+?)(?=\nKPI\b|$)/i)?.[1]
       || block.match(/VERANTWOORDELIJKE\s*—\s*.+?•\s*(.+?)(?=\nKPI\b|$)/i)?.[1]
       || "90 dagen"
     ),
-    kpi: normalize(block.match(/KPI\s*(?::|—)\s*(.+?)$/i)?.[1] || ""),
+    kpi: normalize(
+      block.match(/KPI\s*(?::|—)\s*(.+?)$/i)?.[1]
+      || block.match(/KPI\s*\n([\s\S]+)$/i)?.[1]
+      || ""
+    ),
   })).filter((row) => row.action);
 }
 
@@ -513,7 +627,7 @@ function estimateParagraphHeight(text: string, width: number, lineHeight: number
 function splitLabeledStatement(part: string): { label: string; body: string } | null {
   const match = String(part || "")
     .trim()
-    .match(/^((?:KERNINZICHT|ONDERLIGGENDE OORZAAK|BESTUURLIJK GEVOLG|INZICHT|MECHANISME|IMPLICATIE|BESTUURLIJKE CONSEQUENTIE|BESTUURLIJKE IMPLICATIE|RISICO|NORM|ACTIE|SYMPTOOM|OORZAAK|GEVOLG|SYSTEEMDRUK|STOPREGEL|OPERATIONEEL GEVOLG|FINANCIEEL GEVOLG|ORGANISATORISCH GEVOLG))\s*[—:-]\s*([\s\S]+)$/i);
+    .match(/^((?:KERNINZICHT|ONDERLIGGENDE OORZAAK|BESTUURLIJK GEVOLG|INZICHT|MECHANISME|WAAROM|EIGENAAR|DEADLINE|KPI|BESLUITVRAAG|IMPLICATIE|BESTUURLIJKE CONSEQUENTIE|BESTUURLIJKE IMPLICATIE|RISICO|NORM|ACTIE|SYMPTOOM|OORZAAK|GEVOLG|SYSTEEMDRUK|STOPREGELS?|OPERATIONEEL GEVOLG|FINANCIEEL GEVOLG|ORGANISATORISCH GEVOLG))\s*[—:-]\s*([\s\S]+)$/i);
   if (!match) return null;
   return {
     label: match[1].toUpperCase(),
@@ -631,7 +745,7 @@ export async function buildStyledReportPdfBlob(params: {
     doc.setTextColor(...color);
     doc.setFont(reportDesignSystem.typography.pdfFont, options?.font || "normal");
     doc.setFontSize(size);
-    const lines = doc.splitTextToSize(text, contentWidth);
+    const lines = doc.splitTextToSize(wrapTextToCharacterLimit(text, 80), contentWidth);
     for (const line of lines) {
       doc.text(String(line), x, y);
       y += lineHeight;
@@ -661,16 +775,18 @@ export async function buildStyledReportPdfBlob(params: {
   const drawActionCards = (rows: ActionRow[], startY: number) => {
     let y = startY;
     for (const row of rows) {
-      const summaryText = [
-        row.mechanism ? `MECHANISME — ${row.mechanism}` : "",
-        row.boardDecision ? `BESTUURLIJK BESLUIT — ${row.boardDecision}` : "",
+      const summaryParts = [
+        row.mechanism ? `WAAROM — ${row.mechanism}` : "",
+        row.owner ? `EIGENAAR — ${row.owner}` : "",
+        row.deadline ? `DEADLINE — ${row.deadline}` : "",
         row.kpi ? `KPI — ${row.kpi}` : "",
-      ].filter(Boolean).join("\n");
+      ].filter(Boolean);
+      const summaryText = summaryParts.join("\n");
       const rowHeight =
-        78 + estimateParagraphHeight(summaryText, contentWidth - 36, 15, doc.splitTextToSize.bind(doc));
+        44 + estimateParagraphHeight(summaryText, contentWidth - 36, 15, doc.splitTextToSize.bind(doc));
       if (y + rowHeight > pageHeight - 52) {
         y = addPage();
-        y = writeSectionHeading("90-DAGEN INTERVENTIEPLAN", y - 18);
+        y = writeSectionHeading("BESTUURLIJKE ACTIES", y - 18);
       }
       doc.setFillColor(...theme.panel);
       doc.setDrawColor(...theme.line);
@@ -680,15 +796,9 @@ export async function buildStyledReportPdfBlob(params: {
       doc.setTextColor(...theme.ink);
       doc.setFont(reportDesignSystem.typography.pdfFont, "bold");
       doc.setFontSize(11.5);
-      doc.text(doc.splitTextToSize(row.action, contentWidth - 140), margin + 10, y + 8);
+      doc.text(doc.splitTextToSize(row.action, contentWidth - 24), margin + 10, y + 8);
 
-      doc.setTextColor(...theme.muted);
-      doc.setFont(reportDesignSystem.typography.pdfFont, "bold");
-      doc.setFontSize(8.5);
-      doc.text(`Eigenaar: ${row.owner}`, pageWidth - margin, y + 8, { align: "right" });
-      doc.text(`Deadline: ${row.deadline}`, pageWidth - margin, y + 22, { align: "right" });
-
-      let cardY = y + 28;
+      let cardY = y + 30;
       for (const part of splitParagraphs(summaryText)) {
         const labeled = splitLabeledStatement(part);
         if (labeled) {
@@ -708,7 +818,7 @@ export async function buildStyledReportPdfBlob(params: {
         });
         cardY += 8;
       }
-      y += rowHeight + 14;
+      y += rowHeight + 12;
     }
     return y;
   };
@@ -718,11 +828,15 @@ export async function buildStyledReportPdfBlob(params: {
       "Organisatie",
       "Sector",
       "Analyse datum",
+      "BESTUURLIJK BESLUIT",
+      "WAAROM DIT BESLUIT",
+      "BESLUITVRAAG",
       "KERNPROBLEEM",
       "KERNSTELLING",
       "AANBEVOLEN KEUZE",
       "WAAROM DEZE KEUZE",
       "GROOTSTE RISICO BIJ UITSTEL",
+      "STOPREGELS",
       "STOPREGEL",
     ];
     const fields = parseLabeledBlockFields(section.body, labels);
@@ -759,76 +873,67 @@ export async function buildStyledReportPdfBlob(params: {
   };
 
   const drawCover = () => {
-    doc.setFillColor(...theme.navy);
+    doc.setFillColor(...theme.bg);
     doc.rect(0, 0, pageWidth, pageHeight, "F");
-    doc.setFillColor(...theme.gold);
-    doc.rect(0, 0, 12, pageHeight, "F");
+    doc.setFillColor(...theme.navy);
+    doc.rect(0, 0, pageWidth, 84, "F");
     doc.setTextColor(...theme.gold);
     doc.setFont(reportDesignSystem.typography.pdfFont, "bold");
     doc.setFontSize(8.5);
-    doc.text(coverKicker, margin, 48);
-    doc.setDrawColor(...theme.gold);
-    doc.setLineWidth(1);
-    doc.line(margin, 62, margin + 164, 62);
-    doc.setFontSize(11);
-    doc.text(coverDocumentLabel.toUpperCase(), margin, 86);
+    doc.text("EXECUTIVE MEMO", margin, 34);
+    doc.text(coverKicker, margin, 50);
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(36);
-    const coverTitleLines = doc.splitTextToSize(normalize(params.title), contentWidth - 60);
-    let coverTitleY = 156;
-    for (const line of coverTitleLines.slice(0, 2)) {
-      doc.text(String(line), margin, coverTitleY);
-      coverTitleY += 38;
-    }
-    doc.setFont(reportDesignSystem.typography.pdfFont, "normal");
-    doc.setFontSize(12.5);
-    doc.setTextColor(226, 229, 236);
-    const coverSubtitleLines = doc.splitTextToSize(normalize(params.subtitle || deriveCoverSubtitle(params.meta)), contentWidth - 60);
-    let coverSubtitleY = Math.max(coverTitleY + 4, 222);
-    for (const line of coverSubtitleLines.slice(0, 2)) {
-      doc.text(String(line), margin, coverSubtitleY);
-      coverSubtitleY += 18;
-    }
+    doc.setFontSize(20);
+    doc.text(normalize(params.meta.organizationName), margin, 74);
 
-    const dividerY = Math.max(coverSubtitleY + 24, 278);
-    doc.setDrawColor(92, 108, 126);
-    doc.setLineWidth(1);
-    doc.line(margin, dividerY, pageWidth - margin, dividerY);
+    let y = 124;
+    y = writeLabel("MEMO", y);
+    y = writeWrapped(normalize(params.title || coverDocumentLabel), margin, y + 4, {
+      size: 24,
+      color: theme.ink,
+      lineHeight: 28,
+      font: "bold",
+    });
+    y += 18;
 
-    doc.setTextColor(184, 194, 209);
-    doc.setFont(reportDesignSystem.typography.pdfFont, "normal");
-    doc.setFontSize(10);
-    doc.text("Voor bestuur, directie en toezicht", margin, dividerY + 28);
+    y = writeLabel("KERNBOODSCHAP", y);
+    y = writeWrapped(normalize(params.subtitle || deriveCoverSubtitle(params.meta)), margin, y + 4, {
+      size: 12,
+      color: theme.ink,
+      lineHeight: 18,
+    });
+    y += 18;
 
-    doc.setTextColor(201, 168, 84);
-    doc.setFont(reportDesignSystem.typography.pdfFont, "bold");
-    doc.setFontSize(8.5);
-    doc.text("ORGANISATIE", margin, 352);
-    doc.text("SECTOR", margin, 408);
-    doc.text("DOSSIER", margin, 464);
-    const resolvedContactLines = resolveContactLines(params.meta);
-    doc.text("CONTACTPUNT", margin, 520);
-
-    doc.setTextColor(255, 255, 255);
-    doc.setFont(reportDesignSystem.typography.pdfFont, "bold");
-    doc.setFontSize(21);
-    doc.text(normalize(params.meta.organizationName), margin, 378);
-    doc.setFont(reportDesignSystem.typography.pdfFont, "normal");
-    doc.setFontSize(16);
-    doc.text(normalize(params.meta.sector), margin, 434);
-    doc.text(coverDocumentLabel, margin, 490);
-    doc.setFontSize(11);
-    const contactText = resolvedContactLines.join(" • ");
-    const contactLines = doc.splitTextToSize(contactText, contentWidth);
-    let cy = 546;
-    for (const line of contactLines) {
-      doc.text(String(line), margin, cy);
-      cy += 16;
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(...theme.line);
+    doc.roundedRect(margin - 8, y - 10, contentWidth + 16, 118, 10, 10, "FD");
+    let cardY = y + 10;
+    const memoLines = [
+      `ORGANISATIE — ${normalize(params.meta.organizationName)}`,
+      `SECTOR — ${normalize(params.meta.sector)}`,
+      `DOSSIER — ${coverDocumentLabel}`,
+      `OPGESTELD OP — ${formatNlDateTime(params.meta.generatedAt)}`,
+    ];
+    for (const line of memoLines) {
+      cardY = writeWrapped(line, margin + 10, cardY, {
+        size: 11,
+        color: theme.ink,
+        lineHeight: 16,
+        font: "bold",
+      });
+      cardY += 6;
     }
 
-    doc.setTextColor(214, 220, 230);
+    y += 140;
+    y = writeLabel("CONTACTPUNT", y);
+    y = writeWrapped(resolveContactLines(params.meta).join(" • "), margin, y + 2, {
+      size: 10.5,
+      color: theme.muted,
+      lineHeight: 15,
+    });
+
+    doc.setTextColor(...theme.muted);
     doc.setFontSize(9);
-    doc.text(`Opgesteld op ${formatNlDateTime(params.meta.generatedAt)}`, margin, pageHeight - 48);
     doc.text("Vertrouwelijk document voor bestuurlijke besluitvorming", margin, pageHeight - 28);
     doc.text(normalize(params.meta.analysisType || params.meta.documentType), pageWidth - margin, pageHeight - 28, { align: "right" });
   };
@@ -928,7 +1033,7 @@ export async function buildStyledReportPdfBlob(params: {
       0
     );
 
-    if (ABDF_PAGE_BREAK_TITLES.has(normalizedTitle) && y > 150) {
+    if (ABDF_PAGE_BREAK_TITLES.has(normalizedTitle) && y > 420) {
       y = addPage();
     }
 
@@ -940,13 +1045,13 @@ export async function buildStyledReportPdfBlob(params: {
       y = addPage();
     }
 
-    if (normalizedTitle === "BESTUURLIJKE BESLISKAART") {
+    if (normalizedTitle === "BESTUURLIJKE BESLISKAART" || normalizedTitle === "BESLUITPAGINA") {
       y = drawDecisionCardSection(section, y);
       continue;
     }
 
     let bodyY = writeSectionHeading(normalizedTitle, y);
-    if (section.title.toUpperCase() === "90-DAGEN INTERVENTIEPLAN") {
+    if (section.title.toUpperCase() === "90-DAGEN INTERVENTIEPLAN" || section.title.toUpperCase() === "BESTUURLIJKE ACTIES") {
       bodyY = drawActionCards(parseActionRows(section.body), bodyY + 8);
       y = bodyY + 24;
       continue;

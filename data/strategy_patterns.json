@@ -1,0 +1,52 @@
+[
+  {
+    "id": "youth-care-portfolio-capacity",
+    "sector": "Jeugdzorg",
+    "pattern": "portfolio breadth vs operational capacity",
+    "dominant_problem": "breed gemeentenportfolio overschrijdt teamcapaciteit",
+    "strategic_tension": "portfolio breadth vs operational capacity",
+    "recommended_decision": "activeer kern-, behoud- en uitstapgemeenten en koppel instroom aan caseloadgrenzen",
+    "evidence_markers": ["gemeenten", "caseload", "wachttijd", "consortium", "reistijd", "no-show"],
+    "organizations": 3
+  },
+  {
+    "id": "care-contract-dependency",
+    "sector": "Zorg",
+    "pattern": "contract dependency under fixed tariffs",
+    "dominant_problem": "contractafhankelijkheid beperkt strategische speelruimte",
+    "strategic_tension": "margin vs accessibility",
+    "recommended_decision": "herprioriteer contractmix en stuur op margegrenzen per productlijn",
+    "evidence_markers": ["contract", "tarief", "budget", "plafond", "marge"],
+    "organizations": 4
+  },
+  {
+    "id": "growth-culture-retention",
+    "sector": "Zorg",
+    "pattern": "growth pace vs culture stability",
+    "dominant_problem": "groeitempo tast retentie en kwaliteit aan",
+    "strategic_tension": "growth vs culture",
+    "recommended_decision": "beperk schaal tot ritme dat teamstabiliteit en retentie beschermt",
+    "evidence_markers": ["retentie", "uitstroom", "werkplezier", "vaste medewerkers", "flexibele schil"],
+    "organizations": 2
+  },
+  {
+    "id": "governance-fragmentation-network",
+    "sector": "Publiek",
+    "pattern": "network position under fragmented governance",
+    "dominant_problem": "externe toegang en interne sturing lopen uiteen",
+    "strategic_tension": "network relevance vs controllability",
+    "recommended_decision": "formaliseer mandaat, escalatie en triageroutering in een vast bestuursritme",
+    "evidence_markers": ["consortium", "partner", "mandaat", "triage", "governance"],
+    "organizations": 5
+  },
+  {
+    "id": "ggz-contract-capacity",
+    "sector": "GGZ",
+    "pattern": "contract ceilings vs treatment capacity",
+    "dominant_problem": "contractplafonds en zorgzwaarte drukken behandelcapaciteit en marge",
+    "strategic_tension": "volume growth vs viable treatment capacity",
+    "recommended_decision": "bescherm de kern-ggz en heronderhandel plafonds, tariefmix en zorgpaden",
+    "evidence_markers": ["contractplafond", "zorgzwaarte", "behandelcapaciteit", "wachttijd", "no-show", "zorgpad"],
+    "organizations": 4
+  }
+]

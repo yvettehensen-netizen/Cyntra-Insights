@@ -1,1 +1,0 @@
-const s="SVG",a="VIEW",n="TEXT",t="LINK",c="PAGE",o="NOTE",T="DEFS",e="IMAGE",E="TSPAN",N="CANVAS",I="DOCUMENT",S="TEXT_INSTANCE";export{N as C,I as D,e as I,t as L,o as N,c as P,s as S,n as T,a as V,S as a,T as b,E as c};
