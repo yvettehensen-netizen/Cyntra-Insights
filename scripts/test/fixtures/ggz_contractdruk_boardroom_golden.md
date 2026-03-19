@@ -1,36 +1,38 @@
-GGZ Voor Elkaar
+GGZ Voor Jou
 Sector: GGZ
-Analyse datum: 2026-03-12
+Analyse datum: 2026-03-16
 
 KERNPROBLEEM
-Tariefdruk, oplopende loonkosten en plafondcontracten dwingen de organisatie tot een keuze tussen kernconsolidatie en versnelling van nieuwe proposities.
+Contractplafonds, zorgzwaarte en behandelcapaciteit drukken de marge harder dan extra vraag haar kan herstellen.
 
 KERNSTELLING
-De bestuurlijke kern is niet groei versnellen maar margelogica herstellen voordat nieuwe verbreding bestuurlijk verantwoord is.
+De GGZ-kern kan niet tegelijk volumegroei, contractplafonds en behandelcapaciteit maximaal oprekken zonder dat wachttijd en marge verslechteren.
 
 AANBEVOLEN KEUZE
-Kern consolideren en verbreding conditioneel maken.
+Kern beschermen en contractmix heronderhandelen.
 
-SCENARIO'S
-Scenario A — Kern consolideren
-MECHANISME: contractdiscipline en margesturing gaan voor nieuwe verbreding
-RISICO: tijdelijk minder commerciële snelheid
-RELATIE TOT SPANNING: Kern consolideren / Nieuwe proposities versnellen
-BESTUURLIJKE IMPLICATIE: bestuur maakt margekaart en stop-doing bindend
+WAAROM DEZE KEUZE
+Contract, zorgzwaarte, wachttijd en behandelaarcapaciteit zijn de dominante stuurvariabelen in de GGZ-kern. Behandelmix, contractplafonds en no-show bepalen samen de effectieve margeruimte per zorgpad.
 
-Scenario B — Nieuwe proposities versnellen
-MECHANISME: groei zoeken buiten de kern om omzetdruk te compenseren
-RISICO: extra druk op cash, management en behandelcapaciteit
-RELATIE TOT SPANNING: Kern consolideren / Nieuwe proposities versnellen
-BESTUURLIJKE IMPLICATIE: bestuur accepteert hogere uitvoeringsvolatiliteit
+STOPREGEL: Herzie direct bij wachttijd > 14 weken gedurende twee meetperiodes.
+STOPREGEL: Herzie direct bij bezettingsgraad > 92% gedurende twee meetperiodes.
+STOPREGEL: Herzie direct bij marge < 5% gedurende twee meetperiodes.
 
-INTERVENTIES
-STOPREGEL 1
-ACTIE: Maak productrendement en plafondimpact per contract zichtbaar
-RICHTING: Kern consolideren en verbreding conditioneel maken
-WAAROM: voorkomt schijngroei zonder margeherstel
-RISICO: zonder inzicht absorbeert de kern blijvend verlies
-STOPREGEL: Herzie direct bij marge < 4%
-OWNER: CFO
-DEADLINE: 30 dagen
-KPI: contract- en productrendement volledig zichtbaar
+SCENARIO A
+Kern beschermen en contractmix heronderhandelen.
+MECHANISME — Stuur op marge en behandelcapaciteit door plafonds en tariefmix te herijken op behandelzwaarte.
+RISICO — Zonder echte contractdiscipline blijft volumegroei verlieslatend.
+STRATEGISCHE IMPLICATIE — Bestuur moet contractruimte en zorgpaden als één besluitdomein behandelen.
+
+SCENARIO B
+Selectief groeien in rendabele zorgpaden.
+MECHANISME — Verhoog behandelvolume alleen waar contractruimte en capaciteit dat aantoonbaar toelaten.
+RISICO — Selectieve groei kan de niet-rendabele kern onzichtbaar verder belasten.
+STRATEGISCHE IMPLICATIE — Bestuur moet per zorgpad harde rendements- en capaciteitsgrenzen vastleggen.
+
+SCENARIO C
+Netwerkzorg via partners en doorverwijzing verdiepen.
+MECHANISME — Verschuif vraag via partners en doorverwijzing zodat de kerncapaciteit niet alle zorgvraag hoeft te absorberen.
+RISICO — Governancecomplexiteit stijgt wanneer partnerschap sneller groeit dan mandaat en kwaliteitsborging.
+STRATEGISCHE IMPLICATIE — Bestuur moet rolverdeling, escalatie en kwaliteitsnormen formaliseren.
+

@@ -16,11 +16,10 @@ export default function PublicNavbar() {
         <div className="hidden xl:flex items-center gap-5">
           <a href="/#top" className="text-sm text-[#D6DEE5] transition hover:text-white">Home</a>
           <Link to="/hoe-het-werkt" className="text-sm text-[#D6DEE5] transition hover:text-white">Hoe Cyntra werkt</Link>
-          <a href="/#aurelius" className="text-sm text-[#D6DEE5] transition hover:text-white">Aurelius</a>
-          <a href="/#voorbeeldanalyse" className="text-sm text-[#D6DEE5] transition hover:text-white">Voorbeeldanalyse</a>
+          <Link to="/aurelius" className="text-sm text-[#D6DEE5] transition hover:text-white">Aurelius</Link>
+          <Link to="/besluitdocument" className="text-sm text-[#D6DEE5] transition hover:text-white">Voorbeeldanalyse</Link>
           <Link to="/prijzen" className="text-sm text-[#D6DEE5] transition hover:text-white">Prijzen</Link>
-          <a href="/#over-cyntra" className="text-sm text-[#D6DEE5] transition hover:text-white">Over Cyntra</a>
-          <a href="/#contact" className="text-sm text-[#D6DEE5] transition hover:text-white">Contact</a>
+          <Link to="/contact" className="text-sm text-[#D6DEE5] transition hover:text-white">Contact</Link>
         </div>
 
         <div className="hidden lg:flex items-center gap-2 shrink-0">
@@ -60,11 +59,10 @@ export default function PublicNavbar() {
             <div className="mt-10 space-y-5 text-cyntra-primary">
               <a href="/#top" onClick={() => setMobileOpen(false)}>Home</a>
               <Link to="/hoe-het-werkt" onClick={() => setMobileOpen(false)}>Hoe Cyntra werkt</Link>
-              <a href="/#aurelius" onClick={() => setMobileOpen(false)}>Aurelius</a>
-              <a href="/#voorbeeldanalyse" onClick={() => setMobileOpen(false)}>Voorbeeldanalyse</a>
+              <Link to="/aurelius" onClick={() => setMobileOpen(false)}>Aurelius</Link>
+              <Link to="/besluitdocument" onClick={() => setMobileOpen(false)}>Voorbeeldanalyse</Link>
               <Link to="/prijzen" onClick={() => setMobileOpen(false)}>Prijzen</Link>
-              <a href="/#over-cyntra" onClick={() => setMobileOpen(false)}>Over Cyntra</a>
-              <a href="/#contact" onClick={() => setMobileOpen(false)}>Contact</a>
+              <Link to="/contact" onClick={() => setMobileOpen(false)}>Contact</Link>
             </div>
 
             <Link

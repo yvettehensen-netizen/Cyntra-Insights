@@ -60,6 +60,14 @@ assert(
 );
 
 assert(
+  reportPdf.includes("async function assertRenderablePdfBlob(blob: Blob): Promise<void>") &&
+    reportPdf.includes('throw new Error("PDF-rendering leverde geen geldig PDF-document op.")') &&
+    reportPdf.includes("await assertRenderablePdfBlob(pdfOutput);") &&
+    reportPdf.includes("await assertRenderablePdfBlob(pdfBlob);"),
+  "pdf renderer valideert het document niet expliciet voor preview en download"
+);
+
+assert(
   reportPdf.includes("setTimeout(() => URL.revokeObjectURL(pdfUrl), params.previewWindow ? 60000 : 5000);"),
   "pdf renderer houdt blob-URL niet lang genoeg in leven"
 );
@@ -86,17 +94,25 @@ assert(
 );
 
 assert(
+  reportPage.includes("function buildFullDossierExport(") &&
+    reportPage.includes("buildScenarioReportExport(model)") &&
+    reportPage.includes("buildTechnicalAnalysisExport(model)"),
+  "volledig dossier combineert strategisch rapport, scenario's en technische analyse niet"
+);
+
+assert(
   reportPage.includes("function buildStrategicReportExport(") &&
-    reportPage.includes('"STRATEGISCH SPEELVELD"') &&
+    reportPage.includes('"BESLUITPAGINA"') &&
+    reportPage.includes('"STRATEGISCHE SPANNING"') &&
     reportPage.includes('"SCENARIO\'S"') &&
-    reportPage.includes('"BESTUURLIJKE STRESSTEST"') &&
-    reportPage.includes('"BESLUITGEVOLGEN"') &&
-    reportPage.includes('"BESTUURLIJKE BESLISKAART"'),
+    reportPage.includes('"DOORBRAAKINZICHTEN"') &&
+    reportPage.includes('"STOPREGELS"'),
   "strategische export gebruikt geen gecureerde bestuursstructuur"
 );
 
 assert(
-  reportPdf.includes('"BESTUURLIJKE BESLISKAART"') &&
+  reportPdf.includes('"BESLUITPAGINA"') &&
+    reportPdf.includes('"STRATEGISCHE SPANNING"') &&
     reportPdf.includes('"TECHNISCHE ANALYSE"'),
   "pdf parser herkent strategische exportkoppen niet"
 );

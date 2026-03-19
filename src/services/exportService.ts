@@ -1,4 +1,6 @@
 import type { StrategicReport } from "@/platform/types";
+import type { BoardroomDocument } from "@/types/BoardroomDocument";
+import type { StrategicReport as CanonicalStrategicReport } from "@/types/StrategicReport";
 
 function triggerDownload(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
@@ -46,6 +48,8 @@ export async function exportPDF(
     preview?: boolean;
     download?: boolean;
     previewWindow?: Window | null;
+    canonicalReport?: CanonicalStrategicReport;
+    boardroomDocument?: BoardroomDocument;
   }
 ): Promise<void> {
   const { downloadStyledReportPdf, metaFromReport } = await import("./reportPdf");
@@ -76,6 +80,8 @@ export async function exportPDF(
     subtitle: options?.subtitle || "Bestuurlijk analyse- en besluitdocument",
     reportBody: report.report_body || "Geen rapportinhoud beschikbaar.",
     meta: metaFromReport(report, options),
+    sourceStrategicReport: options?.canonicalReport,
+    sourceBoardroomDocument: options?.boardroomDocument,
     previewWindow,
     skipDownload: options?.download === false,
   });
@@ -92,6 +98,8 @@ export async function createPdfPreviewUrl(
     rawInput?: string;
     titleOverride?: string;
     subtitle?: string;
+    canonicalReport?: CanonicalStrategicReport;
+    boardroomDocument?: BoardroomDocument;
   }
 ): Promise<string> {
   const { buildStyledReportPdfBlob, metaFromReport } = await import("./reportPdf");
@@ -105,6 +113,8 @@ export async function createPdfPreviewUrl(
     subtitle: options?.subtitle || "Bestuurlijk analyse- en besluitdocument",
     reportBody: report.report_body || "Geen rapportinhoud beschikbaar.",
     meta: metaFromReport(report, options),
+    sourceStrategicReport: options?.canonicalReport,
+    sourceBoardroomDocument: options?.boardroomDocument,
   });
   const pdfBlob = pdfOutput instanceof Blob ? pdfOutput : new Blob([pdfOutput], { type: "application/pdf" });
   return URL.createObjectURL(pdfBlob);

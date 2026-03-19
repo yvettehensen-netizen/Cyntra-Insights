@@ -108,6 +108,10 @@ function normalizeSectorLabel(value: string, source: string): string {
   const corpus = `${sector} ${normalize(source).toLowerCase()}`;
   if (/\bjeugdzorg|jeugdwet|jongeren|gezinnen|opvoed|multiproblematiek\b/i.test(corpus)) return "jeugdzorg";
   if (/\bggz|geestelijke gezondheidszorg\b/i.test(corpus)) return "ggz";
+  if (/\bsaas|software|nrr|churn|burn|cac|payback\b/i.test(corpus)) return "saas";
+  if (/\bb2b|dienstverlening|delivery|utilization|account|gross margin|propositie\b/i.test(corpus)) {
+    return "b2b dienstverlening";
+  }
   if (/\bzorg\b/i.test(corpus)) return "zorg";
   return normalize(value) || "onbekende sector";
 }
@@ -115,6 +119,12 @@ function normalizeSectorLabel(value: string, source: string): string {
 function inferDominantProblem(source: string, explicit?: string): string {
   const given = normalize(explicit);
   if (given) return given;
+  if (/\bchurn|burn|nrr|cac|payback|pricing\b/i.test(source)) {
+    return "unit economics onder groeidruk";
+  }
+  if (/\bdelivery|utilization|account|gross margin|maatwerk\b/i.test(source)) {
+    return "deliverydruk en margeverlies per account";
+  }
   if (/\bcontract|tarief|budgetdruk|gemeentelijke inkoop\b/i.test(source)) {
     return "contractdruk onder bestuurlijke afhankelijkheid";
   }
@@ -125,6 +135,72 @@ function inferDominantProblem(source: string, explicit?: string): string {
     return "personeelsdruk en uitvoerbaarheidsrisico";
   }
   return "strategische focus onder druk";
+}
+
+function buildSectorMemoryLines(pattern: StrategicPatternMemoryRecord, similarCount: number): {
+  similarPatterns: string;
+  repeatedStrategiesPrefix: string;
+  successfulInterventionsPrefix: string;
+  strategicWarning: string;
+} {
+  if (/^ggz$/i.test(pattern.sector)) {
+    return {
+      similarPatterns:
+        similarCount > 0
+          ? `Analyse lijkt op ${similarCount} eerdere GGZ-case(s), vooral rond contractplafonds, zorgzwaarte en behandelcapaciteit.`
+          : `Nog geen directe vergelijkcases beschikbaar. Basispatroon: GGZ-organisatie met ${pattern.dominantProblem}.`,
+      repeatedStrategiesPrefix: "Vergelijkbare GGZ-organisaties kiezen het vaakst voor:",
+      successfulInterventionsPrefix: "Herhaalde GGZ-interventies:",
+      strategicWarning:
+        "Waarschuwing: in vergelijkbare GGZ-cases verslechtert wachtdruk vaak sneller dan contractruimte meebeweegt als productmix en capaciteit niet samen worden herijkt.",
+    };
+  }
+  if (/^saas$/i.test(pattern.sector)) {
+    return {
+      similarPatterns:
+        similarCount > 0
+          ? `Analyse lijkt op ${similarCount} eerdere SaaS-case(s), vooral rond retentie, burn en implementatiecapaciteit.`
+          : `Nog geen directe vergelijkcases beschikbaar. Basispatroon: SaaS-organisatie met ${pattern.dominantProblem}.`,
+      repeatedStrategiesPrefix: "Vergelijkbare SaaS-organisaties kiezen het vaakst voor:",
+      successfulInterventionsPrefix: "Herhaalde SaaS-interventies:",
+      strategicWarning:
+        "Waarschuwing: in vergelijkbare SaaS-cases slaat groei vaak terug in churn en burn zodra implementatiebelasting sneller stijgt dan retentie en pricing verbeteren.",
+    };
+  }
+  if (/^b2b dienstverlening$/i.test(pattern.sector)) {
+    return {
+      similarPatterns:
+        similarCount > 0
+          ? `Analyse lijkt op ${similarCount} eerdere B2B-dienstverleningscase(s), vooral rond deliverydruk, accountconcentratie en marge per account.`
+          : `Nog geen directe vergelijkcases beschikbaar. Basispatroon: B2B-dienstverlener met ${pattern.dominantProblem}.`,
+      repeatedStrategiesPrefix: "Vergelijkbare B2B-dienstverleners kiezen het vaakst voor:",
+      successfulInterventionsPrefix: "Herhaalde B2B-interventies:",
+      strategicWarning:
+        "Waarschuwing: in vergelijkbare B2B-cases verslechtert leverbetrouwbaarheid vaak voordat omzetdruk zichtbaar wordt, zodra commerciële uitzonderingen deliverydiscipline uithollen.",
+    };
+  }
+  if (/^jeugdzorg$/i.test(pattern.sector)) {
+    return {
+      similarPatterns:
+        similarCount > 0
+          ? `Analyse lijkt op ${similarCount} eerdere jeugdzorgcase(s), vooral rond gemeentenportfolio, wachtdruk en teamcapaciteit.`
+          : `Nog geen directe vergelijkcases beschikbaar. Basispatroon: ${pattern.organizationType} met ${pattern.dominantProblem}.`,
+      repeatedStrategiesPrefix: "Vergelijkbare jeugdzorgorganisaties kiezen het vaakst voor:",
+      successfulInterventionsPrefix: "Herhaalde jeugdzorginterventies:",
+      strategicWarning:
+        "Waarschuwing: in vergelijkbare jeugdzorgcases vergroten portfolio-breedte en zwakke triage de druk sneller dan extra capaciteit die kan absorberen.",
+    };
+  }
+  return {
+    similarPatterns:
+      similarCount > 0
+        ? `Analyse lijkt op ${similarCount} eerdere case(s), vooral in ${pattern.sector} met ${pattern.dominantProblem}.`
+        : `Nog geen directe vergelijkcases beschikbaar. Basispatroon: ${pattern.organizationType} in ${pattern.sector} met ${pattern.dominantProblem}.`,
+    repeatedStrategiesPrefix: "Vergelijkbare organisaties kiezen het vaakst voor:",
+    successfulInterventionsPrefix: "Succesvolle interventies:",
+    strategicWarning:
+      "Waarschuwing: organisaties die tegelijk meerdere richtingen combineren verliezen vaak focus voordat de gekozen strategie resultaat laat zien.",
+  };
 }
 
 function summarizeInterventions(interventions: string[]): string[] {
@@ -206,13 +282,9 @@ export function runStrategicMemoryNode(
   const pattern = buildStoredPattern(input);
   const existing = store.listStrategicPatterns();
   const similar = index.findSimilarPatterns(pattern, existing, 5);
+  const sectorLines = buildSectorMemoryLines(pattern, similar.length);
 
-  const similarPatterns =
-    similar.length > 0
-      ? `Analyse lijkt op ${similar.length} eerdere case(s), vooral in ${pattern.sector} met ${pattern.dominantProblem}.`
-      : /^jeugdzorg$/i.test(pattern.sector)
-        ? `Nog geen directe vergelijkcases beschikbaar. Basispatroon: ${pattern.organizationType} met ${pattern.dominantProblem}.`
-        : `Nog geen directe vergelijkcases beschikbaar. Basispatroon: ${pattern.organizationType} in ${pattern.sector} met ${pattern.dominantProblem}.`;
+  const similarPatterns = sectorLines.similarPatterns;
 
   const repeatedStrategies = (() => {
     if (!similar.length) {
@@ -223,7 +295,7 @@ export function runStrategicMemoryNode(
     for (const strategy of strategies) counts.set(strategy, (counts.get(strategy) || 0) + 1);
     const dominant = Array.from(counts.entries()).sort((a, b) => b[1] - a[1])[0];
     return dominant
-      ? `Vergelijkbare organisaties kiezen het vaakst voor: ${dominant[0]} (${dominant[1]} van ${similar.length}).`
+      ? `${sectorLines.repeatedStrategiesPrefix} ${dominant[0]} (${dominant[1]} van ${similar.length}).`
       : `Geen herhaald strategisch patroon beschikbaar.`;
   })();
 
@@ -235,13 +307,13 @@ export function runStrategicMemoryNode(
       ])
     ).slice(0, 4);
     return interventions.length
-      ? interventions.join("\n")
+      ? `${sectorLines.successfulInterventionsPrefix}\n${interventions.join("\n")}`
       : "Nog geen herhaalde interventies beschikbaar in het strategisch geheugen.";
   })();
 
   const strategicWarning = (() => {
     if (!similar.length) {
-      return "Waarschuwing: zonder historisch vergelijkmateriaal moet de gekozen richting sneller worden gevalideerd via expliciete KPI- en stopregels.";
+      return `${sectorLines.strategicWarning} Zonder historisch vergelijkmateriaal moet de gekozen richting sneller worden gevalideerd via expliciete KPI- en stopregels.`;
     }
     const conflicting = similar.filter(
       (item) =>
@@ -252,7 +324,7 @@ export function runStrategicMemoryNode(
     if (conflicting >= Math.ceil(similar.length / 2)) {
       return "Waarschuwing: vergelijkbare organisaties kozen regelmatig een andere strategie; valideer dus expliciet waarom deze richting hier beter past.";
     }
-    return "Waarschuwing: organisaties die tegelijk meerdere richtingen combineren verliezen vaak focus voordat de gekozen strategie resultaat laat zien.";
+    return sectorLines.strategicWarning;
   })();
 
   store.upsertStrategicPattern(pattern);

@@ -30,6 +30,7 @@ import PortalGuard from "./aurelius/guards/PortalGuard";
    PUBLIC PAGES
 ============================================================ */
 const HomePage = lazy(() => import("./pages/marketing/HomePage"));
+const AureliusPage = lazy(() => import("./pages/marketing/AureliusPage"));
 const HowItWorksPage = lazy(() => import("./pages/marketing/HowItWorksPage"));
 const PricingPage = lazy(() => import("./pages/marketing/PricingPage"));
 const SectorenPage = lazy(() => import("./pages/marketing/SectorenPage"));
@@ -215,7 +216,7 @@ export default function App() {
         <Route path="/analysis" element={<RedirectToCanonicalAnalysis />} />
         <Route path="/analysis/new" element={<RedirectToCanonicalAnalysis />} />
         <Route path="/analysis/session/:id" element={<RedirectToCanonicalAnalysis />} />
-        <Route path="/aurelius" element={<Navigate to="/" replace />} />
+        <Route path="/aurelius" element={<AureliusPage />} />
         <Route path="/hoe-het-werkt" element={<HowItWorksPage />} />
         <Route path="/scan" element={<StrategicQuickscan />} />
         <Route path="/prijzen" element={<PricingPage />} />

@@ -1,38 +1,37 @@
 Jeugdzorg ZIJN
 Sector: Jeugdzorg
-Analyse datum: 2026-03-12
+Analyse datum: 2026-03-16
 
 KERNPROBLEEM
-Contractgedreven instroom, regionale triage en budgetgedreven capaciteit zetten meer druk op uitvoerbaarheid dan parallelle verbreding bestuurlijk kan dragen. De keuze loopt tussen Brede ambulante specialist blijven en Selectieve specialisatie / niche kiezen.
+Een breed gemeentenportfolio legt meer variatie in contractcondities en instroom op de organisatie dan vaste teams operationeel en economisch kunnen absorberen.
 
 KERNSTELLING
-Contractgedreven instroom, regionale triage en budgetgedreven capaciteit zetten meer druk op uitvoerbaarheid dan parallelle verbreding bestuurlijk kan dragen. Het bestuur moet kiezen tussen Brede ambulante specialist blijven en Selectieve specialisatie / niche kiezen.
+Jeugdzorg ZIJN kan niet tegelijk brede regionale aanwezigheid en stabiele teamcapaciteit maximaliseren; focus in het gemeentenportfolio is nodig om cultuurkapitaal en marge te beschermen.
 
 AANBEVOLEN KEUZE
-Brede ambulante specialist blijven.
+Gemeentenportfolio rationaliseren en sturen op kern-, behoud- en uitstapgemeenten.
 
-SCENARIO'S
-Scenario A — Brede ambulante specialist blijven
-MECHANISME: Behoud brede ambulante positionering maar maak groei ondergeschikt aan contractdiscipline en triage-realiteit
-RISICO: Verbreding blijft beperkt terwijl gemeentelijke druk op volume en budget hoog blijft
-BESTUURLIJKE IMPLICATIE: Bestuur moet prioriteren op kerncapaciteit en actieve consortiumsturing
+WAAROM DEZE KEUZE
+Circa 35 gemeenten, consortiumtoegang, rendabiliteitsdruk en hoge retentie van vaste professionals bepalen samen de schaalruimte. De unit economics verschillen per gemeente: tarief per uur minus reistijd, no-show en indirecte uren bepaalt de effectieve marge.
 
-Scenario B — Selectieve specialisatie / niche kiezen
-MECHANISME: Versmal het profiel naar een kleiner aantal zorgvormen om capaciteit en kwaliteit te concentreren
-RISICO: Regionale relevantie en instroombasis kunnen versmallen
-BESTUURLIJKE IMPLICATIE: Bestuur moet expliciet besluiten welk aanbod niet langer prioriteit krijgt
+STOPREGEL: Herzie direct bij wachttijd > 12 weken gedurende twee meetperiodes.
+STOPREGEL: Herzie direct bij caseload > 18 per professional gedurende twee meetperiodes.
+STOPREGEL: Herzie direct bij marge < 4% gedurende twee meetperiodes.
 
-Scenario C — Consortiumstrategie verdiepen
-MECHANISME: Vergroot invloed op regionale toegang, triage en samenwerking in plaats van autonome verbreding
-RISICO: Afhankelijkheid van partners en gemeenten neemt toe
-BESTUURLIJKE IMPLICATIE: Bestuur moet extern mandaat en interne escalatieregels expliciet vastleggen
+SCENARIO A
+Gemeentenportfolio rationaliseren.
+MECHANISME — Prioriteer kern-, behoud- en uitstapgemeenten zodat contractruimte, reistijd en teamstabiliteit bestuurbaar blijven.
+RISICO — Te snelle afbouw kan regionale legitimiteit aantasten als gemeenten niet actief worden meegenomen.
+STRATEGISCHE IMPLICATIE — Bestuur moet gemeenten expliciet classificeren en de portfolio-keuze periodiek herijken.
 
-INTERVENTIES
-STOPREGEL 1
-ACTIE: Standaardiseer triage en wekelijkse capaciteitssturing
-WAAROM: Beschermt de kernroute tegen contract- en instroomschommelingen
-RISICO: Zonder ritme blijft wachtdruk zich verplaatsen tussen teams
-STOPREGEL: Herzie direct bij wachttijd > 12 weken
-OWNER: Bestuur
-DEADLINE: 15 dagen
-KPI: Wachtdruk daalt en caseload spreidt aantoonbaar
+SCENARIO B
+Operationele schaal vergroten binnen vaste teams en flexibele schil.
+MECHANISME — Vergroot capaciteit alleen binnen harde grenzen voor caseload, flexratio en reistijd.
+RISICO — Schaal zonder grenzen trekt cultuurkapitaal leeg en verhoogt wachtdruk sneller dan marge meegroeit.
+STRATEGISCHE IMPLICATIE — Bestuur moet cap op flexratio en caseload bestuurlijk vastzetten.
+
+SCENARIO C
+Zorgmodel en instroomroute veranderen.
+MECHANISME — Herontwerp triage, routering en partnerinzet zodat niet alle vraag dezelfde teams en dezelfde zorgvorm belast.
+RISICO — Governancecomplexiteit stijgt als mandaat en consortiumafspraken niet vooraf scherp zijn vastgelegd.
+STRATEGISCHE IMPLICATIE — Bestuur moet mandaat, escalatie en partnerrol formaliseren.

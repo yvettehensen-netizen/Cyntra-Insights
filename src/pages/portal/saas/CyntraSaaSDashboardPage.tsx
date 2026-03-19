@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { SubscriptionType } from "@/platform";
 import { EmptyState, PageShell, Panel } from "./ui";
 import { usePlatformApiBridge } from "./usePlatformApiBridge";
 import { formatReportCode } from "./reportIdentity";
 import { isSessionCompleted } from "@/platform/types";
+import DecisionPressureGauge from "@/components/reports/DecisionPressureGauge";
+import StrategicLandscapeMap from "@/components/reports/StrategicLandscapeMap";
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -25,10 +27,6 @@ async function extractDocxPreview(file: File, limit: number): Promise<string> {
       .replace(/<w:tab[^>]*\/>/g, " ")
       .replace(/<[^>]+>/g, " ")
       .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&quot;/g, "\"")
-      .replace(/&#39;/g, "'")
       .replace(/\s+/g, " ")
       .trim()
       .slice(0, limit);
@@ -41,9 +39,7 @@ async function buildUploadContext(files: File[]): Promise<string> {
   if (!files.length) return "";
   const parts = await Promise.all(
     files.map(async (file) => {
-      const looksTextual =
-        file.type.startsWith("text/") ||
-        /\.(txt|md|csv|json|xml|html)$/i.test(file.name);
+      const looksTextual = file.type.startsWith("text/") || /\.(txt|md|csv|json|xml|html)$/i.test(file.name);
       let preview = "";
       if (looksTextual) {
         try {
@@ -60,12 +56,18 @@ async function buildUploadContext(files: File[]): Promise<string> {
   return ["[UPLOAD_CONTEXT]", ...parts].join("\n\n");
 }
 
+function pressureLevel(text: string): "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" {
+  const source = String(text || "").toLowerCase();
+  if (/kritiek|critical|caseload|wachttijd|hoog risico|verlies|druk loopt/i.test(source)) return "HIGH";
+  if (/marge|vertrag|alert|kwetsbaar|contractdruk/i.test(source)) return "MEDIUM";
+  return "LOW";
+}
+
 export default function CyntraSaaSDashboardPage() {
   const api = usePlatformApiBridge();
   const [organizations, setOrganizations] = useState<any[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
   const [benchmark, setBenchmark] = useState<any>({ sector: "", totaal_cases: 0, dominante_problemen: [] });
-
   const [organisatieNaam, setOrganisatieNaam] = useState("");
   const [sector, setSector] = useState("");
   const [grootte, setGrootte] = useState("");
@@ -73,6 +75,7 @@ export default function CyntraSaaSDashboardPage() {
   const [analyseInput, setAnalyseInput] = useState("");
   const [analyseFiles, setAnalyseFiles] = useState<File[]>([]);
   const [wizardStatus, setWizardStatus] = useState("");
+
   async function reload() {
     const [orgs, sess, bench] = await Promise.all([
       api.listOrganizations(),
@@ -120,93 +123,155 @@ export default function CyntraSaaSDashboardPage() {
       setWizardStatus(`Onboarding voltooid. Eerste rapport: ${formatReportCode(analysis.reportId)}`);
       await reload();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Onboarding mislukt.";
-      setWizardStatus(message);
-      if (typeof window !== "undefined") {
-        window.alert(message);
-      }
+      setWizardStatus(error instanceof Error ? error.message : "Onboarding mislukt.");
     }
   }
 
   const completed = sessions.filter((item) => isSessionCompleted(item?.status));
+  const recentAnalyses = completed.slice(0, 4);
+  const strategicAlerts = recentAnalyses.map((session) => ({
+    id: session.session_id,
+    title: session.organization_name || formatReportCode(session.session_id),
+    summary: session.executive_summary || "Bestuurlijke samenvatting ontbreekt.",
+    pressure: pressureLevel(session.executive_summary || session.board_memo || ""),
+  }));
+  const landscapePoints = useMemo(
+    () =>
+      recentAnalyses.slice(0, 3).map((session, index) => ({
+        label: session.organization_name || `Analyse ${index + 1}`,
+        x: 35 + index * 18,
+        y: 38 + index * 12,
+      })),
+    [recentAnalyses]
+  );
 
   return (
-    <PageShell title="Cyntra Strategisch Analyseplatform" subtitle="SaaS-overzicht voor organisaties: analyses, rapporten, strategische inzichten en sectorbenchmark.">
-      <div className="grid gap-4 md:grid-cols-4">
-        <Panel title="Organisaties"><p className="text-2xl font-semibold text-white">{organizations.length}</p></Panel>
-        <Panel title="Analyses"><p className="text-2xl font-semibold text-white">{sessions.length}</p></Panel>
-        <Panel title="Rapporten"><p className="text-2xl font-semibold text-white">{completed.length}</p></Panel>
-        <Panel title="Dataset records"><p className="text-2xl font-semibold text-white">{benchmark.totaal_cases || 0}</p></Panel>
-      </div>
+    <PageShell
+      title="Strategic Decision Dashboard"
+      subtitle="Boardroom command center voor strategische druk, besluiten, recente analyses en organisatie-overzicht."
+    >
+      <section className="grid gap-6 xl:grid-cols-12">
+        <div className="xl:col-span-7 space-y-6">
+          <Panel title="Strategic Alerts">
+            {!strategicAlerts.length ? (
+              <EmptyState text="Nog geen strategische alerts beschikbaar. Start een analyse om boardroom-druk zichtbaar te maken." />
+            ) : (
+              <div className="space-y-4">
+                {strategicAlerts.map((alert) => (
+                  <article key={alert.id} className="rounded-[12px] border border-white/[0.06] bg-[rgba(255,255,255,0.02)] p-6">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <h3 className="text-[18px] font-semibold text-white">{alert.title}</h3>
+                      <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#7C9BFF]">
+                        {alert.pressure}
+                      </span>
+                    </div>
+                    <p className="mt-3 text-[15px] leading-[1.6] text-slate-300">{alert.summary}</p>
+                  </article>
+                ))}
+              </div>
+            )}
+          </Panel>
 
-      <Panel title="Strategische inzichten">
-        {!completed.length ? <EmptyState text="Nog geen voltooide analyses. Start via Strategische analyse." /> : (
-          <ul className="space-y-2 text-sm text-gray-200">{completed.slice(0, 5).map((session) => <li key={session.session_id} className="rounded-lg border border-white/10 px-3 py-2"><strong>{formatReportCode(session.session_id)}</strong>: {session.executive_summary || "Samenvatting ontbreekt."}</li>)}</ul>
-        )}
-      </Panel>
+          <Panel title="Recent analyses">
+            {!recentAnalyses.length ? (
+              <EmptyState text="Nog geen voltooide analyses." />
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2">
+                {recentAnalyses.map((session) => (
+                  <article key={session.session_id} className="rounded-[12px] border border-white/[0.06] bg-[rgba(255,255,255,0.02)] p-6">
+                    <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">{formatReportCode(session.session_id)}</p>
+                    <h3 className="mt-2 text-[18px] font-semibold text-white">
+                      {session.organization_name || "Onbekende organisatie"}
+                    </h3>
+                    <p className="mt-3 text-[15px] leading-[1.6] text-slate-300">
+                      {session.executive_summary || "Samenvatting ontbreekt."}
+                    </p>
+                  </article>
+                ))}
+              </div>
+            )}
+          </Panel>
+        </div>
 
-      <Panel title="SaaS onboarding wizard">
-        <ol className="space-y-4 text-sm text-gray-200">
-          <li className="rounded-xl border border-white/10 bg-black/20 p-4"><strong>Stap 1: Organisatieprofiel</strong><div className="mt-2 grid gap-3 md:grid-cols-3"><input className="rounded-lg border border-white/20 bg-black/20 p-2" value={organisatieNaam} onChange={(e) => setOrganisatieNaam(e.target.value)} placeholder="Organisatienaam" /><input className="rounded-lg border border-white/20 bg-black/20 p-2" value={sector} onChange={(e) => setSector(e.target.value)} placeholder="Sector" /><input className="rounded-lg border border-white/20 bg-black/20 p-2" value={grootte} onChange={(e) => setGrootte(e.target.value)} placeholder="Organisatiegrootte" /></div></li>
-          <li className="rounded-xl border border-white/10 bg-black/20 p-4"><strong>Stap 2: Abonnement</strong><div className="mt-2"><select className="rounded-lg border border-white/20 bg-black/20 p-2" value={abonnement} onChange={(e) => setAbonnement(e.target.value as SubscriptionType)}><option value="Starter">Starter (3 analyses/maand)</option><option value="Professional">Professional (10 analyses/maand)</option><option value="Enterprise">Enterprise (onbeperkt)</option></select></div></li>
-          <li className="rounded-xl border border-white/10 bg-black/20 p-4">
-            <strong>Stap 3: Eerste analyse starten</strong>
-            <textarea className="mt-2 min-h-[120px] w-full rounded-lg border border-white/20 bg-black/20 p-2" value={analyseInput} onChange={(e) => setAnalyseInput(e.target.value)} placeholder="Beschrijf de kerncontext en strategische spanning." />
-            <div className="mt-3 rounded-lg border border-dashed border-white/20 p-3">
-              <p className="text-xs text-gray-300">Documenten uploaden (optioneel)</p>
-              <input
-                type="file"
-                multiple
-                className="mt-2 block w-full text-xs text-gray-200 file:mr-3 file:rounded-md file:border-0 file:bg-[#D4AF37] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-black"
-                onChange={(e) => {
-                  const selected = Array.from(e.target.files || []);
-                  if (!selected.length) return;
-                  setAnalyseFiles((prev) => {
-                    const known = new Set(prev.map((f) => `${f.name}:${f.size}:${f.lastModified}`));
-                    const merged = [...prev];
-                    selected.forEach((file) => {
-                      const key = `${file.name}:${file.size}:${file.lastModified}`;
-                      if (!known.has(key)) {
-                        known.add(key);
-                        merged.push(file);
-                      }
-                    });
-                    return merged;
-                  });
-                  e.target.value = "";
-                }}
+        <div className="xl:col-span-5 space-y-6">
+          <Panel title="Decision pressure">
+            <div className="space-y-4">
+              <DecisionPressureGauge
+                label="Board pressure"
+                level={pressureLevel(recentAnalyses[0]?.executive_summary || "")}
+                hint={recentAnalyses[0]?.executive_summary || "Nog geen actuele board pressure beschikbaar."}
               />
-              <p className="mt-2 text-xs text-gray-300">{analyseFiles.length} document{analyseFiles.length === 1 ? "" : "en"} geselecteerd</p>
-              {analyseFiles.length > 0 && (
-                <ul className="mt-2 space-y-1">
-                  {analyseFiles.map((file) => (
-                    <li key={`${file.name}:${file.size}:${file.lastModified}`} className="flex items-center justify-between rounded border border-white/10 px-2 py-1 text-xs text-gray-200">
-                      <span className="truncate pr-3">{file.name} ({formatFileSize(file.size)})</span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setAnalyseFiles((prev) =>
-                            prev.filter((f) => `${f.name}:${f.size}:${f.lastModified}` !== `${file.name}:${file.size}:${file.lastModified}`)
-                          )
-                        }
-                        className="rounded border border-white/20 px-2 py-0.5 text-xs text-white"
-                      >
-                        Verwijder
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <DecisionPressureGauge
+                label="Contractdruk"
+                level={benchmark.dominante_problemen?.[0]?.probleemtype ? "MEDIUM" : "LOW"}
+                hint={benchmark.dominante_problemen?.[0]?.probleemtype || "Nog geen benchmarksignaal beschikbaar."}
+              />
             </div>
-            <div className="mt-3 flex items-center gap-3"><button className="rounded-lg bg-[#D4AF37] px-4 py-2 text-sm font-semibold text-black" onClick={() => void runOnboarding()}>Start onboarding + analyse</button><span className="text-xs text-gray-300">{wizardStatus}</span></div>
-          </li>
-        </ol>
-      </Panel>
+          </Panel>
 
-      <Panel title="SECTOR BENCHMARK">
-        <p className="text-sm text-gray-200">Sector: {benchmark.sector}</p>
-        <p className="mt-2 text-sm text-gray-200">Totaal cases: {benchmark.totaal_cases}</p>
-        <p className="mt-2 text-sm text-gray-200">Topprobleem: {benchmark.dominante_problemen?.[0]?.probleemtype || "Nog geen data"}</p>
+          <StrategicLandscapeMap points={landscapePoints.length ? landscapePoints : [{ label: "Geen cases", x: 50, y: 50 }]} />
+
+          <Panel title="Organisation overview">
+            <div className="grid gap-4 md:grid-cols-2">
+              <article className="rounded-[12px] border border-white/[0.06] bg-[rgba(255,255,255,0.02)] p-6">
+                <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Organisaties</p>
+                <p className="mt-2 text-[28px] font-semibold text-white">{organizations.length}</p>
+              </article>
+              <article className="rounded-[12px] border border-white/[0.06] bg-[rgba(255,255,255,0.02)] p-6">
+                <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Rapporten</p>
+                <p className="mt-2 text-[28px] font-semibold text-white">{completed.length}</p>
+              </article>
+            </div>
+          </Panel>
+        </div>
+      </section>
+
+      <Panel title="Nieuwe analyse starten">
+        <div className="grid gap-4 md:grid-cols-3">
+          <input className="rounded-[12px] border border-white/[0.08] bg-white/[0.03] p-3 text-sm text-white" value={organisatieNaam} onChange={(e) => setOrganisatieNaam(e.target.value)} placeholder="Organisatienaam" />
+          <input className="rounded-[12px] border border-white/[0.08] bg-white/[0.03] p-3 text-sm text-white" value={sector} onChange={(e) => setSector(e.target.value)} placeholder="Sector" />
+          <input className="rounded-[12px] border border-white/[0.08] bg-white/[0.03] p-3 text-sm text-white" value={grootte} onChange={(e) => setGrootte(e.target.value)} placeholder="Organisatiegrootte" />
+        </div>
+        <div className="mt-4">
+          <select className="rounded-[12px] border border-white/[0.08] bg-white/[0.03] p-3 text-sm text-white" value={abonnement} onChange={(e) => setAbonnement(e.target.value as SubscriptionType)}>
+            <option value="Starter">Starter</option>
+            <option value="Professional">Professional</option>
+            <option value="Enterprise">Enterprise</option>
+          </select>
+        </div>
+        <textarea className="mt-4 min-h-[140px] w-full rounded-[12px] border border-white/[0.08] bg-white/[0.03] p-4 text-sm text-white" value={analyseInput} onChange={(e) => setAnalyseInput(e.target.value)} placeholder="Beschrijf de kerncontext, spanning en gewenste besluitvraag." />
+        <div className="mt-4 rounded-[12px] border border-dashed border-white/[0.12] p-4">
+          <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Documenten uploaden</p>
+          <input
+            type="file"
+            multiple
+            className="mt-3 block w-full text-xs text-gray-200 file:mr-3 file:rounded-[12px] file:border-0 file:bg-white file:px-3 file:py-2 file:text-xs file:font-semibold file:text-black"
+            onChange={(e) => {
+              const selected = Array.from(e.target.files || []);
+              if (!selected.length) return;
+              setAnalyseFiles((prev) => {
+                const known = new Set(prev.map((f) => `${f.name}:${f.size}:${f.lastModified}`));
+                const merged = [...prev];
+                selected.forEach((file) => {
+                  const key = `${file.name}:${file.size}:${file.lastModified}`;
+                  if (!known.has(key)) {
+                    known.add(key);
+                    merged.push(file);
+                  }
+                });
+                return merged;
+              });
+              e.target.value = "";
+            }}
+          />
+          <p className="mt-2 text-xs text-slate-400">{analyseFiles.length} document(en) geselecteerd</p>
+        </div>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button className="rounded-[12px] bg-white px-4 py-2 text-sm font-semibold text-black" onClick={() => void runOnboarding()}>
+            Start onboarding + analyse
+          </button>
+          <span className="text-sm text-slate-400">{wizardStatus}</span>
+        </div>
       </Panel>
     </PageShell>
   );

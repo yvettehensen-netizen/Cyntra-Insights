@@ -14,10 +14,10 @@ function StickyRail() {
         </div>
       </div>
       <div className="border border-[#7A5C3E]/45 bg-[#FAF8F3] p-6">
-        <h3 className="text-xl font-semibold tracking-tight mb-2">Besloten omgeving</h3>
+        <h3 className="text-xl font-semibold tracking-tight mb-2">Publieke vervolgstap</h3>
         <div className="space-y-3">
-          <Link to="/portal" className="w-full inline-flex items-center justify-center px-4 py-3 rounded-md bg-[#7A5C3E] text-white text-sm font-medium hover:bg-[#6A4F35] transition-colors">Ga naar Portal</Link>
-          <Link to="/aurelius/login" className="w-full inline-flex items-center justify-center px-4 py-3 rounded-md border border-[#7A5C3E] text-[#7A5C3E] text-sm font-medium hover:bg-[#7A5C3E] hover:text-white transition-colors">Login</Link>
+          <Link to="/scan" className="w-full inline-flex items-center justify-center px-4 py-3 rounded-md bg-[#7A5C3E] text-white text-sm font-medium hover:bg-[#6A4F35] transition-colors">Start korte scan</Link>
+          <Link to="/aurelius/login" className="w-full inline-flex items-center justify-center px-4 py-3 rounded-md border border-[#7A5C3E] text-[#7A5C3E] text-sm font-medium hover:bg-[#7A5C3E] hover:text-white transition-colors">Login volledig rapport</Link>
         </div>
       </div>
     </aside>
@@ -60,7 +60,10 @@ export default function AnalysisOverviewPage() {
                 </div>
               </article>
               <article className={cardClass}>
-                <Link to="/contact" className="inline-flex items-center justify-center px-8 py-4 rounded-md bg-[#7A5C3E] text-white font-medium hover:bg-[#6A4F35] transition-colors">Plan een Bestuurlijke Intake</Link>
+                <div className="flex flex-wrap gap-4">
+                  <Link to="/contact" className="inline-flex items-center justify-center px-8 py-4 rounded-md bg-[#7A5C3E] text-white font-medium hover:bg-[#6A4F35] transition-colors">Plan een Bestuurlijke Intake</Link>
+                  <Link to="/aurelius" className="inline-flex items-center justify-center px-8 py-4 rounded-md border border-[#7A5C3E] text-[#7A5C3E] font-medium hover:bg-[#7A5C3E] hover:text-white transition-colors">Bekijk Aurelius</Link>
+                </div>
               </article>
             </div>
             <div className="lg:hidden"><StickyRail /></div>

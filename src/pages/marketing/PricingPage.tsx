@@ -1,67 +1,137 @@
+import { Helmet } from "react-helmet-async";
 import { Link } from "react-router-dom";
+
+const analysisPlans = [
+  {
+    label: "Boardroom Analyse",
+    price: "EUR750",
+    items: [
+      "dominante these",
+      "kernspanning",
+      "strategische opties",
+      "prijs van uitstel",
+    ],
+    cta: { label: "Start analyse", to: "/scan", kind: "secondary" as const },
+  },
+  {
+    label: "Strategisch Besluitdocument",
+    price: "EUR2.500",
+    items: [
+      "dominante these",
+      "structurele kernspanning",
+      "expliciet verlies",
+      "90-dagen interventieplan",
+    ],
+    cta: { label: "Genereer besluitdocument", to: "/besluitdocument", kind: "secondary" as const },
+  },
+];
+
+const interventionPlan = {
+  label: "Interventieontwerp",
+  price: "EUR25k - EUR45k",
+  items: [
+    "Aurelius diagnose",
+    "15+ interventies",
+    "beslisgates",
+    "decision contract",
+  ],
+};
 
 export default function PricingPage() {
   return (
-    <main className="marketing-readable marketing-shell py-16 md:py-20">
-      <section className="marketing-container">
-        <div className="marketing-card">
-          <p className="text-xs uppercase tracking-[0.2em] text-cyntra-gold">Prijzen</p>
-          <h1 className="mt-3 text-4xl md:text-5xl font-semibold text-white">Toegang tot Cyntra</h1>
-          <p className="mt-3 max-w-3xl text-cyntra-secondary">
-            Kies tussen losse AI-analyses en bestuurlijke interventies afhankelijk van beslisdruk, tempo en implementatiebehoefte.
-          </p>
-        </div>
-      </section>
+    <>
+      <Helmet>
+        <title>Prijzen | Cyntra Insights</title>
+        <meta
+          name="description"
+          content="Bekijk de prijzen voor losse boardroom analyses, strategische besluitdocumenten en bestuurlijke interventies van Cyntra Insights."
+        />
+      </Helmet>
 
-      <section className="marketing-container mt-6">
-        <div className="marketing-card">
-          <h2 className="text-2xl font-semibold text-white">AI Analyses</h2>
-          <div className="mt-4 grid gap-4 md:grid-cols-2">
-            <article className="marketing-card">
-              <p className="text-xs uppercase tracking-[0.16em] text-cyntra-gold">Boardroom Analyse</p>
-              <p className="mt-2 text-2xl font-semibold text-white">€750</p>
-              <ul className="mt-3 space-y-1 text-sm text-cyntra-secondary">
-                <li>dominante these</li>
-                <li>kernspanning</li>
-                <li>strategische opties</li>
-                <li>prijs van uitstel</li>
-              </ul>
-              <Link to="/scan" className="marketing-btn-secondary mt-4 px-4 py-2 text-sm">Start analyse</Link>
-            </article>
+      <main className="marketing-readable marketing-shell overflow-hidden text-white">
+        <section className="overflow-hidden bg-[radial-gradient(circle_at_top_left,_rgba(200,169,106,0.18),_transparent_28%),linear-gradient(135deg,_#0D1A29_0%,_#10263B_54%,_#0A1624_100%)] py-24 md:py-32">
+          <div className="marketing-container">
+            <div className="max-w-4xl">
+              <p className="text-sm uppercase tracking-[0.22em] text-[#C8A96A]">
+                Prijzen
+              </p>
+              <h1 className="mt-6 font-serif text-5xl leading-[1.02] text-white md:text-7xl">
+                Toegang tot Cyntra
+              </h1>
+              <p className="mt-8 max-w-3xl text-xl leading-relaxed text-[#D6DEE5]">
+                Kies tussen losse AI-analyses en bestuurlijke interventies afhankelijk van
+                beslisdruk, tempo en implementatiebehoefte.
+              </p>
+            </div>
+          </div>
+        </section>
 
-            <article className="marketing-card">
-              <p className="text-xs uppercase tracking-[0.16em] text-cyntra-gold">Strategisch Besluitdocument</p>
-              <p className="mt-2 text-2xl font-semibold text-white">€2.500</p>
-              <ul className="mt-3 space-y-1 text-sm text-cyntra-secondary">
-                <li>dominante these</li>
-                <li>structurele kernspanning</li>
-                <li>expliciet verlies</li>
-                <li>90-dagen interventieplan</li>
+        <section className="py-24">
+          <div className="marketing-container">
+            <div className="max-w-3xl">
+              <p className="text-sm uppercase tracking-[0.22em] text-[#C8A96A]">
+                AI Analyses
+              </p>
+              <h2 className="mt-5 font-serif text-4xl leading-tight text-white md:text-5xl">
+                Van eerste diagnose tot expliciet besluitdocument.
+              </h2>
+            </div>
+
+            <div className="mt-12 grid gap-6 md:grid-cols-2">
+              {analysisPlans.map((plan) => (
+                <article key={plan.label} className="marketing-card rounded-[28px] p-8">
+                  <p className="text-sm uppercase tracking-[0.18em] text-[#C8A96A]">{plan.label}</p>
+                  <p className="mt-4 text-4xl font-semibold text-white">{plan.price}</p>
+                  <ul className="mt-6 space-y-3 text-base text-[#D6DEE5]">
+                    {plan.items.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                  <Link
+                    to={plan.cta.to}
+                    className={`mt-8 inline-flex px-6 py-3 text-sm ${
+                      plan.cta.kind === "secondary" ? "marketing-btn-secondary" : "marketing-btn-primary"
+                    }`}
+                  >
+                    {plan.cta.label}
+                  </Link>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="border-y border-white/8 bg-[linear-gradient(180deg,_rgba(255,255,255,0.028),_rgba(255,255,255,0.012))] py-24">
+          <div className="marketing-container">
+            <div className="max-w-3xl">
+              <p className="text-sm uppercase tracking-[0.22em] text-[#C8A96A]">
+                Bestuurlijke Interventies
+              </p>
+              <h2 className="mt-5 font-serif text-4xl leading-tight text-white md:text-5xl">
+                Voor organisaties waar een rapport alleen niet genoeg is.
+              </h2>
+            </div>
+
+            <article className="marketing-card mt-12 rounded-[28px] p-8">
+              <p className="text-sm uppercase tracking-[0.18em] text-[#C8A96A]">{interventionPlan.label}</p>
+              <p className="mt-4 text-4xl font-semibold text-white">{interventionPlan.price}</p>
+              <ul className="mt-6 space-y-3 text-base text-[#D6DEE5]">
+                {interventionPlan.items.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
               </ul>
-              <Link to="/besluitdocument" className="marketing-btn-secondary mt-4 px-4 py-2 text-sm">Genereer besluitdocument</Link>
+              <div className="mt-8 flex flex-wrap gap-4">
+                <Link to="/contact" className="marketing-btn-primary px-6 py-3 text-sm">
+                  Plan bestuurlijke intake
+                </Link>
+                <Link to="/aurelius" className="marketing-btn-secondary px-6 py-3 text-sm">
+                  Bekijk Aurelius
+                </Link>
+              </div>
             </article>
           </div>
-        </div>
-      </section>
-
-      <section className="marketing-container mt-6">
-        <div className="marketing-card">
-          <h2 className="text-2xl font-semibold text-white">Bestuurlijke Interventies</h2>
-          <div className="mt-4 grid gap-4 md:grid-cols-1">
-            <article className="marketing-card">
-              <p className="text-xs uppercase tracking-[0.16em] text-cyntra-gold">Interventieontwerp</p>
-              <p className="mt-2 text-2xl font-semibold text-white">€25k – €45k</p>
-              <ul className="mt-3 space-y-1 text-sm text-cyntra-secondary">
-                <li>Aurelius diagnose</li>
-                <li>15+ interventies</li>
-                <li>beslisgates</li>
-                <li>decision contract</li>
-              </ul>
-              <Link to="/contact" className="marketing-btn-primary mt-4 px-5 py-2.5 text-sm">Plan bestuurlijke intake</Link>
-            </article>
-          </div>
-        </div>
-      </section>
-    </main>
+        </section>
+      </main>
+    </>
   );
 }

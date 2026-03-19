@@ -1,6 +1,7 @@
 import type { StoredReport } from "@/aurelius/models/StoredReport";
 
 const LS_KEY = "cyntra.stored_reports.v1";
+const LEGACY_LS_KEY = "cyntra_reports";
 const DB_NAME = "cyntra_report_db";
 const STORE = "reports";
 
@@ -13,9 +14,45 @@ function safeParse<T>(value: string | null, fallback: T): T {
   }
 }
 
+function normalizeLegacyReport(row: unknown): StoredReport | null {
+  const item = row as {
+    id?: string;
+    sessionId?: string;
+    organizationName?: string;
+    savedAt?: string;
+    report?: {
+      report_id?: string;
+      session_id?: string;
+      organization_id?: string;
+      title?: string;
+      generated_at?: string;
+    };
+  };
+  const reportId = String(item?.id || item?.report?.report_id || "").trim();
+  const analysisId = String(item?.sessionId || item?.report?.session_id || reportId).trim();
+  if (!reportId || !analysisId) return null;
+  const title = String(item?.organizationName || item?.report?.title || item?.report?.organization_id || reportId).trim();
+  const date = String(item?.savedAt || item?.report?.generated_at || new Date().toISOString()).trim();
+  return {
+    id: reportId,
+    analysisId,
+    title: title || "Strategisch rapport",
+    date,
+    baliScore: 0,
+    betrouwbaarheid: 0,
+    interventionStatus: "Opgeslagen",
+    analysisRoute: `/portal/rapporten/${encodeURIComponent(analysisId)}`,
+  };
+}
+
 function readLocal(): StoredReport[] {
   if (typeof localStorage === "undefined") return [];
-  return safeParse<StoredReport[]>(localStorage.getItem(LS_KEY), []);
+  const primary = safeParse<StoredReport[]>(localStorage.getItem(LS_KEY), []);
+  if (primary.length) return primary;
+  const legacy = safeParse<unknown[]>(localStorage.getItem(LEGACY_LS_KEY), []);
+  return legacy
+    .map((row) => normalizeLegacyReport(row))
+    .filter((row): row is StoredReport => Boolean(row));
 }
 
 function writeLocal(rows: StoredReport[]) {
@@ -146,4 +183,3 @@ export async function getReportById(id: string): Promise<StoredReport | null> {
 
   return readLocal().find((row) => row.id === id) ?? null;
 }
-

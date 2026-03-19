@@ -45,6 +45,26 @@ import {
   runBoardDecisionBriefNode,
   type BoardDecisionBriefNodeOutput,
 } from "@/aurelius/engine/nodes/strategy/BoardDecisionBriefNode";
+import {
+  runTensionEngineNode,
+  type TensionEngineNodeOutput,
+} from "@/aurelius/engine/nodes/strategy/TensionEngineNode";
+import {
+  runScenarioEngineNode,
+  type ScenarioEngineNodeOutput,
+} from "@/aurelius/engine/nodes/strategy/ScenarioEngineNode";
+import {
+  runDecisionEngineNode,
+  type DecisionEngineNodeOutput,
+} from "@/aurelius/engine/nodes/strategy/DecisionEngineNode";
+import {
+  runGovernanceEngineNode,
+  type GovernanceEngineNodeOutput,
+} from "@/aurelius/engine/nodes/governance/GovernanceEngineNode";
+import {
+  runInstitutionalMemoryNode,
+  type InstitutionalMemoryNodeOutput,
+} from "@/aurelius/engine/nodes/memory/InstitutionalMemoryNode";
 import { STRATEGIC_BRAIN_LAYERS } from "@/aurelius/engine/strategicBrainArchitecture";
 import type { AnalysisContext, ModelResult } from "@/aurelius/engine/types";
 
@@ -65,12 +85,17 @@ export type StrategicBrainOutput = {
   reasoning: {
     strategicPattern: StrategicPatternDetectionNodeOutput;
     strategicMemory: StrategicMemoryNodeOutput;
+    institutionalMemory: InstitutionalMemoryNodeOutput;
+    tension: TensionEngineNodeOutput;
     paradox: StrategicParadoxNodeOutput;
     paradoxQuality: ParadoxQualityCheckNodeOutput;
     uncomfortableTruth: UncomfortableTruthNodeOutput;
     killerInsights: ModelResult;
   };
   decision: {
+    scenarios: ScenarioEngineNodeOutput;
+    decisionEngine: DecisionEngineNodeOutput;
+    governance: GovernanceEngineNodeOutput;
     options: AureliusNodeOutput;
     boardDecision: AureliusNodeOutput;
   };
@@ -169,13 +194,70 @@ export function runStrategicBrainArchitecture(input: StrategicBrainInput): Strat
     keyRisks: [],
   });
 
+  const tension = runTensionEngineNode({
+    organizationName: input.organizationName,
+    sector: input.sector,
+    sourceText: input.inputText,
+    strategicSignals: strategicSignals.strategicSignals.map((item) => `${item.signal} — ${item.meaning}`),
+    organizationMechanics: organizationMechanics.map((item) => item.summary),
+    systemAnalysis: systemAnalysis.map((item) => item.summary),
+    strategicPattern: strategicPattern.strategicPattern.pattern,
+    historicalSignals: [
+      strategicMemory.strategicMemory.similarPatterns,
+      strategicMemory.strategicMemory.repeatedStrategies,
+      strategicMemory.strategicMemory.strategicWarning,
+    ],
+  });
+
+  const scenarios = runScenarioEngineNode({
+    sector: input.sector,
+    sourceText: input.inputText,
+    structuralTension: tension.structuralTension,
+    coreProblem: tension.coreProblem,
+    detectedPatterns: tension.detectedPatterns,
+  });
+
+  const decisionEngine = runDecisionEngineNode({
+    sourceText: input.inputText,
+    structuralTension: tension.structuralTension,
+    mechanism: tension.mechanism,
+    scenarios: scenarios.scenarios,
+    detectedPatterns: tension.detectedPatterns,
+  });
+
+  const governance = runGovernanceEngineNode({
+    sector: input.sector,
+    sourceText: input.inputText,
+    recommendedScenario: decisionEngine.recommendedScenario,
+    recommendedDecision: decisionEngine.recommendedDecision,
+    structuralTension: tension.structuralTension,
+    detectedPatterns: tension.detectedPatterns,
+  });
+
+  const institutionalMemory = runInstitutionalMemoryNode({
+    organizationName: input.organizationName,
+    sector: input.sector,
+    coreProblem: tension.coreProblem,
+    strategicTension: tension.structuralTension,
+    recommendedDecision: decisionEngine.recommendedDecision,
+    detectedPatterns: tension.detectedPatterns,
+  });
+
   const paradox = runStrategicParadoxNode({
     organizationName: input.organizationName,
     sectorContext: input.sector,
-    strategyContext: [input.inputText, strategicMemory.strategicMemory.similarPatterns].join("\n"),
+    strategyContext: [
+      input.inputText,
+      tension.structuralTension,
+      tension.mechanism,
+      institutionalMemory.summary,
+      strategicMemory.strategicMemory.similarPatterns,
+    ].join("\n"),
     marketContext: input.inputText,
     facts: [
       input.inputText,
+      tension.coreProblem,
+      tension.decisionFocus,
       ...strategicSignals.strategicSignals.map((item) => item.signal),
       ...organizationMechanics.map((item) => item.summary),
       ...systemAnalysis.map((item) => item.summary),
@@ -186,15 +268,15 @@ export function runStrategicBrainArchitecture(input: StrategicBrainInput): Strat
     paradox: paradox.strategicParadox,
     organizationName: input.organizationName,
     sectorContext: input.sector,
-    facts: [input.inputText, strategicMemory.strategicMemory.strategicWarning],
+    facts: [input.inputText, tension.structuralTension, strategicMemory.strategicMemory.strategicWarning],
   });
 
   const uncomfortableTruth = runUncomfortableTruthNode({
     organizationName: input.organizationName,
     sectorContext: input.sector,
-    strategyContext: paradoxQuality.paradoxQualityCheck.improvedParadox,
-    facts: [input.inputText, strategicMemory.strategicMemory.repeatedStrategies],
-    strategicChoice: paradoxQuality.paradoxQualityCheck.improvedParadox,
+    strategyContext: [paradoxQuality.paradoxQualityCheck.improvedParadox, tension.mechanism].join("\n"),
+    facts: [input.inputText, strategicMemory.strategicMemory.repeatedStrategies, institutionalMemory.summary],
+    strategicChoice: decisionEngine.recommendedDecision,
   });
 
   const killerInsightNode = new KillerInsightNode();
@@ -216,6 +298,17 @@ export function runStrategicBrainArchitecture(input: StrategicBrainInput): Strat
       insights: [item.signal, item.meaning],
       confidence: 0.72,
     })),
+    {
+      section: "TensionEngineNode",
+      model: "TensionEngineNode",
+      content: {
+        coreProblem: tension.coreProblem,
+        structuralTension: tension.structuralTension,
+        mechanism: tension.mechanism,
+      },
+      insights: [tension.coreProblem, tension.structuralTension, tension.mechanism],
+      confidence: tension.confidence,
+    },
     ...organizationMechanics.map(toModelResult),
     ...systemAnalysis.map(toModelResult),
   ]);
@@ -232,39 +325,44 @@ export function runStrategicBrainArchitecture(input: StrategicBrainInput): Strat
       ...organizationMechanics.map((item) => item.summary),
       ...systemAnalysis.map((item) => item.summary),
     ],
-    strategicOptions:
-      Array.isArray(options.data.options) ? options.data.options.map((value) => String(value)) : [options.summary],
-    recommendedChoice: boardDecision.summary,
-    interventions: (killerInsights.insights ?? []).slice(0, 3),
+    strategicOptions: scenarios.scenarios.map((item) => `${item.code}. ${item.title}`),
+    recommendedChoice: decisionEngine.recommendedDecision,
+    interventions: governance.executionActions.map((item) => item.action),
     sector: input.sector,
-    dominantProblem: input.inputText,
+    dominantProblem: tension.coreProblem,
     dominantParadox:
       paradoxQuality.paradoxQualityCheck.score < 4
         ? paradoxQuality.paradoxQualityCheck.improvedParadox
         : paradox.strategicParadox.paradox,
-    keyRisks: killerInsights.risks ?? [],
+    keyRisks: governance.earlySignals,
   });
 
   const debate = runBoardroomRoleDebateNode({
     organizationName: input.organizationName,
-    recommendedChoice: boardDecision.summary,
+    recommendedChoice: decisionEngine.recommendedDecision,
     sectorContext: input.sector,
     strategicParadox: paradoxQuality.paradoxQualityCheck.score < 4
       ? paradoxQuality.paradoxQualityCheck.improvedParadox
       : paradox.strategicParadox.paradox,
     pressurePoints: [
       uncomfortableTruth.uncomfortableTruth,
+      tension.decisionFocus,
       ...(killerInsights.insights ?? []).slice(0, 2),
     ],
   });
 
   const pressureTest = runStrategicPressureTestNode({
     organizationName: input.organizationName,
-    recommendedChoice: boardDecision.summary,
+    recommendedChoice: decisionEngine.recommendedDecision,
     sectorContext: input.sector,
-    strategicParadox: paradox.strategicParadox.paradox,
-    facts: [input.inputText, ...systemAnalysis.map((item) => item.summary)],
-    risks: killerInsights.risks ?? [],
+    strategicParadox: tension.structuralTension,
+    facts: [
+      input.inputText,
+      tension.mechanism,
+      ...governance.earlySignals,
+      ...systemAnalysis.map((item) => item.summary),
+    ],
+    risks: governance.stopRules,
   });
 
   const narrative = runStrategicNarrativeNode({
@@ -274,28 +372,25 @@ export function runStrategicBrainArchitecture(input: StrategicBrainInput): Strat
       paradoxQuality.paradoxQualityCheck.score < 4
         ? paradoxQuality.paradoxQualityCheck.improvedParadox
         : paradox.strategicParadox.paradox,
-    breakthroughInsights: killerInsights.insights ?? [],
-    strategicOptions:
-      Array.isArray(options.data.options) ? options.data.options.map((value) => String(value)) : [options.summary],
-    recommendedChoice: boardDecision.summary,
+    breakthroughInsights: [
+      tension.coreProblem,
+      tension.mechanism,
+      ...decisionEngine.whyItDominates,
+      ...(killerInsights.insights ?? []),
+    ],
+    strategicOptions: scenarios.scenarios.map((item) => `${item.code}. ${item.title}`),
+    recommendedChoice: decisionEngine.recommendedDecision,
     pressureTest: pressureTest.pressureTest,
   });
 
   const decisionBrief = runBoardDecisionBriefNode({
     organizationName: input.organizationName,
     sector: input.sector,
-    coreProblem:
-      paradoxQuality.paradoxQualityCheck.score < 4
-        ? paradoxQuality.paradoxQualityCheck.improvedParadox
-        : paradox.strategicParadox.paradox,
-    strategicChoice: boardDecision.summary,
-    whyChoice: [
-      ...strategicSignals.strategicSignals.map((item) => item.meaning),
-      ...organizationMechanics.map((item) => item.summary),
-      ...systemAnalysis.map((item) => item.summary),
-    ].slice(0, 3),
+    coreProblem: tension.coreProblem,
+    strategicChoice: decisionEngine.recommendedDecision,
+    whyChoice: decisionEngine.whyItDominates,
     majorRisk: pressureTest.pressureTest[0]?.breakpoint || uncomfortableTruth.uncomfortableTruth,
-    boardAction: pressureTest.pressureTest[0]?.recoveryAction || narrative.strategicNarrative.boardTask,
+    boardAction: governance.executionActions[0]?.action || pressureTest.pressureTest[0]?.recoveryAction || narrative.strategicNarrative.boardTask,
     narrative: narrative.strategicNarrative.boardTask,
     pressureTest: pressureTest.pressureTest,
   });
@@ -310,13 +405,18 @@ export function runStrategicBrainArchitecture(input: StrategicBrainInput): Strat
     },
     reasoning: {
       strategicMemory: enrichedStrategicMemory,
+      institutionalMemory,
       strategicPattern,
+      tension,
       paradox,
       paradoxQuality,
       uncomfortableTruth,
       killerInsights,
     },
     decision: {
+      scenarios,
+      decisionEngine,
+      governance,
       options,
       boardDecision,
     },

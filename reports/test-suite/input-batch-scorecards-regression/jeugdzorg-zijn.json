@@ -1,0 +1,55 @@
+{
+  "id": "jeugdzorg-zijn",
+  "organizationName": "Jeugdzorg ZIJN",
+  "sector": "Jeugdzorg",
+  "overallScore": 69,
+  "memoScore": 100,
+  "keywordHits": 3,
+  "keywordTarget": 4,
+  "memoArtifactPass": true,
+  "rawReportArtifactPass": true,
+  "pass": true,
+  "recommendedOption": "Gemeentenportfolio rationaliseren en sturen op kern-, behoud- en uitstapgemeenten",
+  "historicalOutcome": "Geen historisch outcome-signaal beschikbaar",
+  "boardIssueCodes": [
+    "incomplete_sentence",
+    "generic_scenario",
+    "incomplete_section"
+  ],
+  "boardIssues": [
+    "Onvolledige of semantisch kapotte regel verwijderd.",
+    "Onvolledige of semantisch kapotte regel verwijderd.",
+    "Onvolledige of semantisch kapotte regel verwijderd.",
+    "Onvolledige of semantisch kapotte regel verwijderd.",
+    "Onvolledige of semantisch kapotte regel verwijderd.",
+    "Onvolledige of semantisch kapotte regel verwijderd.",
+    "Onvolledige of semantisch kapotte regel verwijderd.",
+    "Onvolledige of semantisch kapotte regel verwijderd.",
+    "Scenario niet onderscheidend: Operationele schaal vergroten: vergroot capaciteit binnen harde grenzen voor caseload en flexratio.",
+    "Scenario niet onderscheidend: Zorgmodel en instroomroute veranderen: herontwerp toegang, triage en routering.",
+    "Sectie ontbreekt of is leeg: Besluitvraag",
+    "Sectie ontbreekt of is leeg: Strategische kernvragen",
+    "Sectie ontbreekt of is leeg: Strategisch patroon",
+    "Sectie ontbreekt of is leeg: Systeemmechanisme",
+    "Sectie ontbreekt of is leeg: Feitenbasis",
+    "Sectie ontbreekt of is leeg: Keuzerichtingen",
+    "Sectie ontbreekt of is leeg: Doorbraakinzichten",
+    "Sectie ontbreekt of is leeg: Mogelijke ontwikkelingen",
+    "Sectie ontbreekt of is leeg: Bestuurlijke waarschuwingssignalen",
+    "Sectie ontbreekt of is leeg: Besluitgevolgen"
+  ],
+  "consistencyFindings": [
+    "Kernprobleem, kernstelling en aanbevolen keuze sluiten semantisch niet strak op elkaar aan.",
+    "Aanbevolen keuze is niet logisch verankerd in de strategische spanning van de analysekaart.",
+    "Scenario's verwijzen niet zichtbaar naar de centrale strategische spanning."
+  ],
+  "rawConsistencyFindings": [
+    "Aanbevolen keuze is niet logisch verankerd in de strategische spanning van de analysekaart.",
+    "Scenario's verwijzen niet zichtbaar naar de centrale strategische spanning."
+  ],
+  "scenarioIssues": [
+    "Scenario niet onderscheidend: Operationele schaal vergroten: vergroot capaciteit binnen harde grenzen voor caseload en flexratio.",
+    "Scenario niet onderscheidend: Zorgmodel en instroomroute veranderen: herontwerp toegang, triage en routering."
+  ],
+  "boardMemoQualityFindings": []
+}

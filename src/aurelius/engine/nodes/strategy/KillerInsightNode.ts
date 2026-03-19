@@ -14,7 +14,7 @@ type KillerInsightOutput = {
 const TARGET_MIN = 7;
 const TARGET_MAX = 10;
 const NON_TRIVIAL_RE = /\b(transparantie|margekaart|beter sturen|meer focus)\b/i;
-const MECHANISM_RE = /\bONDERLIGGENDE OORZAAK\b/i;
+const MECHANISM_RE = /\b(?:ONDERLIGGENDE OORZAAK|WAAROM DIT BELANGRIJK IS)\b/i;
 const LEVER_RE = /\bBESTUURLIJK GEVOLG\b/i;
 const EVIDENCE_RE = /(€\s?\d|\d+\s?%|\d+\s?(?:dagen|maanden|jaar)|plafond|contractvloer|no-show|casemix|doorlooptijd|bijbetaling|tarief)/i;
 const DOUBLE_IMPACT_RE = /organisatie[\s\S]{0,120}(cliënt|client|klant)|(?:cliënt|client|klant)[\s\S]{0,120}organisatie/i;
@@ -94,8 +94,8 @@ function formatInsight(index: number, payload: {
   risk: string;
 }): string {
   return [
-    `KERNINZICHT — ${payload.truth}`,
-    `ONDERLIGGENDE OORZAAK — ${payload.mechanism} Bewijs: ${payload.evidence.replace(/^- /gm, "").replace(/\n/g, "; ")}`,
+    `INZICHT — ${payload.truth}`,
+    `WAAROM DIT BELANGRIJK IS — ${payload.mechanism} Bewijs: ${payload.evidence.replace(/^- /gm, "").replace(/\n/g, "; ")}`,
     `BESTUURLIJK GEVOLG — ${payload.action} ${payload.risk}`,
   ].join("\n");
 }

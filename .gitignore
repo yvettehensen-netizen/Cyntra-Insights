@@ -1,5 +1,13 @@
 .env
 node_modules
+dist
+logs
+tmp
+.DS_Store
+.DS_Store?
+*.log
+.cache
+coverage
 QUICK_FIX_OPENAI.md
 SETUP_SECRETS_GUIDE.md
 COMPLETE_SETUP_GUIDE.md

@@ -61,10 +61,15 @@ async function main() {
     path.join(repoRoot, "src/pages/portal/saas/StrategischRapportSaaSPage.tsx"),
     "utf8"
   );
+  const boardroomViewSource = fs.readFileSync(
+    path.join(repoRoot, "src/components/reports/BoardroomView.tsx"),
+    "utf8"
+  );
   assert(pageSource.includes("Kort dossier"), "rapportpagina mist kort dossier toggle");
   assert(pageSource.includes("Volledig dossier"), "rapportpagina mist volledig dossier toggle");
   assert(pageSource.includes("getVisibleReportTabsForMode(reportMode)"), "tabs worden niet op report mode gefilterd");
   assert(pageSource.includes('compact={reportMode === "short"}'), "boardroom view krijgt short dossier niet compact mee");
+  assert(boardroomViewSource.includes('titleLabel="Decision cockpit"'), "kort dossier gebruikt nog een afwijkende boardroom-titel");
 
   console.log("report speed mode regression passed");
 }

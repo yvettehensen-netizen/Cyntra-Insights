@@ -1,6 +1,6 @@
-SignalStack is een SaaS scale-up met groei in enterprise klanten.
-Sales wil sneller nieuwe features leveren om grotere deals te sluiten.
-Tegelijkertijd neemt supportdruk toe en kost enterprise onboarding meer implementatiecapaciteit.
-Het platform kent reliability-problemen tijdens piekmomenten.
-De strategische spanning zit tussen productstabiliteit voor bestaande klanten en feature-expansie voor nieuwe omzet.
-Belangrijke thema's: churn, onboarding, roadmap governance, support load en implementation discipline.
+SignalStack is een SaaS scale-up met druk op burn, churn en CAC payback.
+Enterprise deals verhogen de ACV maar vergroten tegelijk implementation overload en vertragen time-to-value.
+Nieuwe omzet compenseert churn niet zolang net revenue retention onder druk staat en pricing niet meebeweegt.
+De organisatie moet kiezen tussen salesversnelling en het eerst herstellen van retentie en unit economics.
+Implementatiecapaciteit, burn multiple en ICP-discipline bepalen of groei werkelijk schaalbaar wordt.
+

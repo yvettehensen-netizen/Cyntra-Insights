@@ -1,24 +1,29 @@
 import { Link } from "react-router-dom";
 
 export default function RootSidebar() {
-  return (
-    <div className="w-64 bg-black border-r border-white/10 min-h-screen p-6 text-white">
-      <h2 className="text-xl font-bold mb-6">Aurelius Admin</h2>
+  const items = [
+    { to: "/root", label: "Dashboard" },
+    { to: "/root/analyses", label: "Analyses" },
+    { to: "/root/users", label: "Gebruikers" },
+    { to: "/root/engine", label: "Engine" },
+  ];
 
-      <nav className="flex flex-col gap-3">
-        <Link to="/root" className="text-gray-300 hover:text-white">
-          Dashboard
-        </Link>
-        <Link to="/root/analyses" className="text-gray-300 hover:text-white">
-          Analyses
-        </Link>
-        <Link to="/root/users" className="text-gray-300 hover:text-white">
-          Gebruikers
-        </Link>
-        <Link to="/root/engine" className="text-gray-300 hover:text-white">
-          Engine
-        </Link>
+  return (
+    <aside className="min-h-screen w-64 border-r border-white/[0.06] bg-[#08111b] p-6 text-white">
+      <h2 className="mb-6 text-lg font-semibold tracking-[-0.02em] text-white">Aurelius Admin</h2>
+
+      <nav className="flex flex-col gap-2">
+        {items.map((item) => (
+          <Link
+            key={item.to}
+            to={item.to}
+            className="flex min-h-[40px] items-center rounded-[12px] px-3 text-sm text-slate-300 transition hover:bg-white/[0.04] hover:text-white"
+          >
+            <span className="inline-flex h-[18px] w-[18px] rounded-full border border-white/[0.1] bg-white/[0.03]" />
+            <span className="ml-3">{item.label}</span>
+          </Link>
+        ))}
       </nav>
-    </div>
+    </aside>
   );
 }

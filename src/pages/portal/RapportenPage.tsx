@@ -14,6 +14,8 @@ import {
 import type { StoredReport } from "@/aurelius/models/StoredReport";
 import { usePlatformApiBridge } from "./saas/usePlatformApiBridge";
 import { isSessionCompleted } from "@/platform/types";
+import { buildPortalReportPath } from "./portalPaths";
+import { formatReportCode } from "./saas/reportIdentity";
 
 import {
   ArrowLeft,
@@ -298,27 +300,32 @@ export default function RapportenPage() {
           </h2>
           <div className="space-y-3">
             {storedReports.map((report) => (
-              <div
+              <article
                 key={report.id}
                 className="rounded-xl border divider-cyntra bg-cyntra-card p-4"
               >
-                <div className="flex flex-wrap items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => navigate(buildPortalReportPath(report.id))}
+                  className="w-full text-left"
+                >
                   <div>
                     <p className="text-cyntra-primary font-semibold">{report.title}</p>
                     <p className="text-xs text-cyntra-secondary">
+                      {formatReportCode(report.analysisId)} ·{" "}
                       {new Date(report.date).toLocaleString("nl-NL")} · BALI {report.baliScore.toFixed(2)} · Betrouwbaarheid {report.betrouwbaarheid.toFixed(1)}
                     </p>
                     <p className="text-xs text-cyntra-secondary">
                       Status: {report.interventionStatus}
                     </p>
                   </div>
+                </button>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
                       onClick={() => {
-                        if (report.analysisId) {
-                          navigate(`/portal/rapporten/${encodeURIComponent(report.analysisId)}`);
-                        }
+                        navigate(buildPortalReportPath(report.id));
                       }}
                       className="inline-flex items-center gap-1 rounded-lg border divider-cyntra px-3 py-2 text-xs text-cyntra-primary"
                     >
@@ -350,7 +357,7 @@ export default function RapportenPage() {
                     </button>
                   </div>
                 </div>
-              </div>
+              </article>
             ))}
           </div>
         </section>

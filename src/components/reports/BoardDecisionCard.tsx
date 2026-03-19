@@ -1,20 +1,19 @@
-import type { BestuurlijkeBesliskaart } from "./types";
+import type { BoardroomExecutiveDecisionCardDocument } from "@/types/BoardroomDocument";
 import { reportViewStyles } from "./reportViewStyles";
 
 type BoardDecisionCardProps = {
-  data: BestuurlijkeBesliskaart;
-  decisionQuestion?: string;
+  card: BoardroomExecutiveDecisionCardDocument;
   onCopyDecision?: () => void;
 };
 
-export default function BoardDecisionCard({ data, decisionQuestion, onCopyDecision }: BoardDecisionCardProps) {
+export default function BoardDecisionCard({ card, onCopyDecision }: BoardDecisionCardProps) {
   return (
     <section className={reportViewStyles.cockpit.panel}>
       <div className="space-y-4">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className={reportViewStyles.header.label}>Besluit</p>
-            <h2 className={reportViewStyles.cockpit.panelTitle}>{data.recommendedChoice}</h2>
+            <h2 className={reportViewStyles.cockpit.panelTitle}>{card.summary}</h2>
           </div>
           {onCopyDecision ? (
             <button type="button" className="rounded-full border border-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-200" onClick={onCopyDecision}>
@@ -22,17 +21,12 @@ export default function BoardDecisionCard({ data, decisionQuestion, onCopyDecisi
             </button>
           ) : null}
         </div>
-        {decisionQuestion ? <p className={reportViewStyles.cockpit.panelText}>{decisionQuestion}</p> : null}
-        <div className="grid gap-4 md:grid-cols-2">
+        {card.decisionQuestion ? (
           <article className={reportViewStyles.cockpit.signalCard}>
-            <p className={reportViewStyles.cockpit.scenarioLabel}>Kernprobleem</p>
-            <p className={reportViewStyles.cockpit.panelText}>{data.coreProblem}</p>
+            <p className={reportViewStyles.cockpit.scenarioLabel}>Besluitvraag</p>
+            <p className={reportViewStyles.cockpit.panelText}>{card.decisionQuestion}</p>
           </article>
-          <article className={reportViewStyles.cockpit.signalCard}>
-            <p className={reportViewStyles.cockpit.scenarioLabel}>Kernstelling</p>
-            <p className={reportViewStyles.cockpit.panelText}>{data.coreStatement}</p>
-          </article>
-        </div>
+        ) : null}
       </div>
     </section>
   );

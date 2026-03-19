@@ -3,6 +3,7 @@ export type StrategicBrainLayerId =
   | "pattern"
   | "learning"
   | "reasoning"
+  | "tension"
   | "decision"
   | "boardroom"
   | "narrative"
@@ -15,6 +16,11 @@ export type StrategicBrainNodeId =
   | "SystemAnalysisEngine"
   | "StrategicPatternDetectionNode"
   | "StrategicMemoryNode"
+  | "TensionEngineNode"
+  | "ScenarioEngineNode"
+  | "DecisionEngineNode"
+  | "GovernanceEngineNode"
+  | "InstitutionalMemoryNode"
   | "StrategicParadoxNode"
   | "ParadoxQualityCheckNode"
   | "UncomfortableTruthNode"
@@ -47,6 +53,11 @@ export const STRATEGIC_BRAIN_LAYERS: StrategicBrainLayer[] = [
     id: "learning",
     label: "Learning Layer",
     nodes: ["StrategicMemoryNode"],
+  },
+  {
+    id: "tension",
+    label: "Tension Layer",
+    nodes: ["TensionEngineNode", "ScenarioEngineNode", "DecisionEngineNode", "GovernanceEngineNode", "InstitutionalMemoryNode"],
   },
   {
     id: "reasoning",

@@ -30,6 +30,22 @@ function overlapScore(a: string, b: string): number {
   return overlap / Math.max(left.size, right.size);
 }
 
+function recommendationFit(problemText: string, recommendation: string): number {
+  const source = String(problemText ?? "").toLowerCase();
+  const rec = String(recommendation ?? "").toLowerCase();
+  if (!source || !rec) return 0;
+  const signals: Array<[RegExp, RegExp]> = [
+    [/\bcontract|plafond|tarief|zorgzwaarte\b/i, /\bcontractmix|kern beschermen|heronderhandel\b/i],
+    [/\bchurn|burn|nrr|cac|payback|pricing\b/i, /\bretentie|unit economics|pricing|icp\b/i],
+    [/\bdelivery|utilization|account|maatwerk|gross margin\b/i, /\bdelivery disciplineren|marge per account|account\b/i],
+    [/\bgemeente|caseload|wachttijd|consortium\b/i, /\bgemeentenportfolio|triage|kern\b/i],
+  ];
+  return signals.reduce((score, [problemPattern, recommendationPattern]) => {
+    if (problemPattern.test(source) && recommendationPattern.test(rec)) return score + 0.2;
+    return score;
+  }, 0);
+}
+
 function outcomeWeight(score?: StrategicOutcomeSnapshot["outcome_score"]): number {
   switch (score) {
     case "hoog":
@@ -92,8 +108,13 @@ export class StrategicMemoryEngine {
           .sort((a, b) => Date.parse(b.evaluation_date) - Date.parse(a.evaluation_date))[0];
         const sectorMatch = Boolean(sector) && item.sector.toLowerCase() === String(sector).toLowerCase();
         const recommendation = item.gekozen_strategie || item.strategic_options[0] || "";
+        const recommendationAlignment = recommendationFit(problemText, recommendation);
         const weightedScore =
-          overlap * 60 + (sectorMatch ? 20 : 0) + outcomeWeight(matchingOutcome?.outcome_score) * 20;
+          overlap * 50 +
+          (sectorMatch ? 20 : 0) +
+          outcomeWeight(matchingOutcome?.outcome_score) * 20 +
+          recommendationAlignment * 10 +
+          Math.min(5, (item.resultaat ? 1 : 0) + (matchingOutcome ? 1 : 0) * 2);
 
         return {
           item,
@@ -102,6 +123,7 @@ export class StrategicMemoryEngine {
           sectorMatch,
           weightedScore,
           averageOutcomeScore: outcomeWeight(matchingOutcome?.outcome_score) * 100,
+          recommendationAlignment,
         };
       })
       .filter((entry) => entry.recommendation && entry.overlap > 0.15)

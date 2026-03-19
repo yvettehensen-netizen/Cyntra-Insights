@@ -1,36 +1,38 @@
 Northline Advisory
-Sector: B2B dienstverlening
-Analyse datum: 2026-03-12
+Sector: B2B Dienstverlening
+Analyse datum: 2026-03-16
 
 KERNPROBLEEM
-De organisatie kiest tussen maatwerkgedreven groei voor enkele grote klanten en standaardisatie van delivery om marge en schaalbaarheid te herstellen.
+Commerciële groei verhoogt omzet, maar zonder delivery-discipline en accountselectie verslechteren marge en uitvoerbaarheid tegelijk.
 
 KERNSTELLING
-Het dominante risico is niet te weinig vraag maar te hoge afhankelijkheid van uitzonderingswerk dat delivery en prijsdiscipline tegelijk ondermijnt.
+De organisatie kan niet tegelijk commerciële versnelling, maatwerkintensiteit en stabiele delivery-capaciteit maximaliseren zonder margeverlies.
 
 AANBEVOLEN KEUZE
-Standaardiseer delivery en begrens maatwerk voor niet-strategische klanten.
+Kern beschermen en delivery disciplineren.
 
-SCENARIO'S
-Scenario A — Delivery standaardiseren
-MECHANISME: vaste proposities en strakker scopen verminderen uitzonderingswerk
-RISICO: enkele klanten ervaren minder flexibiliteit
-RELATIE TOT SPANNING: Delivery standaardiseren / Maatwerkgedreven groei vasthouden
-BESTUURLIJKE IMPLICATIE: directie moet scope discipline afdwingen
+WAAROM DEZE KEUZE
+Accountconcentratie, deliverybezetting en marge per klantsegment bepalen de bestuurlijke keuze in B2B-dienstverlening. Salesmix, uitzonderingswerk en deliverybelasting bepalen samen de effectieve marge en leverbetrouwbaarheid per account.
 
-Scenario B — Maatwerkgedreven groei vasthouden
-MECHANISME: omzet maximaliseren via uitzonderingen en senior capaciteit
-RISICO: margedruk en sleutelpersoonafhankelijkheid nemen toe
-RELATIE TOT SPANNING: Delivery standaardiseren / Maatwerkgedreven groei vasthouden
-BESTUURLIJKE IMPLICATIE: directie accepteert meer operationele fragiliteit
+STOPREGEL: Herzie direct bij delivery utilization > 90% gedurende twee meetperiodes.
+STOPREGEL: Herzie direct bij gross margin < 30% gedurende twee meetperiodes.
+STOPREGEL: Herzie direct bij top-3 accounts > 55% omzet gedurende twee meetperiodes.
 
-INTERVENTIES
-STOPREGEL 1
-ACTIE: Herijk scope-, pricing- en afwijkingsrechten per klantsegment
-RICHTING: Standaardiseer delivery en begrens maatwerk voor niet-strategische klanten
-WAAROM: beschermt senior capaciteit en margediscipline
-RISICO: zonder scoping groeit uitzonderingswerk sneller dan omzetkwaliteit
-STOPREGEL: Herzie direct bij bruto marge < 35%
-OWNER: Managing Director
-DEADLINE: 21 dagen
-KPI: 90% van nieuwe deals volgt standaard scope-profielen
+SCENARIO A
+Kern beschermen en delivery disciplineren.
+MECHANISME — Herbalanceer sales- en deliverydoelen zodat marge per account en leverdiscipline centraal staan.
+RISICO — Zonder prijsdiscipline blijven uitzonderingsdeals de capaciteit leegtrekken.
+STRATEGISCHE IMPLICATIE — Bestuur moet delivery- en salesgovernance op accountniveau koppelen.
+
+SCENARIO B
+Commercieel versnellen via nieuwe proposities.
+MECHANISME — Nieuwe proposities verhogen omzetkans, maar vergroten ook uitvoeringsdruk en complexiteit.
+RISICO — Propositiegroei zonder deliverybuffer verlaagt leverbetrouwbaarheid en teamrust.
+STRATEGISCHE IMPLICATIE — Bestuur moet expliciet bepalen welke proposities wel en niet parallel mogen schalen.
+
+SCENARIO C
+Selectieve focus op rendabele accounts en sectoren.
+MECHANISME — Verlaag ruis door accounts te prioriteren op marge, voorspelbaarheid en herhaalbaarheid.
+RISICO — Te scherpe focus kan kortetermijnomzet afremmen.
+STRATEGISCHE IMPLICATIE — Bestuur moet accountportfolio actief classificeren en afbouw managen.
+

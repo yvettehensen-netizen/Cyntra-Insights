@@ -11,6 +11,7 @@ const TEST_ENTRIES = [
   "tests/engine/performance-check.test.ts",
   "tests/rapport/report-structure.test.ts",
   "tests/rapport/strategic-report-rendering.test.ts",
+  "tests/rapport/short-dossier-canonical-fallback.test.ts",
 ];
 
 function projectRoot() {

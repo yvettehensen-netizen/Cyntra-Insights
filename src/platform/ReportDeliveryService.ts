@@ -1,4 +1,4 @@
-import type { AnalysisSession, DeliveredReport } from "./types";
+import type { AnalysisSession, DeliveredReport, StrategicReport } from "./types";
 import { normalize } from "./storage";
 import { buildStyledReportPdfDataUri, metaFromSession } from "@/services/reportPdf";
 
@@ -56,12 +56,23 @@ async function toPdfLikeText(session: AnalysisSession): Promise<string> {
     return sanitizeForDelivery(session.board_report || "Geen rapportinhoud beschikbaar.");
   }
 
+  const report: StrategicReport = {
+    report_id: session.session_id,
+    session_id: session.session_id,
+    organization_id: session.organization_name || session.organization_id || "Organisatie",
+    title: session.organization_name || session.organization_id || "Organisatie",
+    sections: [],
+    generated_at: session.analyse_datum || new Date().toISOString(),
+    report_body: sanitizeForDelivery(session.board_report || "Geen rapportinhoud beschikbaar."),
+  };
+
   try {
     return await buildStyledReportPdfDataUri({
       title: "Bestuurlijke Analyse & Interventie",
       subtitle: "Cyntra Executive Dossier",
-      reportBody: sanitizeForDelivery(session.board_report || "Geen rapportinhoud beschikbaar."),
+      reportBody: report.report_body,
       meta: metaFromSession(session),
+      sourceReport: report,
     });
   } catch {
     return sanitizeForDelivery(session.board_report || "Geen rapportinhoud beschikbaar.");

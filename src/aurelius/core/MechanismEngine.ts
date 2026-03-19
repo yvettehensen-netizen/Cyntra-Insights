@@ -35,7 +35,7 @@ function deriveYouthMechanism(source: string, risk: string, strategy: string): M
     ? "Instroom en toewijzing worden mede buiten de eigen organisatie bepaald via consortium en regionale triage"
     : "Instroom en capaciteit bewegen niet volledig op hetzelfde bestuurlijke ritme";
   const mechanism = has(/\bgemeent|contract|budget\b/i, source)
-    ? "Een breed ambulant model moet functioneren binnen gemeentelijke contractruimte, regionale triage en budgetgedreven capaciteit"
+    ? "De causale keten loopt van contractstructuur via tariefverschillen en reistijd/no-show regels naar caseload per team, vervolgens naar teamdruk en retentie, daarna naar wachttijd en behandelcapaciteit en uiteindelijk naar marge en bestuurbaarheid"
     : "De strategie moet tegelijk kwaliteit, bereik en uitvoerbaarheid dragen binnen externe contract- en budgetkaders";
   const consequence = has(/\bspecialisatie|niche\b/i, `${source} ${strategy}`)
     ? "Breedte wordt kwetsbaar zodra externe partijen specialisatie en scherpere financieringslogica belonen"

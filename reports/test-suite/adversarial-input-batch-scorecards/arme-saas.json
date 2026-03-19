@@ -1,0 +1,52 @@
+{
+  "id": "arme-saas",
+  "organizationName": "ThinCloud",
+  "sector": "SaaS",
+  "overallScore": 81,
+  "memoScore": 100,
+  "keywordHits": 3,
+  "keywordTarget": 4,
+  "memoArtifactPass": true,
+  "rawReportArtifactPass": true,
+  "pass": true,
+  "recommendedOption": "Retentie en unit economics eerst herstellen",
+  "historicalOutcome": "Geen historisch outcome-signaal beschikbaar",
+  "boardIssueCodes": [
+    "incomplete_sentence",
+    "generic_scenario",
+    "incomplete_section"
+  ],
+  "boardIssues": [
+    "Onvolledige of semantisch kapotte regel verwijderd.",
+    "Onvolledige of semantisch kapotte regel verwijderd.",
+    "Onvolledige of semantisch kapotte regel verwijderd.",
+    "Onvolledige of semantisch kapotte regel verwijderd.",
+    "Onvolledige of semantisch kapotte regel verwijderd.",
+    "Onvolledige of semantisch kapotte regel verwijderd.",
+    "Onvolledige of semantisch kapotte regel verwijderd.",
+    "Onvolledige of semantisch kapotte regel verwijderd.",
+    "Scenario niet onderscheidend: Enterprise sales versnellen: verhoogt ACV maar vergroot implementatiedruk.",
+    "Scenario niet onderscheidend: Focus op selectieve verticale groei met scherpere ICP: verhoogt retentie per segment en verlaagt ruis.",
+    "Sectie ontbreekt of is leeg: Besluitvraag",
+    "Sectie ontbreekt of is leeg: Strategische kernvragen",
+    "Sectie ontbreekt of is leeg: Strategisch patroon",
+    "Sectie ontbreekt of is leeg: Systeemmechanisme",
+    "Sectie ontbreekt of is leeg: Feitenbasis",
+    "Sectie ontbreekt of is leeg: Keuzerichtingen",
+    "Sectie ontbreekt of is leeg: Doorbraakinzichten",
+    "Sectie ontbreekt of is leeg: Mogelijke ontwikkelingen",
+    "Sectie ontbreekt of is leeg: Bestuurlijke waarschuwingssignalen",
+    "Sectie ontbreekt of is leeg: Besluitgevolgen"
+  ],
+  "consistencyFindings": [
+    "Aanbevolen keuze is niet logisch verankerd in de strategische spanning van de analysekaart."
+  ],
+  "rawConsistencyFindings": [
+    "Aanbevolen keuze is niet logisch verankerd in de strategische spanning van de analysekaart."
+  ],
+  "scenarioIssues": [
+    "Scenario niet onderscheidend: Enterprise sales versnellen: verhoogt ACV maar vergroot implementatiedruk.",
+    "Scenario niet onderscheidend: Focus op selectieve verticale groei met scherpere ICP: verhoogt retentie per segment en verlaagt ruis."
+  ],
+  "boardMemoQualityFindings": []
+}

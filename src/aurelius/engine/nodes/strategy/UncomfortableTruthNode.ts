@@ -79,13 +79,13 @@ OUTPUT
 ### Ongemakkelijke waarheid
 
 WAARHEID
-De organisatie kan niet tegelijk overal beschikbaar blijven en doen alsof die breedte geen harde grens heeft.
+De organisatie kan niet tegelijk een breed gemeentenportfolio aanhouden en doen alsof teamcapaciteit onbeperkt meebeweegt.
 
 UITLEG
-De regionale rol voelt strategisch noodzakelijk, maar elke extra gemeente, reistijd en complexe instroom drukt direct op teams, wachttijd en marge. Zolang die grens niet expliciet wordt gemaakt, lijkt de strategie ruim, maar wordt de uitvoering steeds krapper.
+De regionale rol voelt strategisch noodzakelijk, maar elke extra gemeente, reistijd en complexe instroom drukt direct op teams, wachttijd en marge. Zolang die grens niet expliciet wordt gemaakt, lijkt het portfolio breed, maar wordt de uitvoering steeds smaller.
 
 BESTUURLIJKE IMPLICATIE
-Het bestuur moet expliciet bepalen waar beschikbaarheid ophoudt en overbelasting begint.
+Het bestuur moet expliciet bepalen welke gemeenten het portfolio waard zijn en waar overbelasting begint.
 `.trim();
 
 function normalize(value: unknown): string {
@@ -135,11 +135,11 @@ function buildFallbackTruth(input: UncomfortableTruthNodeInput) {
   if (/\bjeugdzorg|gemeente|consortium|regionaal\b/i.test(source)) {
     return {
       uncomfortableTruth:
-        "De organisatie kan niet tegelijk breed toegankelijk blijven voor alle gemeenten en doen alsof die breedte geen harde grens heeft.",
+        "De organisatie kan niet tegelijk een breed gemeentenportfolio aanhouden en doen alsof teamcapaciteit onbeperkt meebeweegt.",
       explanation:
-        "De regionale rol voelt strategisch logisch, maar elke extra gemeente, reistijd en instroomroute drukt direct op caseload, wachttijd en marge. Zolang die grens niet expliciet wordt gemaakt, lijkt de strategie ruim, maar wordt de uitvoering steeds smaller.",
+        "De regionale rol voelt strategisch logisch, maar elke extra gemeente, reistijd en instroomroute drukt direct op caseload, wachttijd en marge. Zolang die grens niet expliciet wordt gemaakt, lijkt het portfolio breed, maar wordt de uitvoering steeds smaller.",
       boardImplication:
-        "Het bestuur moet hard kiezen waar toegankelijkheid nog waarde toevoegt en waar zij overgaat in overbelasting.",
+        "Het bestuur moet hard kiezen welke gemeenten nog waarde toevoegen en waar spreiding overgaat in overbelasting.",
     };
   }
 

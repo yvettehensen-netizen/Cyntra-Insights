@@ -1,65 +1,65 @@
 {
   "organisation": "Jeugdzorg ZIJN",
   "sector": "Jeugdzorg",
-  "analysisDate": "2026-03-12",
-  "dominantRisk": "Contractgedreven instroom, regionale triage en budgetgedreven capaciteit zetten meer druk op uitvoerbaarheid dan parallelle verbreding bestuurlijk kan dragen",
+  "analysisDate": "2026-03-16",
+  "dominantRisk": "Teamdruk en margeverlies nemen sneller toe dan extra volume kan compenseren.",
   "strategicTension": {
-    "optionA": "Brede ambulante specialist blijven",
-    "optionB": "Selectieve specialisatie / niche kiezen"
+    "optionA": "Regionaal relevant blijven voor gemeenten",
+    "optionB": "Operationele uitvoerbaarheid binnen vaste teams beschermen"
   },
   "decisionOptions": [
-    "Brede ambulante specialist blijven",
-    "Selectieve specialisatie / niche kiezen",
-    "Consortiumstrategie verdiepen"
+    "Gemeentenportfolio rationaliseren",
+    "Operationele schaal vergroten binnen vaste teams en flexibele schil",
+    "Zorgmodel en instroomroute veranderen"
   ],
-  "recommendedOption": "Brede ambulante specialist blijven",
+  "recommendedOption": "Gemeentenportfolio rationaliseren en sturen op kern-, behoud- en uitstapgemeenten",
   "scenarios": [
     {
-      "name": "Scenario A — Brede ambulante specialist blijven",
-      "mechanism": "Behoud brede ambulante positionering maar maak groei ondergeschikt aan contractdiscipline en triage-realiteit",
-      "risk": "Verbreding blijft beperkt terwijl gemeentelijke druk op volume en budget hoog blijft",
-      "governanceImplication": "Bestuur moet prioriteren op kerncapaciteit en actieve consortiumsturing"
+      "name": "Scenario A",
+      "mechanism": "Prioriteer kern-, behoud- en uitstapgemeenten zodat contractruimte, reistijd en teamstabiliteit bestuurbaar blijven.",
+      "risk": "Te snelle afbouw kan regionale legitimiteit aantasten als gemeenten niet actief worden meegenomen.",
+      "governanceImplication": "Bestuur moet gemeenten expliciet classificeren en de portfolio-keuze periodiek herijken."
     },
     {
-      "name": "Scenario B — Selectieve specialisatie / niche kiezen",
-      "mechanism": "Versmal het profiel naar een kleiner aantal zorgvormen om capaciteit en kwaliteit te concentreren",
-      "risk": "Regionale relevantie en instroombasis kunnen versmallen",
-      "governanceImplication": "Bestuur moet expliciet besluiten welk aanbod niet langer prioriteit krijgt"
+      "name": "Scenario B",
+      "mechanism": "Vergroot capaciteit alleen binnen harde grenzen voor caseload, flexratio en reistijd zodat extra volume niet direct de kern uitholt.",
+      "risk": "Schaal zonder grenzen trekt cultuurkapitaal leeg en verhoogt wachtdruk sneller dan marge meegroeit.",
+      "governanceImplication": "Bestuur moet cap op flexratio en caseload bestuurlijk vastzetten."
     },
     {
-      "name": "Scenario C — Consortiumstrategie verdiepen",
-      "mechanism": "Vergroot invloed op regionale toegang, triage en samenwerking in plaats van autonome verbreding",
-      "risk": "Afhankelijkheid van partners en gemeenten neemt toe",
-      "governanceImplication": "Bestuur moet extern mandaat en interne escalatieregels expliciet vastleggen"
+      "name": "Scenario C",
+      "mechanism": "Herontwerp triage, routering en partnerinzet zodat niet alle vraag dezelfde teams en dezelfde zorgvorm belast.",
+      "risk": "Governancecomplexiteit stijgt als mandaat en consortiumafspraken niet vooraf scherp zijn vastgelegd.",
+      "governanceImplication": "Bestuur moet mandaat, escalatie en partnerrol formaliseren."
     }
   ],
   "interventions": [
     {
-      "action": "Standaardiseer triage en wekelijkse capaciteitssturing",
-      "reason": "Beschermt de kernroute tegen contract- en instroomschommelingen",
-      "risk": "Zonder ritme blijft wachtdruk zich verplaatsen tussen teams",
-      "stopRule": "Herzie direct bij wachttijd > 12 weken",
-      "owner": "Bestuur",
-      "deadline": "15 dagen",
-      "KPI": "Wachtdruk daalt en caseload spreidt aantoonbaar"
+      "action": "Stel een gemeentenmatrix vast met kern-, behoud- en uitstapgemeenten.",
+      "reason": "Portfolio-keuzes moeten expliciet worden gemaakt op marge, reistijd en contractzekerheid.",
+      "risk": "Zonder classificatie blijft spreiding doorlopen terwijl uitvoerbaarheid afneemt.",
+      "stopRule": "Herzie direct bij wachttijd > 12 weken gedurende twee meetperiodes.",
+      "owner": "Bestuur + Directie",
+      "deadline": "Dag 30",
+      "KPI": "100% van de gemeenten geclassificeerd op marge, reistijd en contractzekerheid."
     },
     {
-      "action": "Koppel nieuwe initiatieven aan contractruimte en governancecriteria",
-      "reason": "Voorkomt dat verbreding sneller groeit dan bestuurlijke absorptiecapaciteit",
-      "risk": "Zonder poortcriteria groeit portfolio-complexiteit sneller dan stuurkracht",
-      "stopRule": "Herzie direct bij marge < 4%",
-      "owner": "Directie",
-      "deadline": "30 dagen",
-      "KPI": "Alle nieuwe initiatieven hebben businesscase, eigenaar en stopcriterium"
+      "action": "Koppel consortiumtriage en instroom wekelijks aan caseload- en wachttijdsturing.",
+      "reason": "Externe instroom moet aan planbare capaciteit worden gekoppeld.",
+      "risk": "Zonder ritme groeit caseload sneller dan teams aankunnen.",
+      "stopRule": "Herzie direct bij caseload > 18 per professional gedurende twee meetperiodes.",
+      "owner": "Operationeel directeur",
+      "deadline": "Dag 45",
+      "KPI": "Instroom per route zichtbaar en caseload binnen bestuursnorm."
     },
     {
-      "action": "Versterk de consortiumrol in regionale triage- en contractafspraken",
-      "reason": "Sluit de strategie aan op het werkelijke instroommechanisme",
-      "risk": "Zonder invloed op toegang blijft de organisatie reageren op externe druk in plaats van sturen",
-      "stopRule": "Herzie direct bij caseload > 18 per behandelaar",
-      "owner": "Bestuur",
-      "deadline": "45 dagen",
-      "KPI": "Meer voorspelbaarheid in instroom en contractafspraken"
+      "action": "Bescherm cultuurkapitaal met een bestuurlijke grens voor flexratio en groeitempo.",
+      "reason": "Retentie en teamstabiliteit zijn het productiemechanisme van ambulante kwaliteit.",
+      "risk": "Te snelle groei tast retentie en declarabele productiviteit tegelijk aan.",
+      "stopRule": "Herzie direct bij marge < 4% gedurende twee meetperiodes.",
+      "owner": "Bestuur + HR/Operations",
+      "deadline": "Dag 60",
+      "KPI": "Flexratio onder grens en retentie/wachtdruk stabiel."
     }
   ]
 }

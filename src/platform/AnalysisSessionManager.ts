@@ -455,6 +455,72 @@ function cleanMemoText(value: string): string {
     .trim();
 }
 
+function refinePrimarySectorMemo(
+  memo: string,
+  input: {
+    sector?: string;
+    organizationName?: string;
+    executiveSummary?: string;
+    chosenStrategy?: string;
+    strategicHypothesis?: string;
+  }
+): string {
+  const text = cleanMemoText(String(memo || ""));
+  const sectorPack = resolvePrimarySectorPack({
+    sector: input.sector,
+    organizationName: input.organizationName,
+  });
+  if (sectorPack.key === "generic" || !text) return text;
+
+  const sectorContextBlock =
+    sectorPack.key === "ggz"
+      ? [
+          "Scenario-interpretatie",
+          "Contractplafonds, zorgzwaarte en behandelcapaciteit bepalen samen welk GGZ-scenario bestuurlijk houdbaar blijft.",
+          "",
+          "Decision memory",
+          "Aannames: contractplafonds en behandelcapaciteit blijven in lijn met de gekozen kernfocus; zorgpaden groeien alleen waar no-show, zorgzwaarte en marge binnen norm blijven.",
+        ].join("\n")
+      : sectorPack.key === "saas"
+        ? [
+            "Scenario-interpretatie",
+            "Retentie, burn en implementatiecapaciteit bepalen samen welk SaaS-scenario werkelijk schaalbaar is.",
+            "",
+            "Decision memory",
+            "Aannames: retentie en pricing verbeteren sneller dan acquisitiedruk oploopt; implementatiecapaciteit blijft leidend boven nieuw enterprise-volume.",
+          ].join("\n")
+        : sectorPack.key === "b2b"
+          ? [
+              "Scenario-interpretatie",
+              "Delivery utilization, marge per account en accountconcentratie bepalen samen welk B2B-scenario bestuurlijk houdbaar is.",
+              "",
+              "Decision memory",
+              "Aannames: deliverydiscipline blijft leidend boven commerciële uitzonderingen; marge per account verbetert binnen de gekozen portfoliofocus.",
+            ].join("\n")
+          : "";
+
+  let next = text;
+  if (input.executiveSummary && !next.includes(String(input.executiveSummary).trim())) {
+    next = next.replace(
+      /Bestuurlijke hypothese\s*\n/i,
+      `Bestuurlijke hypothese\n${cleanMemoText(String(input.executiveSummary))}\n`
+    );
+  }
+  if (sectorContextBlock && !/Scenario-interpretatie/i.test(next)) {
+    next = `${next}\n\n${sectorContextBlock}`;
+  }
+  if (input.chosenStrategy && !new RegExp(String(input.chosenStrategy).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i").test(next)) {
+    next = `${next}\n\nGekozen koers\n${input.chosenStrategy}`;
+  }
+  if (input.strategicHypothesis && !new RegExp(String(input.strategicHypothesis).slice(0, 40).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i").test(next)) {
+    next = next.replace(
+      /Besluitvoorstel\s*\n/i,
+      `Besluitvoorstel\nStrategische hypothese: ${cleanMemoText(String(input.strategicHypothesis))}\n`
+    );
+  }
+  return next.trim();
+}
+
 function stripSourceDump(value: string): string {
   return cutAtSourceNoise(String(value || ""));
 }
@@ -1803,6 +1869,7 @@ function buildStrategySimulationEngine(params: {
   successMechanism?: string;
   leverage?: InputInsights["leverage"];
   organizationName?: string;
+  sector?: string;
 }): StrategySimulationEngineOutput {
   const org = normalize(params.organizationName) || "de organisatie";
   const growthCap = params.leverage?.growthCapFte ?? 5;
@@ -1810,7 +1877,16 @@ function buildStrategySimulationEngine(params: {
   const agingPct = params.leverage?.agingCostPct ?? 30;
   const mechanismText = normalize(params.successMechanism).toLowerCase();
   const publicYouthContext = /(jeugdzorg|jongeren|gezinnen|gemeente|wijkteam)/i.test(
-    `${org} ${(params.strategicOptions || []).join(" ")} ${mechanismText}`
+    `${org} ${normalize(params.sector)} ${(params.strategicOptions || []).join(" ")} ${mechanismText}`
+  );
+  const ggzContext = /(ggz|geestelijke gezondheidszorg|contractplafond|behandelcapaciteit|zorgzwaarte)/i.test(
+    `${org} ${normalize(params.sector)} ${(params.strategicOptions || []).join(" ")} ${mechanismText}`
+  );
+  const saasContext = /(saas|software|nrr|churn|burn|cac|payback|implementation)/i.test(
+    `${org} ${normalize(params.sector)} ${(params.strategicOptions || []).join(" ")} ${mechanismText}`
+  );
+  const b2bContext = /(b2b|dienstverlening|delivery|utilization|account|gross margin|propositie)/i.test(
+    `${org} ${normalize(params.sector)} ${(params.strategicOptions || []).join(" ")} ${mechanismText}`
   );
   const partnershipContext =
     !publicYouthContext &&
@@ -1818,13 +1894,31 @@ function buildStrategySimulationEngine(params: {
     Boolean(params.leverage?.movementOfZeroKnown) ||
     Boolean(params.leverage?.licenseMarginKnown);
   const options = (params.strategicOptions || []).slice(0, 3);
-  const defaultA = partnershipContext
+  const defaultA = ggzContext
+    ? "Kern beschermen en contractmix heronderhandelen."
+    : saasContext
+      ? "Retentie en unit economics eerst herstellen."
+      : b2bContext
+        ? "Kern beschermen en delivery disciplineren."
+        : partnershipContext
     ? "Culture-first model: bescherm kernkwaliteit en eigenaarschap met beperkte interne groei."
     : "Bescherm de kern en begrens parallelle verbreding totdat capaciteit en governance aantoonbaar op orde zijn.";
-  const defaultB = partnershipContext
+  const defaultB = ggzContext
+    ? "Selectief groeien in rendabele zorgpaden."
+    : saasContext
+      ? "Enterprise sales versnellen."
+      : b2bContext
+        ? "Commercieel versnellen via nieuwe proposities."
+        : partnershipContext
     ? "Versnel impact via extra capaciteit en accepteer hogere druk op borging en uitvoering."
     : "Versnel verbreding en accepteer hogere uitvoeringsdruk op teams, marge en sturing.";
-  const defaultC = partnershipContext
+  const defaultC = ggzContext
+    ? "Netwerkzorg via partners en doorverwijzing verdiepen."
+    : saasContext
+      ? "Focus op selectieve verticale groei met scherpere ICP."
+      : b2bContext
+        ? "Selectieve focus op rendabele accounts en sectoren."
+        : partnershipContext
     ? "Schaal selectief via partners met contractuele kwaliteitsborging en auditritme."
     : "Gefaseerde route met selectieve samenwerking en expliciete governance-gates.";
   const scenarioA = options[0] || defaultA;
@@ -1855,7 +1949,79 @@ function buildStrategySimulationEngine(params: {
           netwerk: "Netwerksamenwerking versterkt bereik zonder dat de organisatie haar kernpropositie hoeft te verbreden.",
         },
       ]
-    : [
+    : ggzContext
+      ? [
+          {
+            scenario: "A",
+            capaciteit: "Behandelcapaciteit stabiliseert wanneer plafonds, zorgzwaarte en no-show tegelijk worden herijkt.",
+            financien: "Marge herstelt als tariefmix en contractruimte beter aansluiten op de feitelijke behandelmix.",
+            cultuur: "Teams houden meer rust zodra wachtdruk en roosterdruk bestuurlijk worden begrensd.",
+            netwerk: "Verwijzersvertrouwen blijft hoger wanneer de kern-GGZ voorspelbaar leverbaar blijft.",
+          },
+          {
+            scenario: "B",
+            capaciteit: "Selectieve groei benut vrije ruimte, maar verhoogt druk zodra zorgpaden te optimistisch worden opgeschaald.",
+            financien: "Rendabele paden kunnen marge verbeteren, maar verliezen snel effect als no-show en indirecte uren oplopen.",
+            cultuur: "Teamdruk neemt toe als groeikeuzes sneller gaan dan supervisie en planning kunnen dragen.",
+            netwerk: "Verwijzers zien meer aanbod, maar de kernfocus kan diffuser worden.",
+          },
+          {
+            scenario: "C",
+            capaciteit: "Partners en doorverwijzing kunnen de kerncapaciteit ontlasten mits routering en mandaat helder zijn.",
+            financien: "Kosten blijven beter beheersbaar dan bij interne verbreding, maar governance vraagt extra discipline.",
+            cultuur: "De kernteams blijven stabieler zolang niet-passende vraag buiten de kern wordt geleid.",
+            netwerk: "Netwerkpositie wordt sterker als partnerschap de kern-GGZ versterkt in plaats van vervangt.",
+          },
+        ]
+      : saasContext
+        ? [
+            {
+              scenario: "A",
+              capaciteit: "Implementatiecapaciteit krijgt lucht zodra churn, pricing en ICP weer leidend worden voor groei.",
+              financien: "Burn en brutomarge verbeteren als retentie sneller stijgt dan acquisitiedruk.",
+              cultuur: "Teams ervaren minder escalatieruis wanneer deals beter passen bij product en onboarding.",
+              netwerk: "Marktvertrouwen groeit trager, maar klantkwaliteit verbetert aantoonbaar.",
+            },
+            {
+              scenario: "B",
+              capaciteit: "Meer enterprise-deals trekken implementatie en support sneller leeg dan teams kunnen opschalen.",
+              financien: "ACV stijgt, maar payback en burn verslechteren als time-to-value achterblijft.",
+              cultuur: "Commerciële druk neemt toe doordat uitzonderingswerk productdiscipline verdringt.",
+              netwerk: "Marktsignaal is agressiever, maar klantfit en referentiewaarde kunnen dalen.",
+            },
+            {
+              scenario: "C",
+              capaciteit: "Scherpere ICP verlaagt implementatieruis en maakt onboarding voorspelbaarder per segment.",
+              financien: "NRR en payback verbeteren wanneer groei wordt geconcentreerd in beter passende verticals.",
+              cultuur: "Product, sales en success werken consistenter zodra segmentkeuze expliciet is.",
+              netwerk: "Marktpositionering wordt scherper, maar het adressabele volume wordt tijdelijk smaller.",
+            },
+          ]
+        : b2bContext
+          ? [
+              {
+                scenario: "A",
+                capaciteit: "Delivery wordt voorspelbaarder zodra uitzonderingsdeals en maatwerk buiten de norm worden begrensd.",
+                financien: "Marge per account stijgt wanneer pricing en deliverydoelen weer samen worden gestuurd.",
+                cultuur: "Teams ervaren minder frictie zodra commerciële beloften beter passen bij leverbaarheid.",
+                netwerk: "Klantvertrouwen verbetert via stabielere levering in plaats van via meer volume.",
+              },
+              {
+                scenario: "B",
+                capaciteit: "Nieuwe proposities vergroten uitvoeringsdruk en trekken senior deliverycapaciteit sneller leeg.",
+                financien: "Omzetkans stijgt, maar gross margin verslechtert als prijsdiscipline en herhaalbaarheid ontbreken.",
+                cultuur: "Meer commerciële spreiding verhoogt interne spanning tussen sales en delivery.",
+                netwerk: "Marktzichtbaarheid stijgt, maar leverbetrouwbaarheid kan dalen.",
+              },
+              {
+                scenario: "C",
+                capaciteit: "Selectieve accountfocus verlaagt ruis en maakt deliveryplanning voorspelbaarder.",
+                financien: "Marge verbetert wanneer verlieslatende accounts en uitzonderingswerk actief worden afgebouwd.",
+                cultuur: "Deliveryteams houden meer rust door scherpere accountkeuze en minder spoeduitzonderingen.",
+                netwerk: "Positionering wordt duidelijker richting sectoren waar herhaalbaar geleverd kan worden.",
+              },
+            ]
+          : [
     {
       scenario: "A",
       capaciteit: `Capaciteit groeit beheerst; doorstroom verbetert beperkt zolang kort-traject rond ${waitlistPct}% blijft.`,
@@ -1879,7 +2045,70 @@ function buildStrategySimulationEngine(params: {
     },
   ];
 
-  const scenario_risks: StrategySimulationEngineOutput["scenario_risks"] = [
+  const scenario_risks: StrategySimulationEngineOutput["scenario_risks"] = ggzContext
+    ? [
+        {
+          scenario: "A",
+          risico: "Heronderhandeling zonder operationele discipline laat wachtdruk en marge alsnog verslechteren.",
+          kans: "middel",
+          impact: "hoog",
+        },
+        {
+          scenario: "B",
+          risico: "Selectieve groei vergroot druk op teams zodra zorgzwaarte en no-show zwaarder binnenkomen dan gepland.",
+          kans: "hoog",
+          impact: "hoog",
+        },
+        {
+          scenario: "C",
+          risico: "Netwerkzorg faalt als mandaat, routering en kwaliteitsborging niet vooraf zijn verankerd.",
+          kans: "middel",
+          impact: "middel",
+        },
+      ]
+    : saasContext
+      ? [
+          {
+            scenario: "A",
+            risico: "Markt en team verliezen geduld als retentieherstel te traag zichtbaar wordt.",
+            kans: "middel",
+            impact: "middel",
+          },
+          {
+            scenario: "B",
+            risico: "Enterprise-versnelling vergroot burn en implementation overload sneller dan omzet zich terugverdient.",
+            kans: "hoog",
+            impact: "hoog",
+          },
+          {
+            scenario: "C",
+            risico: "Te smalle ICP-focus verlaagt de groeisnelheid voordat retentievoordeel zichtbaar is.",
+            kans: "middel",
+            impact: "middel",
+          },
+        ]
+      : b2bContext
+        ? [
+            {
+              scenario: "A",
+              risico: "Te late commerciële correctie laat deliverydruk en margeschade langer doorlopen.",
+              kans: "middel",
+              impact: "hoog",
+            },
+            {
+              scenario: "B",
+              risico: "Nieuwe proposities vergroten complexiteit sneller dan delivery die kan absorberen.",
+              kans: "hoog",
+              impact: "hoog",
+            },
+            {
+              scenario: "C",
+              risico: "Accountafbouw raakt kortetermijnomzet voordat de nieuwe focus volledig rendeert.",
+              kans: "middel",
+              impact: "middel",
+            },
+          ]
+        : [
     {
       scenario: "A",
       risico: "Te lage impactsnelheid waardoor maatschappelijke vraag sneller groeit dan modeladoptie.",
@@ -1900,7 +2129,61 @@ function buildStrategySimulationEngine(params: {
     },
   ];
 
-  const early_warning_signals: StrategySimulationEngineOutput["early_warning_signals"] = [
+  const early_warning_signals: StrategySimulationEngineOutput["early_warning_signals"] = ggzContext
+    ? [
+        {
+          scenario: "A",
+          indicator: "Plafonds en tariefmix bewegen niet mee met de feitelijke behandelmix.",
+          kpi: "Wachttijd > 14 weken of marge < 5% twee periodes op rij.",
+        },
+        {
+          scenario: "B",
+          indicator: "Selectieve groei vergroot teamdruk sneller dan behandelcapaciteit mee kan bewegen.",
+          kpi: "Bezettingsgraad > 92% of no-show boven norm twee periodes op rij.",
+        },
+        {
+          scenario: "C",
+          indicator: "Partnerroutering verlaagt druk niet aantoonbaar.",
+          kpi: "Doorverwijzingen stijgen zonder daling van wachtdruk twee periodes op rij.",
+        },
+      ]
+    : saasContext
+      ? [
+          {
+            scenario: "A",
+            indicator: "Retentieherstel blijft achter op de pricing- en churnagenda.",
+            kpi: "NRR < 100% twee periodes op rij.",
+          },
+          {
+            scenario: "B",
+            indicator: "Enterprise sales groeit sneller dan implementation en payback kunnen dragen.",
+            kpi: "CAC payback > 18 maanden of burn multiple > 2.0 twee periodes op rij.",
+          },
+          {
+            scenario: "C",
+            indicator: "Verticale focus levert nog geen betere klantkwaliteit op.",
+            kpi: "Churn in focussegment blijft boven norm twee periodes op rij.",
+          },
+        ]
+      : b2bContext
+        ? [
+            {
+              scenario: "A",
+              indicator: "Deliverydiscipline verbetert niet ondanks portfolio-ingrepen.",
+              kpi: "Delivery utilization > 90% of gross margin < 30% twee periodes op rij.",
+            },
+            {
+              scenario: "B",
+              indicator: "Nieuwe proposities vergroten uitzonderingswerk en planningruis.",
+              kpi: "Uitzonderingsdeals en spoedwerk boven norm twee periodes op rij.",
+            },
+            {
+              scenario: "C",
+              indicator: "Focus verlaagt complexiteit niet snel genoeg om leverbetrouwbaarheid te verbeteren.",
+              kpi: "Top-3 accounts > 55% omzet of leverbetrouwbaarheid onder norm twee periodes op rij.",
+            },
+          ]
+        : [
     {
       scenario: "A",
       indicator: "Impactgroei blijft achter op beleids- en netwerkkansen.",
@@ -1944,8 +2227,20 @@ function buildStrategySimulationEngine(params: {
       core_mechanism:
         normalize(params.successMechanism) ||
         `${org} levert kwaliteit via eigenaarschap; schaal moet dit mechanisme beschermen.`,
-      ecosystem_factors: ["partnerkwaliteit", "beleidscycli", "contractruimte"],
-      capacity_context: `Interne groeicap rond ${growthCap} FTE/jaar; kort-trajectbasis circa ${waitlistPct}%.`,
+      ecosystem_factors: ggzContext
+        ? ["contractplafonds", "verwijzersdruk", "behandelcapaciteit"]
+        : saasContext
+          ? ["pricing", "implementation capaciteit", "kapitaaldiscipline"]
+          : b2bContext
+            ? ["accountconcentratie", "deliverycapaciteit", "prijsdiscipline"]
+            : ["partnerkwaliteit", "beleidscycli", "contractruimte"],
+      capacity_context: ggzContext
+        ? "Behandelcapaciteit, no-show en zorgzwaarte bepalen samen de schaalruimte."
+        : saasContext
+          ? "Implementatiecapaciteit, burn en NRR bepalen samen de schaalruimte."
+          : b2bContext
+            ? "Delivery utilization, marge per account en uitzonderingswerk bepalen samen de schaalruimte."
+            : `Interne groeicap rond ${growthCap} FTE/jaar; kort-trajectbasis circa ${waitlistPct}%.`,
     },
     strategic_scenarios: [
       { scenario: "A", strategy_type: "conservatief", description: scenarioA },
@@ -1966,7 +2261,7 @@ function buildStrategySimulationEngine(params: {
     scenario_risks,
     strategy_comparison: [
       "STRATEGY COMPARISON",
-      `Scenario A — ${scenarioA}\nVoordeel: hoogste bestuurlijke beheersbaarheid.\nNadeel: lagere korte-termijn impactsnelheid.`,
+      `Scenario A — ${scenarioA}\nVoordeel: hoogste bestuurlijke beheersbaarheid.\nNadeel: ${ggzContext ? "tragere volumegroei in de kern." : saasContext ? "langzamer commercieel momentum." : b2bContext ? "lagere korte-termijn omzetgroei." : "lagere korte-termijn impactsnelheid."}`,
       `Scenario B — ${scenarioB}\nVoordeel: hoogste potentiële impactgroei.\nNadeel: grootste druk op uitvoering en kwaliteitsborging.`,
       `Scenario C — ${scenarioC}\nVoordeel: balans tussen kernbescherming en selectieve schaal.\nNadeel: afhankelijk van governance-discipline en partnerkwaliteit.`,
     ].join("\n\n"),
@@ -2088,6 +2383,7 @@ function buildDecisionMemoryEngine(params: {
   coreConflict?: string;
   interventionLines?: string[];
   kpiLines?: string[];
+  sector?: string;
   priorDecisions?: Array<{
     session_id: string;
     date: string;
@@ -2112,6 +2408,10 @@ function buildDecisionMemoryEngine(params: {
   const interventions = (params.interventionLines || []).map((line) => normalize(line)).filter(Boolean).slice(0, 5);
   const kpis = (params.kpiLines || []).map((line) => normalize(line)).filter(Boolean).slice(0, 5);
   const history = (params.priorDecisions || []).slice(0, 5);
+  const sectorPack = resolvePrimarySectorPack({
+    sector: params.sector,
+    organizationName: params.organizationName,
+  });
   const prev = history[0];
   const chosenCanonical = canonicalStrategy(chosen);
   const previousCanonical = canonicalStrategy(normalize(prev?.chosen_strategy || ""));
@@ -2128,8 +2428,20 @@ function buildDecisionMemoryEngine(params: {
   const currentDirection = chosen;
   const boardQuestion =
     status === "consistent"
-      ? "Bevestigen we deze koers en borgen we de gekozen aannames expliciet?"
-      : "Is deze koerswijziging bewust genomen en bestuurlijk gevalideerd inclusief nieuwe aannames en risicoacceptatie?";
+      ? sectorPack.key === "ggz"
+        ? "Bevestigen we deze koers en borgen we expliciet welke zorgpaden, plafonds en capaciteitsgrenzen leidend blijven?"
+        : sectorPack.key === "saas"
+          ? "Bevestigen we deze koers en borgen we expliciet dat retentie, pricing en payback leidend blijven boven pure groei?"
+          : sectorPack.key === "b2b"
+            ? "Bevestigen we deze koers en borgen we expliciet dat deliverydiscipline en marge per account leidend blijven?"
+            : "Bevestigen we deze koers en borgen we de gekozen aannames expliciet?"
+      : sectorPack.key === "ggz"
+        ? "Is deze koerswijziging bewust genomen inclusief nieuwe aannames over contractplafonds, zorgzwaarte en behandelcapaciteit?"
+        : sectorPack.key === "saas"
+          ? "Is deze koerswijziging bewust genomen inclusief nieuwe aannames over NRR, burn en implementatiecapaciteit?"
+          : sectorPack.key === "b2b"
+            ? "Is deze koerswijziging bewust genomen inclusief nieuwe aannames over delivery utilization, accountmix en marge?"
+            : "Is deze koerswijziging bewust genomen en bestuurlijk gevalideerd inclusief nieuwe aannames en risicoacceptatie?";
 
   const boardAlert =
     status === "consistent"
@@ -2157,18 +2469,62 @@ function buildDecisionMemoryEngine(params: {
       kpi_doelen: kpis,
     },
     decision_context: {
-      aannames: [
-        "gekozen strategie blijft consistent met kernmechanisme",
-        "interventies zijn uitvoerbaar binnen capaciteit",
-        "geaccepteerde trade-offs blijven bestuurlijk gedragen",
-      ],
-      risico_s: [
-        "koersdrift zonder expliciet herbesluit",
-        "maatwerk-interventies zonder drempelbewaking",
-        "kwaliteitserosie bij schaal zonder guardrails",
-      ],
+      aannames:
+        sectorPack.key === "ggz"
+          ? [
+              "contractplafonds en behandelcapaciteit blijven in lijn met de gekozen kernfocus",
+              "zorgpaden groeien alleen waar no-show, zorgzwaarte en marge binnen norm blijven",
+              "wachttijd blijft bestuurlijk begrensd binnen de gekozen productmix",
+            ]
+          : sectorPack.key === "saas"
+            ? [
+                "retentie en pricing verbeteren sneller dan acquisitiedruk oploopt",
+                "implementatiecapaciteit blijft leidend boven nieuwe enterprise-volume",
+                "burn en CAC payback blijven bestuurlijk acceptabel binnen de gekozen groei",
+              ]
+            : sectorPack.key === "b2b"
+              ? [
+                  "deliverydiscipline blijft leidend boven commerciële uitzonderingen",
+                  "marge per account verbetert binnen de gekozen portfoliofocus",
+                  "accountconcentratie blijft bestuurlijk beheersbaar binnen de koers",
+                ]
+              : [
+                  "gekozen strategie blijft consistent met kernmechanisme",
+                  "interventies zijn uitvoerbaar binnen capaciteit",
+                  "geaccepteerde trade-offs blijven bestuurlijk gedragen",
+                ],
+      risico_s:
+        sectorPack.key === "ggz"
+          ? [
+              "koersdrift zonder expliciet herbesluit op plafonds en productmix",
+              "wachtdruk stijgt sneller dan contractruimte meebeweegt",
+              "behandelcapaciteit erodeert door verkeerde groeikeuzes",
+            ]
+          : sectorPack.key === "saas"
+            ? [
+                "groeikoers schuift impliciet terug naar volume zonder payback-discipline",
+                "implementation overload vergroot churn sneller dan sales die compenseert",
+                "burn blijft stijgen zonder expliciete herprioritering van ICP en pricing",
+              ]
+            : sectorPack.key === "b2b"
+              ? [
+                  "commerciële uitzonderingen ondermijnen deliverydiscipline zonder expliciet herbesluit",
+                  "accountconcentratie vergroot marge- en leverrisico sneller dan zichtbaar wordt",
+                  "nieuwe proposities trekken senior capaciteit leeg zonder prijsdiscipline",
+                ]
+              : [
+                  "koersdrift zonder expliciet herbesluit",
+                  "maatwerk-interventies zonder drempelbewaking",
+                  "kwaliteitserosie bij schaal zonder guardrails",
+                ],
       strategische_reden:
-        "Besluit vastleggen voorkomt dat strategiewijzigingen impliciet ontstaan en dwingt expliciete bestuurlijke herijking af.",
+        sectorPack.key === "ggz"
+          ? "Besluit vastleggen voorkomt dat wijzigingen in productmix, contractplafonds en behandelcapaciteit impliciet ontstaan."
+          : sectorPack.key === "saas"
+            ? "Besluit vastleggen voorkomt dat groei ongemerkt weer op volume wordt gestuurd in plaats van op retentie en unit economics."
+            : sectorPack.key === "b2b"
+              ? "Besluit vastleggen voorkomt dat sales- en deliverydoelen opnieuw uit elkaar gaan lopen zonder expliciete bestuurskeuze."
+              : "Besluit vastleggen voorkomt dat strategiewijzigingen impliciet ontstaan en dwingt expliciete bestuurlijke herijking af.",
     },
     decision_history: history.map((item) => ({
       session_id: item.session_id,
@@ -3791,6 +4147,12 @@ function buildExecutiveSummary(
   const absenteeism = leverage.absenteeismPct != null ? `${formatPct(leverage.absenteeismPct)}%` : "5,0%";
   const org = normalize(organizationName) || "De organisatie";
   const successSignature = hasSuccessModelSignature(inputInsights);
+  const sectorPack = resolvePrimarySectorPack({
+    sector: output?.context_state?.sector,
+    organizationName,
+    facts: inputInsights.facts,
+    actions: inputInsights.actions,
+  });
   const factsLine =
     caseClassification === "SUCCESS_MODEL" && successSignature
       ? `${org} combineert ${typeof leverage.absenteeismPct === "number" ? `laag verzuim (${absenteeism})` : "beheersbare uitval"}, een expliciete groeicap (${growthCap} FTE per jaar) en een ${leverage.careTimePct ?? 70}/${leverage.devTimePct ?? 30}-model dat uitvoering en ontwikkeling tegelijk draagt.`
@@ -3804,11 +4166,7 @@ function buildExecutiveSummary(
           : gekozenOptie === "B"
             ? "Advies: schaal via cellenmodel alleen met harde kwaliteits- en eigenaarschapsstandaarden."
             : "Advies: vergroot impact via netwerkstrategie zonder het kernmodel te overbelasten."
-      : gekozenOptie === "A"
-        ? "Advies: stabiliseer eerst de kern-GGZ, herstel marge en contractdiscipline, en vertraag niet-kritische verbreding."
-        : gekozenOptie === "B"
-          ? "Advies: versnel verbreding alleen met een harde investerings- en rendementsdiscipline per initiatief."
-          : "Advies: voer gerichte herstructurering uit met duidelijke eigenaarschap- en uitvoeringsgrenzen.";
+      : sectorPack.summaryByOption[gekozenOptie];
   const patternLine = caseClassification === "SUCCESS_MODEL" && successSignature ? `Patroon: ${patternLabel}.` : "";
   if (publicYouthContext && caseClassification !== "SUCCESS_MODEL") {
     return sanitizeReportForBoardView(
@@ -3827,7 +4185,7 @@ function buildExecutiveSummary(
     );
   }
   return sanitizeReportForBoardView(
-    `${factsLine} ${optionLine} ${patternLine} Aanbevolen optie ${gekozenOptie}.`
+    `${factsLine || sectorPack.boardRisk} ${optionLine} ${patternLine} Aanbevolen optie ${gekozenOptie}.`
       .replace(/\s+/g, " ")
       .trim()
   );
@@ -3846,11 +4204,22 @@ function buildKillerInsights(
   caseClassification: CaseClassification,
   organizationName?: string
 ): MechanisticInsight[] {
+  const sectorPack = resolvePrimarySectorPack({
+    sector: output?.context_state?.sector,
+    organizationName,
+    facts: inputInsights.facts,
+    actions: inputInsights.actions,
+  });
   const publicYouthContext = /(jeugdzorg|jeugdwet|gemeente|gemeentelijke inkoop|jongeren|gezinnen|wijkteam)/i.test(
     `${inputInsights.facts.join(" ")} ${inputInsights.actions.join(" ")}`
   );
   if (publicYouthContext && caseClassification !== "SUCCESS_MODEL") {
     return buildPublicYouthKillerInsights(inputInsights, organizationName);
+  }
+  if (caseClassification !== "SUCCESS_MODEL") {
+    if (sectorPack.key === "ggz") return buildGgzKillerInsights(inputInsights);
+    if (sectorPack.key === "saas") return buildSaasKillerInsights(inputInsights);
+    if (sectorPack.key === "b2b") return buildB2BKillerInsights(inputInsights);
   }
   const formatMechanism = (text: string): string => {
     const cleaned = normalize(text);
@@ -4973,6 +5342,102 @@ function buildPublicYouthKillerInsights(
   }));
 }
 
+function buildGgzKillerInsights(inputInsights: InputInsights): MechanisticInsight[] {
+  const actionCorpus = inputInsights.actions.join(" ");
+  const insights: MechanisticInsight[] = [
+    {
+      title: "Wachttijd wordt in de GGZ begrensd door contractmix en behandelcapaciteit, niet alleen door vraagvolume.",
+      mechanism:
+        "Contractplafonds, zorgzwaarte en no-show bepalen samen hoeveel productieve behandeltijd werkelijk beschikbaar blijft binnen de kern.",
+      implication:
+        "Heronderhandel plafonds en tariefmix per zorgpad voordat volume verder wordt opgevoerd.",
+    },
+    {
+      title: "De behandelmix bepaalt de margeruimte harder dan extra instroom haar herstelt.",
+      mechanism:
+        "Zwaardere trajecten, indirecte uren en no-show drukken de effectieve marge per zorgpad sneller weg dan extra vraag die kan compenseren.",
+      implication:
+        "Stuur per zorgpad op margeruimte, no-show en capaciteitsgrenzen in plaats van op totaalvolume.",
+    },
+    {
+      title: "Bezettingsdruk wordt strategisch zodra wachttijd en behandelcapaciteit tegelijk oplopen.",
+      mechanism:
+        "Als wachttijden stijgen terwijl behandelaarcapaciteit al dicht tegen de bovengrens zit, verschuift het probleem van planning naar bestuurskeuze over productmix en kernfocus.",
+      implication:
+        "Maak wachttijd en bezettingsgraad onderdeel van board-escalatie in plaats van alleen operationele sturing.",
+    },
+  ];
+
+  return insights.map((item) => ({
+    ...item,
+    mechanism: normalize(`${item.mechanism} ${actionCorpus}`),
+  }));
+}
+
+function buildSaasKillerInsights(inputInsights: InputInsights): MechanisticInsight[] {
+  const actionCorpus = inputInsights.actions.join(" ");
+  const insights: MechanisticInsight[] = [
+    {
+      title: "Groei telt pas als retentie en pricing de unit economics dragen.",
+      mechanism:
+        "Churn, burn en CAC-payback bepalen samen of nieuwe omzet werkelijk bijdraagt aan brutomarge en runway.",
+      implication:
+        "Zet retentie en pricing-discipline boven pure bookings-groei.",
+    },
+    {
+      title: "Enterprise-deals kunnen de schaalbaarheid verlagen terwijl ACV stijgt.",
+      mechanism:
+        "Implementation overload en langere time-to-value trekken capaciteit weg uit product en klantretentie voordat omzet zich terugverdient.",
+      implication:
+        "Voer harde dealgates in op ICP-fit, implementatiebelasting en payback.",
+    },
+    {
+      title: "Burn wordt een bestuursvraag zodra acquisitie sneller groeit dan implementatie en retentie kunnen absorberen.",
+      mechanism:
+        "Als meer klanten binnenkomen dan teams effectief kunnen onboarden en behouden, stijgt de burn multiple terwijl NRR onder druk blijft.",
+      implication:
+        "Koppel salesritme direct aan implementatiecapaciteit, NRR en payback-normen.",
+    },
+  ];
+
+  return insights.map((item) => ({
+    ...item,
+    mechanism: normalize(`${item.mechanism} ${actionCorpus}`),
+  }));
+}
+
+function buildB2BKillerInsights(inputInsights: InputInsights): MechanisticInsight[] {
+  const actionCorpus = inputInsights.actions.join(" ");
+  const insights: MechanisticInsight[] = [
+    {
+      title: "Omzetgroei zonder delivery-discipline vergroot vooral uitvoeringsdruk.",
+      mechanism:
+        "Salesmix, maatwerk en uitzonderingsdeals verhogen omzetkans, maar drukken tegelijk de leverbetrouwbaarheid en marge per account.",
+      implication:
+        "Stuur commerciële groei op marge per account en leverbaarheid, niet op volume alleen.",
+    },
+    {
+      title: "Accountconcentratie maakt de strategie fragieler dan de omzetgroei laat zien.",
+      mechanism:
+        "Wanneer een klein aantal accounts een groot deel van de omzet bepaalt, vertaalt delivery-frictie zich direct naar marge- en afhankelijkheidsrisico.",
+      implication:
+        "Verlaag concentratierisico via actieve accountclassificatie en prijsdiscipline.",
+    },
+    {
+      title: "Delivery utilization is een strategische grens, geen alleen operationele KPI.",
+      mechanism:
+        "Zodra teams structureel te vol zitten, neemt uitzonderingswerk toe en verschuift commerciële groei in de praktijk naar kwaliteits- en margeschade.",
+      implication:
+        "Maak utilization en gross margin harde bestuursdrempels voor nieuwe deals en proposities.",
+    },
+  ];
+
+  return insights.map((item) => ({
+    ...item,
+    mechanism: normalize(`${item.mechanism} ${actionCorpus}`),
+  }));
+}
+
 function buildBoardroomSummaryBlock(params: {
   dominantRisk: string;
   recommendedDecision: string;
@@ -5008,8 +5473,178 @@ function normalizeBoardroomSectorLabel(value: unknown): string {
   if (!text) return "Onbekende sector";
   if (/jeugdzorg|jeugdwet|jongeren|gezinnen|opvoed|multiproblematiek/.test(text)) return "Jeugdzorg";
   if (/ggz|geestelijke gezondheidszorg/.test(text)) return "GGZ";
+  if (/saas|software/.test(text)) return "SaaS";
+  if (/b2b|dienstverlening|advies|consult/.test(text)) return "B2B Dienstverlening";
   if (/zorg/.test(text)) return "Zorg";
   return normalize(value) || "Onbekende sector";
+}
+
+type PrimarySectorPackKey = "jeugdzorg" | "ggz" | "saas" | "b2b" | "generic";
+
+type PrimarySectorPack = {
+  key: PrimarySectorPackKey;
+  label: string;
+  reportOptions: [string, string, string];
+  summaryByOption: Record<"A" | "B" | "C", string>;
+  stopRule: string;
+  boardRisk: string;
+  reportKpis: string[];
+};
+
+function resolvePrimarySectorPack(input: {
+  sector?: string;
+  organizationName?: string;
+  facts?: string[];
+  actions?: string[];
+}): PrimarySectorPack {
+  const source = normalize(
+    [
+      input.sector,
+      input.organizationName,
+      ...(input.facts || []),
+      ...(input.actions || []),
+    ]
+      .filter(Boolean)
+      .join(" ")
+  ).toLowerCase();
+
+  if (/jeugdzorg|jeugdwet|gemeente|wijkteam|jongeren|gezinnen/.test(source)) {
+    return {
+      key: "jeugdzorg",
+      label: "Jeugdzorg",
+      reportOptions: [
+        "Bescherm de kern en versmal de propositie",
+        "Verbreden ondanks contract- en personeelsdruk",
+        "Netwerkroute rond kernspecialisatie",
+      ],
+      summaryByOption: {
+        A: "Advies: bescherm de kern, rationaliseer het gemeentenportfolio en herstel contractdiscipline voordat nieuwe labels of extra breedte worden toegestaan.",
+        B: "Advies: verbreed alleen als contractkwaliteit, triage en teamstabiliteit aantoonbaar binnen norm blijven.",
+        C: "Advies: kies alleen voor netwerkroute als toegang, routering en governance vooraf formeel zijn vastgelegd.",
+      },
+      stopRule:
+        "Draai de gekozen koers terug zodra wachttijd > 12 weken, caseload > 18 of marge < 4% twee meetperiodes aanhoudt.",
+      boardRisk:
+        "Contractdruk, wachtdruk en diffuse positionering versterken werkdruk sneller dan extra activiteit die kan dempen.",
+      reportKpis: [
+        "- KPI: Wachttijd per route en gemeente.",
+        "- KPI: Caseload per professional versus bestuursnorm.",
+        "- KPI: Marge per gemeente en contracttype.",
+        "- KPI: Flexratio en retentie van vaste teams.",
+        "- KPI: Consortiuminstroom versus planbare capaciteit.",
+      ],
+    };
+  }
+
+  if (/ggz|geestelijke gezondheidszorg|behandelcapaciteit|zorgzwaarte|contractplafond/.test(source)) {
+    return {
+      key: "ggz",
+      label: "GGZ",
+      reportOptions: [
+        "Kern beschermen en contractmix heronderhandelen",
+        "Selectief groeien in rendabele zorgpaden",
+        "Netwerkzorg via partners en doorverwijzing verdiepen",
+      ],
+      summaryByOption: {
+        A: "Advies: bescherm de kern-GGZ, heronderhandel plafonds en tariefmix en stabiliseer eerst marge en behandelcapaciteit.",
+        B: "Advies: groei alleen in zorgpaden waar contractruimte, no-show en behandelcapaciteit aantoonbaar binnen norm blijven.",
+        C: "Advies: kies voor netwerkzorg alleen als mandaat, doorverwijzing en kwaliteitsborging vooraf hard zijn vastgelegd.",
+      },
+      stopRule:
+        "Draai de gekozen koers terug zodra wachttijd > 14 weken, bezettingsgraad > 92% of marge < 5% twee meetperiodes aanhoudt.",
+      boardRisk:
+        "Contractplafonds, zorgzwaarte en beperkte behandelcapaciteit drukken de marge harder dan extra vraag haar kan herstellen.",
+      reportKpis: [
+        "- KPI: Wachttijd per zorgpad en contractstroom.",
+        "- KPI: Bezettingsgraad behandelcapaciteit.",
+        "- KPI: Marge per zorgpad en contractsoort.",
+        "- KPI: No-show en indirecte uren per team.",
+        "- KPI: Plafondbenutting en verwijzingsdruk.",
+      ],
+    };
+  }
+
+  if (/saas|software|arr|mrr|nrr|burn|churn|cac|payback|implementation/.test(source)) {
+    return {
+      key: "saas",
+      label: "SaaS",
+      reportOptions: [
+        "Retentie en unit economics eerst herstellen",
+        "Enterprise sales versnellen",
+        "Focus op selectieve verticale groei met scherpere ICP",
+      ],
+      summaryByOption: {
+        A: "Advies: herstel eerst retentie, pricing en brutomarge voordat nieuwe acquisitie de implementatiedruk verder verhoogt.",
+        B: "Advies: versnel enterprise alleen met harde dealgates op implementatie, payback en klantkwaliteit.",
+        C: "Advies: versmal naar een scherpere ICP en verticale focus zodra die retentie en payback aantoonbaar verbetert.",
+      },
+      stopRule:
+        "Draai de gekozen koers terug zodra NRR < 100%, burn multiple > 2.0 of CAC payback > 18 maanden twee meetperiodes aanhoudt.",
+      boardRisk:
+        "Nieuwe omzet compenseert churn en burn niet zolang retentie, pricing en implementatiedruk de unit economics blijven ondermijnen.",
+      reportKpis: [
+        "- KPI: Net revenue retention per segment.",
+        "- KPI: Burn multiple en runway.",
+        "- KPI: CAC payback per kanaal.",
+        "- KPI: Implementatiebelasting en time-to-value.",
+        "- KPI: Brutomarge per klanttype en ICP-fit.",
+      ],
+    };
+  }
+
+  if (/b2b|dienstverlening|account|delivery|utilization|gross margin|propositie|advies/.test(source)) {
+    return {
+      key: "b2b",
+      label: "B2B Dienstverlening",
+      reportOptions: [
+        "Kern beschermen en delivery disciplineren",
+        "Commercieel versnellen via nieuwe proposities",
+        "Selectieve focus op rendabele accounts en sectoren",
+      ],
+      summaryByOption: {
+        A: "Advies: herstel eerst delivery-discipline en marge per account voordat commerciële versnelling verder wordt opgevoerd.",
+        B: "Advies: versnel proposities alleen als pricing, deliverybezetting en uitzonderingswerk vooraf zijn begrensd.",
+        C: "Advies: focus het portfolio op rendabele accounts en sectoren zodra dat leverbetrouwbaarheid en marge aantoonbaar verbetert.",
+      },
+      stopRule:
+        "Draai de gekozen koers terug zodra delivery utilization > 90%, gross margin < 30% of top-3 accounts > 55% omzet twee meetperiodes aanhoudt.",
+      boardRisk:
+        "Commerciële groei verhoogt omzet, maar zonder delivery-discipline en accountselectie verslechteren marge en uitvoerbaarheid tegelijk.",
+      reportKpis: [
+        "- KPI: Delivery utilization per team.",
+        "- KPI: Gross margin per account en propositie.",
+        "- KPI: Concentratie top-3 accounts in omzet.",
+        "- KPI: Uitzonderingswerk buiten standaarddelivery.",
+        "- KPI: Leverbetrouwbaarheid en herhaalbare deliverymix.",
+      ],
+    };
+  }
+
+  return {
+    key: "generic",
+    label: normalizeBoardroomSectorLabel(input.sector),
+    reportOptions: [
+      "Bescherm de kern en herstel bestuurlijke focus",
+      "Versnel verbreding onder hogere uitvoeringsdruk",
+      "Gefaseerde route met expliciete governance-gates",
+    ],
+    summaryByOption: {
+      A: "Advies: bescherm eerst de kern en herstel focus voordat verbreding of schaalversnelling wordt toegelaten.",
+      B: "Advies: versnel alleen als investeringsdiscipline, capaciteit en governance aantoonbaar op orde zijn.",
+      C: "Advies: kies voor gefaseerde herstructurering met duidelijke eigenaarschap- en uitvoeringsgrenzen.",
+    },
+    stopRule:
+      "Draai de gekozen richting terug zodra marge, capaciteit of kwaliteitsdrempels twee meetperiodes onder norm blijven zonder herstelmaatregel.",
+    boardRisk:
+      "Bestuurlijke inertie houdt het dominante risicomechanisme intact en vergroot operationele schade.",
+    reportKpis: [
+      "- KPI: Marge versus norm.",
+      "- KPI: Capaciteitsbenutting versus grens.",
+      "- KPI: Doorlooptijd of wachtdruk.",
+      "- KPI: Kwaliteit of leverbetrouwbaarheid.",
+      "- KPI: Contract- of klantconcentratie.",
+    ],
+  };
 }
 
 function withTerminalPeriod(value: string): string {
@@ -5121,6 +5756,12 @@ function buildDutchReport(
   const isPublicYouthCase = /(jeugdzorg|jeugdwet|gemeente|gemeentelijke inkoop|jongeren|gezinnen)/i.test(
     `${inputInsights.facts.join(" ")} ${inputInsights.actions.join(" ")}`
   );
+  const sectorPack = resolvePrimarySectorPack({
+    sector,
+    organizationName,
+    facts: inputInsights.facts,
+    actions: inputInsights.actions,
+  });
   const interventionActions = buildInterventionActions(output, inputInsights, caseClassification);
   const gekozenOptie =
     caseClassification === "SUCCESS_MODEL" && strategicMode === "SCALE"
@@ -5135,7 +5776,7 @@ function buildDutchReport(
         : gekozenOptie === "B"
           ? "B — schaal via autonome cellen met centraal governancekader."
           : "A — houd groei bewust begrensd om het kernmechanisme te beschermen."
-      : `Optie ${gekozenOptie} — kies de richting met de hoogste bestuurlijke beheersbaarheid en laagste directe schade.`;
+      : `Optie ${gekozenOptie} — ${sectorPack.reportOptions[{ A: 0, B: 1, C: 2 }[String(gekozenOptie).toUpperCase() as "A" | "B" | "C"] ?? 0]}.`;
   const structuredInterventions = buildStructuredInterventionBlock(
     interventionActions,
     inputInsights,
@@ -5507,13 +6148,16 @@ function buildDutchReport(
     ].filter(Boolean),
     sectorContext: [output?.context_state?.sector || "", ...inputInsights.facts].filter(Boolean),
   });
-  const reportKpis = [
-    "- KPI: Marge per productlijn en contracttype.",
-    "- KPI: Cash runway in maanden.",
-    "- KPI: Wachttijd, no-show en behandelcontinuiteit.",
-    "- KPI: Productiviteit versus norm en benutting kerncapaciteit.",
-    "- KPI: Contractdekking, plafondbenutting en partnerkwaliteit.",
-  ].join("\n");
+  const reportKpis = (isPublicYouthCase
+    ? [
+        "- KPI: Wachttijd per route en gemeente.",
+        "- KPI: Caseload per professional versus bestuursnorm.",
+        "- KPI: Marge per gemeente en contracttype.",
+        "- KPI: Flexratio en retentie van vaste teams.",
+        "- KPI: Consortiuminstroom versus planbare capaciteit.",
+      ]
+    : sectorPack.reportKpis
+  ).join("\n");
   const reportDecisionText = [
     "WIJ BESLUITEN:",
     `1. We kiezen voor ${recommendedDirection}.`,
@@ -5529,13 +6173,13 @@ function buildDutchReport(
         ? "Lineaire groei breekt het kwaliteitsmechanisme sneller dan zij impact opschaalt."
         : isPublicYouthCase
           ? "Contractdruk, wachtdruk en diffuse positionering versterken werkdruk sneller dan extra activiteit die kan dempen."
-          : "Bestuurlijke inertie houdt het dominante risicomechanisme intact en vergroot operationele schade.",
+          : sectorPack.boardRisk,
     recommendedDecision: recommendedDirection,
     downside: compact(conflict.explicitLoss || conflict.forcingChoice, 220),
     stopRule:
       isPublicYouthCase
         ? "Draai verbreding of groeibesluiten terug zodra wachttijd twee meetperiodes oploopt, marge onder 4% zakt of caseloadgrenzen structureel worden overschreden."
-        : "Draai de gekozen richting terug zodra marge, capaciteit of kwaliteitsdrempels twee meetperiodes onder norm blijven zonder herstelmaatregel.",
+        : sectorPack.stopRule,
   });
   return [
     "BESTUURLIJKE ANALYSE & INTERVENTIE",
@@ -6058,6 +6702,7 @@ export class AnalysisSessionManager {
         successMechanism: strategicMechanisms.successMechanism,
         leverage: inputInsights.leverage,
         organizationName: input.organization_name,
+        sector: input.sector || output?.context_state?.sector,
       });
       const strategicFlywheel = inferStrategicFlywheel(
         current.input_data,
@@ -6215,6 +6860,7 @@ export class AnalysisSessionManager {
           .map((line) => line.trim())
           .filter((line) => /^\d+\./.test(line))
           .slice(0, 5),
+        sector: input.sector || output?.context_state?.sector,
         priorDecisions: priorDecisionHistory,
       });
       const earlyWarningSystem = buildEarlyWarningSystemEngine({
@@ -6259,7 +6905,15 @@ export class AnalysisSessionManager {
         memoBuildExtras
       );
       const memoBase = memoFromReport || rawMemo;
+      const memoChosenStrategy = `Optie ${gekozenOptie}`;
       let memo = normalizeBoardMemo(memoBase);
+      memo = refinePrimarySectorMemo(memo, {
+        sector: input.sector || output.context_state.sector,
+        organizationName: input.organization_name || current.organization_name,
+        executiveSummary: summary,
+        chosenStrategy: memoChosenStrategy,
+        strategicHypothesis: output.decision.dominant_thesis,
+      });
       if (publicYouthCase) {
         memo = sanitizePublicYouthMemo(memo);
       }
@@ -6273,6 +6927,13 @@ export class AnalysisSessionManager {
             memoBuildExtras
           )
         );
+        memo = refinePrimarySectorMemo(memo, {
+          sector: input.sector || output.context_state.sector,
+          organizationName: input.organization_name || current.organization_name,
+          executiveSummary: summary,
+          chosenStrategy: memoChosenStrategy,
+          strategicHypothesis: output.decision.dominant_thesis,
+        });
         if (publicYouthCase) {
           memo = sanitizePublicYouthMemo(memo);
         }
@@ -6295,23 +6956,32 @@ export class AnalysisSessionManager {
             memoBuildExtras
           )
         );
+        memo = refinePrimarySectorMemo(memo, {
+          sector: input.sector || output.context_state.sector,
+          organizationName: input.organization_name || current.organization_name,
+          executiveSummary: summary,
+          chosenStrategy: memoChosenStrategy,
+          strategicHypothesis: output.decision.dominant_thesis,
+        });
         if (publicYouthCase) {
           memo = sanitizePublicYouthMemo(memo);
         }
       }
       const scenarioSimulationText =
         strategySimulation != null ? buildStrategySimulationBlock(strategySimulation) : reportRaw;
+      const primarySectorPack = resolvePrimarySectorPack({
+        sector: input.sector || output.context_state.sector,
+        organizationName: input.organization_name || current.organization_name,
+        facts: inputInsights.facts,
+        actions: inputInsights.actions,
+      });
       const reportOptionsForNormalization = publicYouthCase
         ? [
             "Brede ambulante specialist blijven binnen consortium- en contractdiscipline",
             "Selectieve specialisatie / niche kiezen voor scherpere positionering",
             "Consortiumstrategie verdiepen om instroom en triage actiever te sturen",
           ]
-        : [
-            "Bescherm de kern en herstel bestuurlijke focus",
-            "Versnel verbreding onder hogere uitvoeringsdruk",
-            "Gefaseerde route met expliciete governance-gates",
-          ];
+        : primarySectorPack.reportOptions;
       const recommendedScenarioLabel =
         reportOptionsForNormalization[{ A: 0, B: 1, C: 2 }[String(gekozenOptie).toUpperCase() as "A" | "B" | "C"] ?? 0] ||
         `Optie ${gekozenOptie}`;
@@ -6351,6 +7021,13 @@ export class AnalysisSessionManager {
             memoBuildExtras
           )
         );
+        memo = refinePrimarySectorMemo(memo, {
+          sector: input.sector || output.context_state.sector,
+          organizationName: input.organization_name || current.organization_name,
+          executiveSummary: summary,
+          chosenStrategy: memoChosenStrategy,
+          strategicHypothesis: output.decision.dominant_thesis,
+        });
         if (publicYouthCase) {
           memo = sanitizePublicYouthMemo(memo);
         }

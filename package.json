@@ -63,6 +63,7 @@
     "test:cyntra-pipeline": "node scripts/test/cyntra_pipeline_regression.ts",
     "test:boardroom-golden": "node scripts/test/run_boardroom_golden_fixture.mjs",
     "test:jeugdzorg-board-fixture": "node scripts/test/run_jeugdzorg_board_fixture_regression.mjs",
+    "test:tension-engine": "node scripts/test/run_tension_engine_regression.mjs",
     "test:strategic-pipeline-guardrails": "node scripts/test/run_strategic_pipeline_guardrails.mjs",
     "test:flywheel-slot-lock-v4": "node scripts/test/run_flywheel_slot_lock_v4_regression.mjs",
     "test:saas-platform": "node scripts/test/run_saas_platform_regression.mjs",

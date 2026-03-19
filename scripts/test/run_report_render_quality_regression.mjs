@@ -36,12 +36,12 @@ assert(
   "rapportpagina mist Boardroom summary in voorkeurssecties"
 );
 assert(
-  boardroomView.includes('split(/\\n(?=Interventie\\s+\\d+)/i)'),
-  "BoardroomView parseert labeled intervention blocks nog niet"
+  boardroomView.includes('titleLabel="Decision cockpit"'),
+  "BoardroomView rendert geen decision-first cockpit"
 );
 assert(
-  strategyView.includes('split(/\\n(?=Interventie\\s+\\d+)/i)'),
-  "StrategyReportView parseert labeled intervention blocks nog niet"
+  strategyView.includes("buildScenarioSectionsFromBoardroomDocument"),
+  "StrategyReportView gebruikt scenariosecties niet vanuit BoardroomDocument"
 );
 assert(
   reportPage.includes("function sanitizeEncoding"),
@@ -56,12 +56,8 @@ assert(
   "rapportpagina consolideert interventietitels nog niet"
 );
 assert(
-  boardroomView.includes('{compact ? "Bestuurlijk overzicht" : "Board memo"}'),
-  "BoardroomView gebruikt geen compact label voor bestuurlijk overzicht"
-);
-assert(
-  boardroomView.includes('[0, 1, 2, 6, 7, 8, 17].includes(section.id)'),
-  "compact boardroomweergave toont nog teveel secties"
+  !boardroomView.includes("compileBoardroomDocument(report)"),
+  "BoardroomView mag geen lokale compile-fallback meer bevatten"
 );
 assert(
   reportPage.includes("function buildScenarioViewSections("),
@@ -76,9 +72,30 @@ assert(
   "rapportpagina mist single-thesis enforcement"
 );
 assert(
-  reportPage.includes("function buildExecutiveSummaryExport(model: ReportViewModel): string") &&
-    reportPage.includes("`Besluit: ${model.bestuurlijkeBesliskaart.recommendedChoice}`"),
-  "rapportpagina bouwt de bestuurlijke kernsamenvatting niet expliciet op"
+  !reportPage.includes("ReportViewModel"),
+  "rapportpagina bevat nog legacy ReportViewModel-artefacten"
+);
+assert(
+  fs.readFileSync(path.resolve(process.cwd(), "src/components/reports/DecisionCockpit.tsx"), "utf8").includes('>Executive<') &&
+    fs.readFileSync(path.resolve(process.cwd(), "src/components/reports/DecisionCockpit.tsx"), "utf8").includes('>Proof<') &&
+    fs.readFileSync(path.resolve(process.cwd(), "src/components/reports/DecisionCockpit.tsx"), "utf8").includes('>Besluit<'),
+  "DecisionCockpit mist de boardroomstappen"
+);
+assert(
+  fs.readFileSync(path.resolve(process.cwd(), "src/components/reports/DecisionCockpit.tsx"), "utf8").includes('eyebrow="Onderbouwing"') &&
+    fs.readFileSync(path.resolve(process.cwd(), "src/components/reports/DecisionCockpit.tsx"), "utf8").includes('eyebrow="Scenario’s"'),
+  "DecisionCockpit mist de vaste boardroomstructuur"
+);
+assert(
+  fs.readFileSync(path.resolve(process.cwd(), "src/components/reports/DecisionCockpit.tsx"), "utf8").includes('Kernprobleem') &&
+    fs.readFileSync(path.resolve(process.cwd(), "src/components/reports/DecisionCockpit.tsx"), "utf8").includes('Waarom deze keuze') &&
+    fs.readFileSync(path.resolve(process.cwd(), "src/components/reports/DecisionCockpit.tsx"), "utf8").includes('Wat gebeurt er als je niets doet') &&
+    fs.readFileSync(path.resolve(process.cwd(), "src/components/reports/DecisionCockpit.tsx"), "utf8").includes('Bestuurlijke vraag'),
+  "DecisionCockpit mist de memo-structuur voor kernprobleem, waarom, risico en bestuurlijke vraag"
+);
+assert(
+  fs.existsSync(path.resolve(process.cwd(), "src/components/reports/boardroomMemoFormatter.ts")),
+  "boardroom memo formatter ontbreekt"
 );
 assert(
   reportPage.includes("gemeentenportfolio") &&
@@ -109,6 +126,10 @@ assert(
 assert(
   strategyView.includes("reportViewStyles.section.root"),
   "strategische rapportweergave gebruikt de gedeelde rustige sectiestijl niet"
+);
+assert(
+  !strategyView.includes("compileBoardroomDocument(report)"),
+  "StrategyReportView mag geen lokale compile-fallback meer bevatten"
 );
 assert(
   fs.readFileSync(path.resolve(process.cwd(), "src/components/reports/EngineAnalysisView.tsx"), "utf8").includes("reportViewStyles.panel.root"),

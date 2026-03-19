@@ -1,0 +1,56 @@
+{
+  "id": "misleidende-ggz",
+  "organizationName": "GGZ Schakel",
+  "sector": "GGZ",
+  "overallScore": 69,
+  "memoScore": 100,
+  "keywordHits": 3,
+  "keywordTarget": 4,
+  "memoArtifactPass": true,
+  "rawReportArtifactPass": true,
+  "pass": true,
+  "recommendedOption": "Kern beschermen en contractmix heronderhandelen",
+  "historicalOutcome": "Geen historisch outcome-signaal beschikbaar",
+  "boardIssueCodes": [
+    "incomplete_sentence",
+    "generic_scenario",
+    "incomplete_section"
+  ],
+  "boardIssues": [
+    "Onvolledige of semantisch kapotte regel verwijderd.",
+    "Onvolledige of semantisch kapotte regel verwijderd.",
+    "Onvolledige of semantisch kapotte regel verwijderd.",
+    "Onvolledige of semantisch kapotte regel verwijderd.",
+    "Onvolledige of semantisch kapotte regel verwijderd.",
+    "Onvolledige of semantisch kapotte regel verwijderd.",
+    "Onvolledige of semantisch kapotte regel verwijderd.",
+    "Onvolledige of semantisch kapotte regel verwijderd.",
+    "Onvolledige of semantisch kapotte regel verwijderd.",
+    "Scenario niet onderscheidend: Selectief groeien in rendabele zorgpaden: verhoog behandelvolume alleen waar contract en capaciteit dat toelaten.",
+    "Scenario niet onderscheidend: Netwerkzorg verdiepen: verschuif vraag via partners en doorverwijzing met harde governance.",
+    "Sectie ontbreekt of is leeg: Besluitvraag",
+    "Sectie ontbreekt of is leeg: Strategische kernvragen",
+    "Sectie ontbreekt of is leeg: Strategisch patroon",
+    "Sectie ontbreekt of is leeg: Systeemmechanisme",
+    "Sectie ontbreekt of is leeg: Feitenbasis",
+    "Sectie ontbreekt of is leeg: Keuzerichtingen",
+    "Sectie ontbreekt of is leeg: Doorbraakinzichten",
+    "Sectie ontbreekt of is leeg: Mogelijke ontwikkelingen",
+    "Sectie ontbreekt of is leeg: Bestuurlijke waarschuwingssignalen",
+    "Sectie ontbreekt of is leeg: Besluitgevolgen"
+  ],
+  "consistencyFindings": [
+    "Kernprobleem, kernstelling en aanbevolen keuze sluiten semantisch niet strak op elkaar aan.",
+    "Aanbevolen keuze is niet logisch verankerd in de strategische spanning van de analysekaart.",
+    "Scenario's verwijzen niet zichtbaar naar de centrale strategische spanning."
+  ],
+  "rawConsistencyFindings": [
+    "Aanbevolen keuze is niet logisch verankerd in de strategische spanning van de analysekaart.",
+    "Scenario's verwijzen niet zichtbaar naar de centrale strategische spanning."
+  ],
+  "scenarioIssues": [
+    "Scenario niet onderscheidend: Selectief groeien in rendabele zorgpaden: verhoog behandelvolume alleen waar contract en capaciteit dat toelaten.",
+    "Scenario niet onderscheidend: Netwerkzorg verdiepen: verschuif vraag via partners en doorverwijzing met harde governance."
+  ],
+  "boardMemoQualityFindings": []
+}

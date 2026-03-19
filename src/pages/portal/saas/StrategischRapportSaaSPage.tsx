@@ -1,10 +1,11 @@
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Suspense, lazy, startTransition, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { EmptyState, PageShell, Panel } from "./ui";
 import { usePlatformApiBridge } from "./usePlatformApiBridge";
 import { formatReportCode, formatReportShortDate } from "./reportIdentity";
 import type { StrategicReport } from "@/platform/types";
 import { SESSION_STATUS, isSessionCompleted } from "@/platform/types";
+import { synthesizeStrategicReport } from "@/engine/reportSynthesizer";
 import BoardroomView from "@/components/reports/BoardroomView";
 import type {
   BoardDecisionPressure,
@@ -16,7 +17,7 @@ import type {
   ReportSpeedMode,
   ReportTabKey,
   ReportSection,
-  ReportViewModel,
+  ReportRenderModel,
   StructuredKillerInsight,
 } from "@/components/reports/types";
 import {
@@ -28,8 +29,9 @@ import {
 } from "@/components/reports/reportSpeedMode";
 import { getReports as getStoredReports, saveReport as persistReport } from "@/services/reportStorage";
 import { parseContactLines } from "@/services/reportText";
-import { adaptStrategicBrainReportToViewModel } from "@/components/reports/adapters/strategicBrainReportAdapter";
-import { buildCyntraMeaning, buildHgbcoNarrative } from "@/components/reports/reportNarrativeBridge";
+import { detectRelevantTension } from "@/aurelius/engine/visuals/TensionLibrary";
+import { buildBoardroomSections, compileBoardroomDocument } from "@/engine/reportCompiler";
+import { sanitizeReportOutput } from "@/utils/sanitizeReportOutput";
 import {
   buildStrategicBrainReport,
   type StrategicBrainReport,
@@ -38,6 +40,9 @@ import { buildPortalReportLibraryPath, buildPortalReportPath } from "../portalPa
 
 const StrategyReportView = lazy(() => import("@/components/reports/StrategyReportView"));
 const EngineAnalysisView = lazy(() => import("@/components/reports/EngineAnalysisView"));
+
+type CanonicalStrategicReport = import("@/types/StrategicReport").StrategicReport;
+type ExportableStrategicReport = StrategicReport & CanonicalStrategicReport;
 
 function downloadReport(file: { filename: string; mime_type: string; content: string }, filenameOverride?: string) {
   const isDataUri = file.content.startsWith("data:");
@@ -144,24 +149,26 @@ function sanitizeDisplayText(value: string): string {
     )
   )
     .replace(/(?:^|\n)\s*Kopieer richting\s*(?=\n|$)/gim, "\n")
-    .replace(/(?:^|\n)\s*bron\s*:[\s\S]*$/i, "")
-    .replace(/\s+Bronnen?\s*:[\s\S]*$/i, "")
-    .replace(/(?:^|\n)\s*notes[\s\S]*$/i, "")
-    .replace(/\s+Notes\b[\s\S]*$/i, "")
-    .replace(/(?:^|\n)\s*action items[\s\S]*$/i, "")
-    .replace(/\s+Action items\b[\s\S]*$/i, "")
+    .replace(/(?:^|\n)\s*bron(?:nen)?\s*:[\s\S]*$/i, "")
+    .replace(/(?:^|\n)\s*notes?\b[\s\S]*$/i, "")
+    .replace(/(?:^|\n)\s*action items?\b[\s\S]*$/i, "")
     .replace(/(?:^|\n)\s*unassigned[\s\S]*$/i, "")
     .replace(/(?:^|\n)\s*Mechanismeketens[\s\S]*$/i, "")
+    .replace(/(?:^|\n)\s*samenvatting gesprekverslag fireflies\s*:[\s\S]*$/i, "")
+    .replace(/(?:^|\n)\s*open vragen[\s\S]*$/i, "")
+    .replace(/(?:^|\n)\s*blockers?[\s\S]*$/i, "")
+    .replace(/(?:^|\n)\s*fyi[\s\S]*$/i, "")
     .replace(/(?:^|\n)\s*Scenario simulatie\s*\n\s*Technische analyse[\s\S]*$/i, "");
   if (!text) return "";
   const markers: RegExp[] = [
-    /(?:^|\n)\s*bron\s*:/i,
-    /\s+Bronnen?\s*:/i,
-    /(?:^|\n)\s*notes\b/i,
-    /\s+Notes\b/i,
-    /(?:^|\n)\s*action items\b/i,
-    /\s+Action items\b/i,
+    /(?:^|\n)\s*bron(?:nen)?\s*:/i,
+    /(?:^|\n)\s*notes?\b/i,
+    /(?:^|\n)\s*action items?\b/i,
     /(?:^|\n)\s*unassigned\b/i,
+    /(?:^|\n)\s*samenvatting gesprekverslag fireflies\s*:/i,
+    /(?:^|\n)\s*open vragen\b/i,
+    /(?:^|\n)\s*blockers?\b/i,
+    /(?:^|\n)\s*fyi\b/i,
     /\bwhat are the top 5\b/i,
     /\bread more\b/i,
   ];
@@ -171,7 +178,7 @@ function sanitizeDisplayText(value: string): string {
     if (!match || match.index == null) continue;
     cutIndex = Math.min(cutIndex, match.index);
   }
-  return humanizeReportLanguage(
+  const cleaned = humanizeReportLanguage(
     text
     .slice(0, cutIndex)
     .replace(/Sttihii/gi, "")
@@ -189,8 +196,11 @@ function sanitizeDisplayText(value: string): string {
     .replace(/(BESTUURLIJKE CONSEQUENTIE)\s*:/g, "$1")
     .replace(/(MECHANISME)\s*:/g, "$1")
     .replace(/(INZICHT)\s*:/g, "$1")
+    .replace(/\n\s+\n/g, "\n\n")
+    .replace(/\n{3,}/g, "\n\n")
     )
     .trim();
+  return sanitizeReportOutput(cleaned);
 }
 
 function looksLikeInternalOrganizationId(value: string): boolean {
@@ -325,22 +335,23 @@ function buildBoardDecisionText(action: string, recommendedDirection: string): s
 
 function buildSourceBoundJeugdzorgConflict(sourceText: string, options: string[]): string {
   const source = sanitizeDisplayText(sourceText);
-  const optionA = options[0] || "focus op kern- en voorkeursgemeenten met sterke lokale teams";
-  const optionB = options[1] || "brede ambulante aanwezigheid in alle gemeenten blijven verdedigen";
+  const optionA = options[0] || "het gemeentenportfolio rationeel begrenzen";
+  const optionB = options[1] || "operationele schaal vergroten binnen dezelfde breedte";
+  const optionC = options[2] || "het zorgmodel en de instroomroute aanpassen";
 
   if (/werkplezier|weinig verloop|lage uitstroom|verbinding/i.test(source) && /±?\s*35\s+gemeenten|gemeenten/i.test(source)) {
-    return `De spanning zit tussen ${optionA.toLowerCase()} en ${optionB.toLowerCase()}. Jeugdzorg ZIJN probeert tegelijk een cultuurgedreven zorgorganisatie en een gemeentelijk contractbedrijf te zijn. Hoe breder de gemeentenspreiding, hoe groter de druk op teamstabiliteit, contractdiscipline en bestuurbaarheid.`;
+    return `De echte spanning zit niet in labels, maar tussen ${optionA.toLowerCase()}, ${optionB.toLowerCase()} en ${optionC.toLowerCase()}. Jeugdzorg ZIJN probeert tegelijk een cultuurgedreven zorgorganisatie en een gemeentelijk contractbedrijf te zijn. Hoe breder het gemeentenportfolio, hoe groter de druk op teamstabiliteit, contractdiscipline en bestuurbaarheid.`;
   }
 
   if (/±?\s*35\s+gemeenten/i.test(source) && /consorti|triage/i.test(source)) {
-    return `De spanning zit tussen ${optionA.toLowerCase()} en ${optionB.toLowerCase()}. De organisatie werkt over circa 35 gemeenten, terwijl instroom deels via consortiumtriage loopt. Het bestuur moet dus kiezen of het focus aanbrengt in gemeenten, capaciteit en contractmix, of breedte blijft verdedigen binnen toenemende bestuurlijke druk.`;
+    return `De echte spanning zit tussen ${optionA.toLowerCase()}, ${optionB.toLowerCase()} en ${optionC.toLowerCase()}. De organisatie werkt over circa 35 gemeenten, terwijl instroom deels via consortiumtriage loopt. Het bestuur moet dus kiezen of het focus aanbrengt in gemeenten en contractmix, extra capaciteit organiseert onder harde grenzen, of het zorgmodel aanpast aan wat teams werkelijk kunnen dragen.`;
   }
 
   if (/Zillers|1\s*april|01\s*04/i.test(source)) {
-    return `De spanning zit tussen ${optionA.toLowerCase()} en ${optionB.toLowerCase()}. Het bestuur moet kiezen of het eerst stuurinformatie, caseloaddiscipline en gemeentenfocus op orde brengt, of de huidige breedte laat doorlopen zonder voldoende bestuurlijke begrenzing.`;
+    return `De echte spanning zit tussen ${optionA.toLowerCase()}, ${optionB.toLowerCase()} en ${optionC.toLowerCase()}. Het bestuur moet kiezen of het eerst stuurinformatie, caseloaddiscipline en gemeentenfocus op orde brengt, extra capaciteit toevoegt onder harde grenzen, of de huidige instroom- en zorglogica verandert.`;
   }
 
-  return `De spanning zit tussen ${optionA.toLowerCase()} en ${optionB.toLowerCase()}. Het bestuur moet kiezen welke schade bewust acceptabel is.`;
+  return `De echte spanning zit tussen ${optionA.toLowerCase()}, ${optionB.toLowerCase()} en ${optionC.toLowerCase()}. Het bestuur moet kiezen welke schade bewust acceptabel is.`;
 }
 
 function buildSourceBoundJeugdzorgThesis(sourceText: string, recommendedDirection: string): string {
@@ -349,13 +360,13 @@ function buildSourceBoundJeugdzorgThesis(sourceText: string, recommendedDirectio
     /werkplezier|weinig verloop|lage uitstroom|verbinding/i.test(source) &&
     /±?\s*35\s+gemeenten|gemeenten/i.test(source)
   ) {
-    return "Jeugdzorg ZIJN kan niet tegelijk brede ambulante toegankelijkheid en contractdiscipline per gemeente maximaliseren; de cultuur en teamstabiliteit blijven alleen intact als het bestuur focus aanbrengt in gemeentenmix, caseload en groeiritme.";
+    return "Jeugdzorg ZIJN kan niet tegelijk een breed gemeentenportfolio aanhouden en teamcapaciteit overal opvangen; cultuurkapitaal en teamstabiliteit blijven alleen intact als het bestuur focus aanbrengt in gemeentenmix, caseload en groeiritme.";
   }
   if (
     /±?\s*35\s+gemeenten|gemeenten/i.test(source) &&
     /consorti|triage|haarlem toegangspoort/i.test(source)
   ) {
-    return "Behoud de brede ambulante identiteit, maar maak de organisatie bestuurbaar door kern- en voorkeursgemeenten te kiezen, consortiumtriage aan capaciteitsgrenzen te koppelen en verlieslatende breedte actief te begrenzen.";
+    return "Maak het gemeentenportfolio bestuurbaar door kern-, behoud- en uitstapgemeenten te kiezen, consortiumtriage aan capaciteitsgrenzen te koppelen en verlieslatende breedte actief te begrenzen.";
   }
   if (/80%\s*rendabiliteit|80%\s*declarabele uren/i.test(source)) {
     return "Laat breedte alleen toe waar marge, reistijd, caseload en teamstabiliteit aantoonbaar binnen bestuurlijke grenzen blijven.";
@@ -364,6 +375,132 @@ function buildSourceBoundJeugdzorgThesis(sourceText: string, recommendedDirectio
     recommendedDirection || "Behoud de gekozen richting binnen strakke bestuursdiscipline.",
     "Behoud de gekozen richting binnen strakke bestuursdiscipline."
   );
+}
+
+function tokenizeContent(text: string): Set<string> {
+  return new Set(
+    (text || "")
+      .toLowerCase()
+      .split(/\W+/)
+      .map((chunk) => chunk.trim())
+      .filter((chunk) => chunk.length > 2)
+  );
+}
+
+function contentSimilarity(left: string, right: string): number {
+  const leftTokens = tokenizeContent(left);
+  const rightTokens = tokenizeContent(right);
+  if (!leftTokens.size || !rightTokens.size) return 0;
+  const intersection = new Set([...leftTokens].filter((token) => rightTokens.has(token)));
+  const union = new Set([...leftTokens, ...rightTokens]);
+  return intersection.size / union.size;
+}
+
+function isDuplicatedContent(candidate: string, existing: string[], threshold = 0.7): boolean {
+  return existing.some((item) => contentSimilarity(candidate, item) >= threshold);
+}
+
+function dedupeStructuredInsights(insights: StructuredKillerInsight[]): StructuredKillerInsight[] {
+  const accumulator: string[] = [];
+  const deduped: StructuredKillerInsight[] = [];
+  for (const insight of insights || []) {
+    const snippet = `${insight.insight} ${insight.mechanism} ${insight.implication}`.trim();
+    if (!snippet) continue;
+    if (isDuplicatedContent(snippet, accumulator)) continue;
+    accumulator.push(snippet);
+    deduped.push(insight);
+    if (deduped.length >= 5) break;
+  }
+  return deduped;
+}
+
+function clampScore(value: number): number {
+  return Math.max(1, Math.min(10, Math.round(value)));
+}
+
+function countKeywordMatches(value: string, keywords: string[]): number {
+  const normalized = String(value || "").toLowerCase();
+  return keywords.reduce((sum, keyword) => sum + (normalized.includes(keyword) ? 1 : 0), 0);
+}
+
+function evaluateScenarioScores(
+  mechanism: string,
+  risk: string,
+  boardImplication: string
+): {
+  impactScore: number;
+  riskScore: number;
+  difficultyScore: number;
+  scoreValue: number;
+} {
+  const impactKeywords = ["marge", "impact", "waarde", "win", "contractruimte", "capaciteit", "growth", "leverage"];
+  const riskKeywords = ["risico", "complex", "governance", "escala", "verlies", "vertraging", "breuk", "dram"];
+  const difficultyKeywords = ["mandaat", "partner", "consortium", "organisatie", "afstemming", "align", "prioriteit"];
+
+  const impactMatch = countKeywordMatches(mechanism, impactKeywords);
+  const riskMatch = countKeywordMatches(`${risk} ${boardImplication}`, riskKeywords);
+  const difficultyMatch = countKeywordMatches(boardImplication, difficultyKeywords);
+
+  const impactScore = clampScore(5 + impactMatch * 1.5);
+  const riskScore = clampScore(3 + riskMatch * 1.4);
+  const difficultyScore = clampScore(3 + difficultyMatch * 1.2);
+  const scoreValue = impactScore - riskScore - difficultyScore;
+  return { impactScore, riskScore, difficultyScore, scoreValue };
+}
+
+function dedupeScenarioList(scenarios: CompactScenario[]): CompactScenario[] {
+  const accumulator: string[] = [];
+  const deduped: CompactScenario[] = [];
+  for (const scenario of scenarios) {
+    const canonical = `${scenario.mechanism} ${scenario.risk} ${scenario.boardImplication}`.trim();
+    if (!canonical) continue;
+    if (isDuplicatedContent(canonical, accumulator)) continue;
+    accumulator.push(canonical);
+    deduped.push(scenario);
+    if (deduped.length >= 5) break;
+  }
+  return deduped;
+}
+
+function normalizeScenarioReference(value: string): string {
+  return normalizeInline(
+    String(value || "")
+      .replace(/^scenario\s+/i, "")
+      .replace(/^(?:optie\s+)?([ABC])\s*[—\-:.]\s*/i, "$1 ")
+      .replace(/^([ABC])\.\s*/i, "$1 ")
+  ).toLowerCase();
+}
+
+function resolveRecommendedScenarioIndex(
+  scenarios: CompactScenario[],
+  recommendedDirection: string
+): number {
+  const normalizedDirection = normalizeScenarioReference(recommendedDirection);
+  if (normalizedDirection) {
+    const directMatch = scenarios.findIndex((scenario) => {
+      const normalizedTitle = normalizeScenarioReference(scenario.title);
+      return (
+        normalizedTitle === normalizedDirection ||
+        normalizedDirection.includes(normalizedTitle) ||
+        normalizedTitle.includes(normalizedDirection)
+      );
+    });
+    if (directMatch >= 0) return directMatch;
+
+    const directionCode = normalizedDirection.match(/^([abc])\b/i)?.[1]?.toUpperCase();
+    if (directionCode) {
+      const codedMatch = scenarios.findIndex((scenario) =>
+        new RegExp(`(?:^|\\b)scenario\\s+${directionCode}\\b|^${directionCode}\\b`, "i").test(String(scenario.title || ""))
+      );
+      if (codedMatch >= 0) return codedMatch;
+    }
+  }
+
+  return scenarios.reduce((bestIndex, scenario, index, rows) => {
+    const bestScore = Number.isFinite(rows[bestIndex]?.scoreValue ?? NaN) ? rows[bestIndex]?.scoreValue ?? -Infinity : -Infinity;
+    const currentScore = Number.isFinite(scenario.scoreValue ?? NaN) ? scenario.scoreValue ?? -Infinity : -Infinity;
+    return currentScore > bestScore ? index : bestIndex;
+  }, 0);
 }
 
 function enforceSingleBoardThesis(thesis: string, fallback: string): string {
@@ -424,9 +561,9 @@ function buildSourceBoundJeugdzorgDecisionPressure(sourceText: string): BoardDec
 function buildSourceBoundJeugdzorgOptions(sourceText: string): string[] {
   const source = sanitizeDisplayText(sourceText);
   const options = [
-    "A. Regionale dominantie via focusgemeenten en sterke lokale teams",
-    "B. Specialistische focus op een scherper ambulant profiel",
-    "C. Netwerkorganisatie via consortium en partners verdiepen",
+    "A. Gemeentenportfolio rationaliseren",
+    "B. Operationele schaal vergroten binnen vaste teams en flexibele schil",
+    "C. Zorgmodel en instroomroute veranderen",
   ];
   if (/gebiedgebonden|lokale medewerkers|korte huurovereenkomst|gemeenten/i.test(source)) {
     return options;
@@ -455,16 +592,18 @@ function buildSourceBoundJeugdzorgInsights(sourceText: string, recommendedDirect
     });
     insights.push({
       insight: "Volume op zichzelf lost het vraagstuk niet op; contractdiscipline per gemeente bepaalt of het gemeentenportfolio houdbaar blijft.",
-      mechanism: "Dezelfde zorgvorm levert per gemeente iets anders op door verschillen in tarief, bereikbaarheid en contractvoorwaarden.",
+      mechanism: "De unit economics zijn per gemeente anders: tarief per uur minus reistijd, no-show en indirecte uren bepaalt de effectieve marge. Daardoor levert dezelfde zorgvorm per gemeente iets anders op.",
       implication: "Het bestuur moet gemeenten indelen in kern, behoud en uitstap in plaats van volume overal gelijk te behandelen.",
     });
   }
   if (/consorti|haarlem toegangspoort|triage/i.test(source)) {
     insights.push({
       insight: "Instroom wordt mede buiten de eigen organisatie bepaald via consortium- en triageafspraken.",
-      mechanism: "Daardoor bepaalt Jeugdzorg ZIJN niet volledig zelf welke casuïstiek binnenkomt, terwijl teams wel de uitvoeringsdruk en kwaliteitslast dragen.",
-      implication: "Het bestuur moet consortiumtoegang, caseload en contractkeuzes als één governancevraag behandelen in plaats van als losse operationele stromen.",
-      });
+      mechanism:
+        "De keten loopt van gemeentelijke toegang via consortiumtriage naar caseload, wachttijd, teamdruk en uiteindelijk marge. Daardoor bepaalt Jeugdzorg ZIJN niet volledig zelf welke casuïstiek binnenkomt, terwijl teams wel de uitvoeringsdruk en kwaliteitslast dragen.",
+      implication:
+        "Het bestuur moet consortiumtoegang, caseload, wachttijd en contractkeuzes als één governancevraag behandelen in plaats van als losse operationele stromen.",
+    });
   }
   if (/80%\s*rendabiliteit|80%\s*declarabele uren/i.test(source)) {
     insights.push({
@@ -496,10 +635,10 @@ function buildSourceBoundJeugdzorgInsights(sourceText: string, recommendedDirect
         ? "De cultuur van werkplezier, verbinding en lage uitstroom is geen zachte factor maar het productiemechanisme van de organisatie."
         : "De vaste kern houdt kwaliteit en continuiteit vast, terwijl de flexibele schil vraagpieken opvangt maar de kostenstructuur volatiel maakt.",
       mechanism: /werkplezier|weinig verloop|lage uitstroom|retentie/i.test(source)
-        ? "Juist die cultuur maakt langdurige retentie, kennisdeling en ambulante kwaliteit mogelijk. Snelle volumegroei of bestuurlijke versnippering tast daarom direct de uitvoerbaarheid aan."
+        ? "Cultuur houdt retentie hoog, retentie houdt caseload planbaar en planbare caseload houdt kwaliteit en declarabele productiviteit op niveau. Snelle volumegroei of bestuurlijke versnippering doorbreekt precies die keten."
         : "Extra inzet van flex of zzp verhoogt de variabele kosten juist op het moment dat zorgzwaarte en wachtdruk oplopen.",
       implication: /werkplezier|weinig verloop|lage uitstroom|retentie/i.test(source)
-        ? `Het bestuur moet teamstabiliteit behandelen als harde randvoorwaarde onder ${directionLabel}.`
+        ? `Het bestuur moet teamstabiliteit en cultuurkapitaal behandelen als harde randvoorwaarde onder ${directionLabel}.`
         : "Het bestuur moet een maximale flexratio en escalatieregel vaststellen voordat nieuwe volumeafspraken worden geaccepteerd.",
     });
   }
@@ -530,11 +669,11 @@ function buildSourceBoundJeugdzorgScenarios(sourceText: string, recommendedDirec
   const hasMunicipalMix = /±?\s*35\s+gemeenten|gemeenten/i.test(source);
   const hasDataTransition = /Zillers|01\s*04|1\s*april/i.test(source);
 
-  return [
+  const baseScenarios = [
     {
-      title: "Scenario A — Regionale dominantie via focusgemeenten en sterke lokale teams",
+      title: "Scenario A — Gemeentenportfolio rationaliseren",
       mechanism: hasMunicipalMix
-        ? "Beperk actieve groei tot kern- en voorkeursgemeenten waar contractruimte, bereikbaarheid en teamstabiliteit aantoonbaar samengaan."
+        ? "Beperk actieve groei tot kern- en behoudgemeenten waar contractruimte, bereikbaarheid en teamstabiliteit aantoonbaar samengaan, en markeer uitstapgemeenten expliciet."
         : "Breng focus aan in gemeenten en teams waar bestuurlijke grip en kwaliteit het sterkst samenkomen.",
       risk: hasDataTransition
         ? "Zonder betrouwbare Zillers-sturing wordt te laat zichtbaar welke gemeenten, teams of pilots bestuurlijk onhoudbaar worden."
@@ -542,28 +681,38 @@ function buildSourceBoundJeugdzorgScenarios(sourceText: string, recommendedDirec
       boardImplication: "Het bestuur moet expliciet bepalen welke gemeenten kern, behoud of exit zijn, en lokale teams daaraan koppelen.",
     },
     {
-      title: "Scenario B — Specialistische focus op een scherper ambulant profiel",
-      mechanism: "Versmal het aanbod naar een kleiner aantal zorgvormen en gemeenten zodat teams, kwaliteit en contractonderhandeling scherper worden georganiseerd.",
-      risk: hasMunicipalMix
-        ? "Te snelle versmalling kan regionale relevantie en toegang tot gemeentelijke contractstromen aantasten."
-        : "Een smallere propositie kan instroom en legitimiteit sneller laten dalen dan kosten meebewegen.",
-      boardImplication: "Het bestuur moet bepalen welke zorgvormen, gemeenten en pilots kern blijven en welke gecontroleerd worden afgebouwd.",
+      title: "Scenario B — Operationele schaal vergroten binnen vaste teams en flexibele schil",
+      mechanism:
+        "Vergroot capaciteit alleen binnen harde grenzen voor caseload, flexratio, reistijd en no-show, zodat extra volume niet direct ten koste gaat van teamstabiliteit.",
+      risk:
+        "Extra schaal zonder harde grenzen trekt cultuurkapitaal leeg en verhoogt wachtdruk sneller dan marge of kwaliteit meebewegen.",
+      boardImplication:
+        "Het bestuur moet vooraf vastleggen bij welke caseload, wachttijd en flexratio schaal wordt gepauzeerd of teruggedraaid.",
     },
     {
-      title: "Scenario C — Netwerkorganisatie via consortium en partners verdiepen",
+      title: "Scenario C — Zorgmodel en instroomroute veranderen",
       mechanism: hasConsortium
-        ? "Vergroot invloed op toegang door consortiumdoelen, triagecriteria en partnerrol bestuurlijk strakker te organiseren."
-        : "Vergroot regionale invloed via sterkere afspraken over toegang, triage en partnerrol.",
-      risk: "Governancecomplexiteit stijgt direct als rolverdeling, mandaat en escalatie tussen bestuur, directie en partners niet helder zijn.",
-      boardImplication: "Het bestuur moet eerst vastleggen welk mandaat het zelf houdt en wat het overdraagt aan consortium of regio.",
+        ? "Verander de keten van gemeentelijke toegang via consortiumtriage naar teams door triagecriteria, routering, partnerrol en caseloadgrenzen bestuurlijk opnieuw te ontwerpen."
+        : "Verander de instroom- en zorglogica door scherpere triage, routering en partnerafspraken.",
+      risk:
+        "Governancecomplexiteit stijgt direct als rolverdeling, mandaat en escalatie tussen bestuur, directie en consortium niet helder zijn.",
+      boardImplication:
+        "Het bestuur moet eerst vastleggen welk mandaat het zelf houdt over toegang, caseload en routering en wat het overdraagt aan consortium of regio.",
     },
-  ].map((scenario) => ({
-    ...scenario,
-    boardImplication:
-      normalizeInline(scenario.title).toLowerCase() === normalizeInline(recommendedDirection).toLowerCase()
-        ? scenario.boardImplication
-        : scenario.boardImplication,
-  }));
+  ];
+  return baseScenarios.map((scenario) => {
+    const mechanismText = rewriteMechanistic(compactSectionText(scenario.mechanism, 140));
+    const riskText = rewriteMechanistic(compactSectionText(scenario.risk, 140));
+    const implicationText = rewriteMechanistic(compactSectionText(scenario.boardImplication, 140));
+    const scenarioScores = evaluateScenarioScores(mechanismText, riskText, implicationText);
+    return {
+      ...scenario,
+      mechanism: mechanismText,
+      risk: riskText,
+      boardImplication: implicationText,
+      ...scenarioScores,
+    };
+  });
 }
 
 export function buildJeugdzorgBoardGoldenFixture(sourceText: string): {
@@ -572,7 +721,7 @@ export function buildJeugdzorgBoardGoldenFixture(sourceText: string): {
   scenarios: CompactScenario[];
   actions: GovernanceIntervention[];
 } {
-  const recommendedDirection = "Brede ambulante specialist blijven binnen consortium- en contractdiscipline.";
+  const recommendedDirection = "Gemeentenportfolio actief begrenzen binnen consortium- en contractdiscipline.";
   const thesis = enforceSingleBoardThesis(
     buildSourceBoundJeugdzorgThesis(sourceText, recommendedDirection),
     recommendedDirection
@@ -583,16 +732,16 @@ export function buildJeugdzorgBoardGoldenFixture(sourceText: string): {
     "",
     [
       {
-        title: "Standaardiseer triage en wekelijkse capaciteitssturing",
-        kpi: "Wachtdruk daalt en caseload blijft binnen norm.",
+        title: "Bouw een gemeentenmatrix met kern-, behoud- en uitstapgemeenten",
+        kpi: "100% van de gemeenten is binnen 30 dagen geclassificeerd op marge, reistijd en contractzekerheid.",
       },
       {
-        title: "Ontwikkel partnerselectiemodel met kwaliteits- en governancecriteria",
-        kpi: "Escalaties en kwaliteitsafwijkingen per partner nemen af.",
+        title: "Koppel consortiumtriage aan wekelijkse caseload- en wachttijdsturing",
+        kpi: "Wachtdruk daalt en caseload blijft binnen norm terwijl instroom per route zichtbaar wordt.",
       },
       {
-        title: "Hanteer margevloer per productlijn en heronderhandel contractmix",
-        kpi: "Marge per gemeente en productlijn blijft boven ondergrens.",
+        title: "Bescherm cultuurkapitaal met harde grens voor flexratio en groeitempo",
+        kpi: "Teamstabiliteit blijft op niveau en flexinzet overschrijdt de bestuurlijke grens niet.",
       },
     ],
     recommendedDirection,
@@ -722,8 +871,73 @@ type InlinePdfPreview = {
   filename: string;
 };
 
+const FALLBACK_SESSIONS_STORAGE_KEY = "cyntra.fallback_sessions.v1";
+
 function normalizeReportIdentifier(value: unknown): string {
   return String(value || "").trim();
+}
+
+function toSortableTimestamp(value: unknown): number {
+  const parsed = Date.parse(String(value || ""));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function resolveEngineLabel(engineMode: unknown, sourceType: MergedReportRow["sourceType"]): string {
+  const normalized = String(engineMode || "").trim().toLowerCase();
+  if (!normalized) {
+    return sourceType === "upload" ? "Geuploade rapportbron" : "Aurelius lokale rapportcache";
+  }
+  if (normalized === "fallback") return "Aurelius lokale continuiteitsmodus";
+  if (normalized === "local") return "Aurelius lokale pipeline";
+  if (normalized === "remote") return "Aurelius live pipeline";
+  if (normalized === "platform") return "Aurelius platformpipeline";
+  return String(engineMode);
+}
+
+function loadPersistedFallbackSeed(reportId: string): SeededReportSessionState | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(FALLBACK_SESSIONS_STORAGE_KEY);
+    const rows = raw ? (JSON.parse(raw) as any[]) : [];
+    const match = rows.find((row) => String(row?.session_id || row?.id || "").trim() === String(reportId || "").trim());
+    if (!match) return null;
+    const sessionId = String(match.session_id || match.id || reportId).trim();
+    const report: StrategicReport = {
+      report_id: sessionId,
+      session_id: sessionId,
+      organization_id: String(match.organization_id || "fallback-org"),
+      title: `Cyntra Executive Dossier — ${String(match.organization_name || "Organisatie")} — ${sessionId}`,
+      sections: [],
+      generated_at: String(match.updated_at || match.created_at || new Date().toISOString()),
+      report_body: String(match.board_report || match.executive_summary || ""),
+    };
+    return {
+      reportId: sessionId,
+      sessionId,
+      report,
+      session: {
+        ...match,
+        session_id: sessionId,
+        strategic_report: report,
+      },
+      organizationName: String(match.organization_name || "Organisatie"),
+      createdAt: String(match.updated_at || match.created_at || new Date().toISOString()),
+      executiveSummary: String(match.executive_summary || ""),
+      boardMemo: String(match.board_memo || ""),
+      rawInput: String(match.input_data || ""),
+      sector: "",
+      status: String(match.status || SESSION_STATUS.COMPLETED),
+      errorMessage: "",
+      interventions: [],
+      analysisRuntimeMs: 0,
+      engineMode: "fallback",
+      qualityScore: 0,
+      qualityTier: "",
+      qualityFlags: [],
+    };
+  } catch {
+    return null;
+  }
 }
 
 function matchesReportSelection(row: Pick<MergedReportRow, "sessionId" | "reportId">, selectedId: string): boolean {
@@ -742,47 +956,296 @@ function mergeUniqueSections(primary: ReportSection[], supplemental: ReportSecti
   return Array.from(merged.values());
 }
 
-function mergeStrategicBrainViewModel(
-  legacy: ReportViewModel,
-  strategicBrainReport?: StrategicBrainReport
-): ReportViewModel {
-  if (!strategicBrainReport) return legacy;
+function isJeugdzorgSectorValue(value: string): boolean {
+  return /jeugdzorg/i.test(String(value || ""));
+}
 
-  const brainModel = adaptStrategicBrainReportToViewModel(strategicBrainReport);
+function buildSourceBoundJeugdzorgMechanismAnalysis(sourceText: string): string {
+  const source = sanitizeDisplayText(sourceText);
+  const lines = [
+    "UNIT ECONOMICS — Tarief per uur minus reistijd, no-show en indirecte uren bepaalt de effectieve marge per gemeente. Daardoor is dezelfde ambulante casus niet overal economisch gelijk.",
+    "PORTFOLIO-EFFECT — A-gemeenten combineren contractruimte, bereikbaarheid en teamstabiliteit. B-gemeenten zijn alleen houdbaar binnen capaciteitsgrenzen. C-gemeenten drukken reistijd, no-show en coördinatielast harder op de marge dan extra volume kan compenseren.",
+    "CAPACITEITSKETEN — Retentie van vaste professionals bepaalt hoeveel casussen planbaar blijven. Zodra retentie daalt, stijgt caseload per professional, loopt wachttijd op en zakt behandelkwaliteit en declarabele productiviteit tegelijk weg.",
+  ];
+  if (/consorti|haarlem toegangspoort|triage/i.test(source)) {
+    lines.push(
+      "TOEGANGSKETEN — Gemeentelijke toegang -> consortiumtriage -> caseload -> wachttijd -> teamdruk -> marge. Daardoor ligt een deel van de vraagvorming buiten directe bestuurscontrole, terwijl de uitvoeringsdruk volledig in de teams landt."
+    );
+  }
+  return lines.join("\n\n");
+}
+
+function filterBoardroomStrategySections(
+  sections: ReportSection[],
+  params: { sector: string; hasStrongLegacySections: boolean }
+): ReportSection[] {
+  const suppressedWhenLegacyIsStrong = new Set([
+    "EXECUTIVE DECISION CARD",
+    "KILLER INSIGHTS",
+    "STRATEGISCHE SIGNALEN",
+    "STRATEGISCH PATROON",
+    "STRATEGISCHE ERVARING",
+    "STRATEGISCHE PARADOX",
+    "PARADOX KWALITEITSCONTROLE",
+    "ONGEMAKKELIJKE WAARHEID",
+    "BOARDROOM DEBAT",
+    "INSTITUTIONAL MEMORY",
+    "STRATEGISCH NARRATIEF",
+    "BOARD DECISION BRIEF",
+    "SCENARIO-OVERZICHT",
+    "VOORGESTELDE KEUZE",
+    "KERNSTELLING",
+    "OPEN BESTUURSVRAGEN",
+    "STRUCTURELE SPANNING",
+  ]);
+  const isJeugdzorg = isJeugdzorgSectorValue(params.sector);
+  return sections
+    .map((section) => ({
+      ...section,
+      title: String(section.title || "").trim(),
+      body: sanitizeDisplayText(section.body || ""),
+    }))
+    .filter((section) => {
+      const title = section.title.toUpperCase();
+      const body = section.body;
+      if (!title || !body) return false;
+      if (params.hasStrongLegacySections && suppressedWhenLegacyIsStrong.has(title)) return false;
+      if (isJeugdzorg && /\bggz\b/i.test(`${title}\n${body}`)) return false;
+      return true;
+    });
+}
+
+function canonicalizeBoardroomSectionTitle(title: string): string {
+  const normalized = String(title || "").trim().toUpperCase();
+  if (["BESTUURLIJKE BESLISKAART", "BESTUURLIJKE BESLISKAART"].includes(normalized)) return "BESTUURLIJKE BESLISKAART";
+  if (normalized === "BESTUURLIJKE KERNSAMENVATTING") return "BESTUURLIJKE KERNSAMENVATTING";
+  if (normalized === "BESLUITVRAAG") return "BESLUITVRAAG";
+  if (normalized === "FEITENBASIS") return "FEITENBASIS";
+  if (normalized === "KEUZERICHTINGEN") return "KEUZERICHTINGEN";
+  if (["AANBEVOLEN KEUZE", "VOORGESTELDE KEUZE"].includes(normalized)) return "AANBEVOLEN KEUZE";
+  if (["DOORBRAAKINZICHTEN", "KILLER INSIGHTS", "NIEUWE INZICHTEN (KILLER INSIGHTS)"].includes(normalized)) {
+    return "DOORBRAAKINZICHTEN";
+  }
+  if (["MOGELIJKE ONTWIKKELINGEN", "SCENARIO VERGELIJKING", "SCENARIO-OVERZICHT"].includes(normalized)) {
+    return "SCENARIO VERGELIJKING";
+  }
+  if (["MECHANISME ANALYSE", "WAAROM DIT GEBEURT"].includes(normalized)) return "MECHANISME ANALYSE";
+  if (normalized === "BESLUITGEVOLGEN") return "BESLUITGEVOLGEN";
+  if (normalized === "VROEGSIGNALERING") return "VROEGSIGNALERING";
+  if (["BOARDROOM STRESSTEST", "BESTUURLIJKE STRESSTEST"].includes(normalized)) return "BOARDROOM STRESSTEST";
+  if (["BESTUURLIJK ACTIEPLAN", "BESTUURLIJKE ACTIES"].includes(normalized)) return "BESTUURLIJK ACTIEPLAN";
+  if (["OPEN STRATEGISCHE VRAGEN", "OPEN BESTUURSVRAGEN"].includes(normalized)) return "OPEN STRATEGISCHE VRAGEN";
+  return normalized;
+}
+
+function curateBoardroomDossierSections(
+  sections: ReportSection[],
+  params: { sector: string; hasStrongLegacySections: boolean }
+): ReportSection[] {
+  const filtered = filterBoardroomStrategySections(sections, params);
+  if (!params.hasStrongLegacySections) return filtered;
+
+  const preferredOrder = [
+    "BESTUURLIJKE BESLISKAART",
+    "BESTUURLIJKE KERNSAMENVATTING",
+    "BESLUITVRAAG",
+    "FEITENBASIS",
+    "KEUZERICHTINGEN",
+    "AANBEVOLEN KEUZE",
+    "DOORBRAAKINZICHTEN",
+    "SCENARIO VERGELIJKING",
+    "MECHANISME ANALYSE",
+    "BESLUITGEVOLGEN",
+    "VROEGSIGNALERING",
+    "BOARDROOM STRESSTEST",
+    "BESTUURLIJK ACTIEPLAN",
+    "OPEN STRATEGISCHE VRAGEN",
+  ];
+  const preferredSet = new Set(preferredOrder);
+  const deduped = new Map<string, ReportSection>();
+  for (const section of filtered) {
+    const canonicalTitle = canonicalizeBoardroomSectionTitle(section.title);
+    if (!preferredSet.has(canonicalTitle) || deduped.has(canonicalTitle)) continue;
+    deduped.set(canonicalTitle, { ...section, title: canonicalTitle });
+  }
+  return preferredOrder.map((title) => deduped.get(title)).filter(Boolean) as ReportSection[];
+}
+
+function getLibrarySortPriority(row: Pick<MergedReportRow, "sourceType" | "engineMode" | "qualityTier">): number {
+  const engineMode = String(row.engineMode || "").toLowerCase();
+  if (row.sourceType === "upload") return 4;
+  if (engineMode === "remote" || engineMode === "platform" || engineMode === "local") return 1;
+  if (engineMode === "fallback") return 3;
+  if (row.qualityTier === "premium") return 2;
+  return 2;
+}
+
+function mergeStrategicBrainViewModel(
+  legacy: ReportRenderModel,
+  strategicBrainReport?: StrategicBrainReport
+): ReportRenderModel {
+  if (!strategicBrainReport) return legacy;
+  const hasStrongLegacySections = legacy.strategySections.some((section) =>
+    [
+      "BESTUURLIJKE KERNSAMENVATTING",
+      "FEITENBASIS",
+      "DOORBRAAKINZICHTEN",
+      "KEUZERICHTINGEN",
+      "BESTUURLIJK ACTIEPLAN",
+      "MOGELIJKE ONTWIKKELINGEN",
+    ].includes(String(section.title || "").trim().toUpperCase())
+  );
+  const strategicBrainInsights = strategicBrainReport.strategisch_rapport.doorbraakinzichten
+    .slice(0, 5)
+    .map((insight, index) => ({
+      insight: String(insight || "").trim() || `Inzicht ${index + 1}`,
+      mechanism:
+        strategicBrainReport.board_analysis?.mechanism_analysis?.[index] ||
+        strategicBrainReport.board_analysis?.structural_tension ||
+        strategicBrainReport.strategisch_rapport.strategische_paradox,
+      implication:
+        strategicBrainReport.strategisch_rapport.strategisch_narratief.bestuurlijke_opgave ||
+        strategicBrainReport.execution_layer?.early_signals?.[index] ||
+        strategicBrainReport.bestuurlijk_overzicht.grootste_risico_bij_uitstel,
+    }));
+  const strategicBrainScenarios = strategicBrainReport.board_analysis?.scenario_comparison?.slice(0, 3).map((item) => ({
+    title: `Scenario ${item.code} - ${item.title}`,
+    mechanism: item.mechanism,
+    risk: item.risk,
+    boardImplication: item.strategic_implication,
+  })) || [];
+  const strategicBrainInterventions = strategicBrainReport.execution_layer?.strategic_actions?.slice(0, 3).map((item) => ({
+    action: item.action,
+    mechanism: strategicBrainReport.board_analysis?.structural_tension || strategicBrainReport.strategisch_rapport.strategische_paradox,
+    boardDecision: strategicBrainReport.bestuurlijk_overzicht.aanbevolen_keuze,
+    owner: item.owner,
+    deadline: item.timeline,
+    kpi: item.kpi,
+  })) || [];
+  const strategicBrainSections = buildBoardroomSections(
+    compileBoardroomDocument({
+      meta: {
+        organisation: strategicBrainReport.meta.organization,
+        sector: strategicBrainReport.meta.sector,
+        reportId: strategicBrainReport.meta.report_id,
+        analysisDate: strategicBrainReport.meta.generated_at,
+      },
+      executiveCore: strategicBrainReport.bestuurlijk_overzicht.kernstelling,
+      decisionQuestion:
+        strategicBrainReport.strategisch_rapport.boardroom_debat?.kernvraag_voor_het_bestuur ||
+        strategicBrainReport.bestuurlijk_overzicht.kernprobleem,
+      situation:
+        strategicBrainReport.board_analysis?.situation ||
+        strategicBrainReport.strategisch_rapport.strategisch_narratief.situatie,
+      strategicTension: {
+        axisA: strategicBrainReport.bestuurlijk_overzicht.kernprobleem,
+        axisB: strategicBrainReport.bestuurlijk_overzicht.aanbevolen_keuze,
+        explanation:
+          strategicBrainReport.board_analysis?.structural_tension ||
+          strategicBrainReport.strategisch_rapport.strategische_paradox,
+      },
+      mechanismAnalysis: {
+        coreMechanism:
+          strategicBrainReport.board_analysis?.mechanism_analysis?.[0] ||
+          strategicBrainReport.strategisch_rapport.ongemakkelijke_waarheid?.uitleg,
+        explanation:
+          strategicBrainReport.strategisch_rapport.ongemakkelijke_waarheid?.uitleg ||
+          strategicBrainReport.board_analysis?.mechanism_analysis?.join(" "),
+        causalChain: strategicBrainReport.board_analysis?.mechanism_analysis || [],
+        boardInterpretation:
+          strategicBrainReport.strategisch_rapport.strategisch_narratief.bestuurlijke_opgave,
+      },
+      scenarios: strategicBrainScenarios,
+      breakthroughInsights: strategicBrainInsights.map((item) => ({
+        insight: item.insight,
+        whyItMatters: item.mechanism,
+        governanceConsequence: item.implication,
+      })),
+      insights: strategicBrainInsights.map((item) => ({
+        insight: item.insight,
+        whyItMatters: item.mechanism,
+        governanceConsequence: item.implication,
+      })),
+      governanceImplications: strategicBrainInsights.slice(0, 4).map((item) => ({
+        strategicImpact: item.insight,
+        governanceQuestion: item.mechanism,
+        decisionMoment: item.implication,
+      })),
+      boardActions: strategicBrainInterventions.map((item) => ({
+        action: item.action,
+        owner: item.owner,
+        deadline: item.deadline,
+        kpi: item.kpi,
+      })),
+      actions: strategicBrainInterventions.map((item) => ({
+        action: item.action,
+        owner: item.owner,
+        deadline: item.deadline,
+        kpi: item.kpi,
+      })),
+      stopRules: strategicBrainReport.bestuurlijk_overzicht.stopregels || [],
+    })
+  );
 
   return {
     ...legacy,
-    dominantThesis: legacy.dominantThesis || brainModel.dominantThesis,
-    strategicConflict: legacy.strategicConflict || brainModel.strategicConflict,
-    recommendedDirection: legacy.recommendedDirection || brainModel.recommendedDirection,
-    boardQuestion: legacy.boardQuestion || brainModel.boardQuestion,
-    financialConsequences: legacy.financialConsequences || brainModel.financialConsequences,
-    stressTest: legacy.stressTest || brainModel.stressTest,
-    strategyAlert: legacy.strategyAlert || brainModel.strategyAlert,
-    noIntervention: legacy.noIntervention || brainModel.noIntervention,
-    strategySections: mergeUniqueSections(legacy.strategySections, brainModel.strategySections),
-    scenarioSections: mergeUniqueSections(legacy.scenarioSections, brainModel.scenarioSections),
-    engineSections: mergeUniqueSections(legacy.engineSections, brainModel.engineSections),
+    dominantThesis: legacy.dominantThesis || strategicBrainReport.bestuurlijk_overzicht.kernstelling,
+    strategicConflict: legacy.strategicConflict || strategicBrainReport.bestuurlijk_overzicht.kernprobleem,
+    recommendedDirection: legacy.recommendedDirection || strategicBrainReport.bestuurlijk_overzicht.aanbevolen_keuze,
+    boardQuestion:
+      legacy.boardQuestion ||
+      strategicBrainReport.strategisch_rapport.boardroom_debat?.kernvraag_voor_het_bestuur ||
+      strategicBrainReport.bestuurlijk_overzicht.kernprobleem,
+    financialConsequences:
+      legacy.financialConsequences ||
+      strategicBrainReport.scenario_simulatie?.strategische_stresstest?.[1]?.breekpunt ||
+      strategicBrainReport.strategisch_rapport.ongemakkelijke_waarheid?.uitleg,
+    stressTest:
+      legacy.stressTest ||
+      strategicBrainReport.scenario_simulatie?.strategische_stresstest?.map((item) => item.breekpunt).join("\n"),
+    strategyAlert:
+      legacy.strategyAlert ||
+      strategicBrainReport.execution_layer?.early_signals?.[0] ||
+      strategicBrainReport.bestuurlijk_overzicht.grootste_risico_bij_uitstel,
+    noIntervention:
+      legacy.noIntervention ||
+      strategicBrainReport.bestuurlijk_overzicht.grootste_risico_bij_uitstel,
+    strategySections: curateBoardroomDossierSections(
+      mergeUniqueSections(legacy.strategySections, strategicBrainSections),
+      {
+        sector: legacy.sector || strategicBrainReport.meta.sector,
+        hasStrongLegacySections,
+      }
+    ),
+    scenarioSections: legacy.scenarioSections,
+    engineSections: legacy.engineSections,
     structuredKillerInsights:
       legacy.structuredKillerInsights.length > 0
         ? legacy.structuredKillerInsights
-        : brainModel.structuredKillerInsights,
-    compactScenarios: legacy.compactScenarios.length > 0 ? legacy.compactScenarios : brainModel.compactScenarios,
+        : strategicBrainInsights,
+    compactScenarios: legacy.compactScenarios.length > 0 ? legacy.compactScenarios : strategicBrainScenarios,
     governanceInterventions:
       legacy.governanceInterventions.length > 0
         ? legacy.governanceInterventions
-        : brainModel.governanceInterventions,
+        : strategicBrainInterventions,
     bestuurlijkeBesliskaart: {
-      ...brainModel.bestuurlijkeBesliskaart,
       ...legacy.bestuurlijkeBesliskaart,
+      organization: strategicBrainReport.meta.organization,
+      sector: strategicBrainReport.meta.sector,
+      analysisDate: strategicBrainReport.meta.analysis_date_label,
+      coreProblem: strategicBrainReport.bestuurlijk_overzicht.kernprobleem,
+      coreStatement: strategicBrainReport.bestuurlijk_overzicht.kernstelling,
+      recommendedChoice: strategicBrainReport.bestuurlijk_overzicht.aanbevolen_keuze,
+      riskIfDelayed: strategicBrainReport.bestuurlijk_overzicht.grootste_risico_bij_uitstel,
+      decisionConfidence: strategicBrainReport.bestuurlijk_overzicht.decision_confidence,
       whyReasons:
         legacy.bestuurlijkeBesliskaart.whyReasons.length > 0
           ? legacy.bestuurlijkeBesliskaart.whyReasons
-          : brainModel.bestuurlijkeBesliskaart.whyReasons,
+          : strategicBrainReport.bestuurlijk_overzicht.waarom_deze_keuze,
       stopRules:
         legacy.bestuurlijkeBesliskaart.stopRules.length > 0
           ? legacy.bestuurlijkeBesliskaart.stopRules
-          : brainModel.bestuurlijkeBesliskaart.stopRules,
+          : strategicBrainReport.bestuurlijk_overzicht.stopregels,
     },
   };
 }
@@ -904,7 +1367,7 @@ export function parseStructuredReportSections(value: string): MemoSection[] {
   const text = sanitizeDisplayText(value);
   if (!text) return [];
 
-  const pattern = /^(?:(\d+)\.\s+(.+)|###\s+(.+))\s*$/gmi;
+  const pattern = /(?:(\d+)\.\s+(.+?)|###\s+(.+?))(?=(?:\s+(?:\d+\.\s+|###\s+)|$))/gmis;
   const matches = Array.from(text.matchAll(pattern));
   if (!matches.length) return [];
 
@@ -985,6 +1448,8 @@ async function exportReportPdf(
     preview?: boolean;
     download?: boolean;
     previewWindow?: Window | null;
+    canonicalReport?: import("@/types/StrategicReport").StrategicReport;
+    boardroomDocument?: import("@/types/BoardroomDocument").BoardroomDocument;
   }
 ): Promise<void> {
   const { exportPDF } = await import("@/services/exportService");
@@ -1009,6 +1474,223 @@ function renderExportSection(title: string, body: string): string {
   const clean = sanitizeDisplayText(body);
   if (!clean) return "";
   return `${title}\n\n${clean}`;
+}
+
+export function resolveExportableStrategicReport(
+  report: StrategicReport | undefined,
+  model: ReportRenderModel
+): ExportableStrategicReport {
+  const canonical = synthesizeStrategicReport(model);
+  const fallbackBody = renderSectionListExport(buildBoardroomSections(compileBoardroomDocument(canonical)));
+  return {
+    ...canonical,
+    report_id: String(report?.report_id || canonical.meta.reportId || model.sessionId || "report"),
+    session_id: String(report?.session_id || model.sessionId || canonical.meta.reportId || "report"),
+    organization_id: String(report?.organization_id || model.organizationName || canonical.meta.organisation || "organisatie"),
+    title:
+      String(report?.title || "").trim() ||
+      `Cyntra Executive Dossier — ${model.organizationName || canonical.meta.organisation || "Organisatie"}`,
+    sections: Array.isArray(report?.sections) ? report.sections : [],
+    generated_at: String(report?.generated_at || model.createdAt || canonical.meta.analysisDate || new Date().toISOString()),
+    report_body: String(report?.report_body || "").trim() || fallbackBody,
+  };
+}
+
+function shortenBoardMechanism(value: string): string {
+  const text = sanitizeDisplayText(value);
+  if (!text) return "";
+  if (/portfolio breadth versus operational capacity/i.test(text)) return "portfolio vs capaciteit";
+  if (/growth pace versus culture stability/i.test(text)) return "groei vs cultuurstabiliteit";
+  if (/contract dependency under fixed tariffs/i.test(text)) return "contractafhankelijkheid vs margeruimte";
+  if (/retention|caseload|culture/i.test(text)) return "cultuur, retentie en caseload";
+  return text.length > 120 ? `${text.slice(0, 117).trim()}...` : text;
+}
+
+function sanitizeStopRuleLine(value: string): string {
+  return sanitizeDisplayText(value)
+    .replace(/^Herzie direct als\s*/i, "")
+    .replace(/^Herzie de gekozen koers direct als\s*/i, "")
+    .replace(/^Herzie de gekozen koers\s*/i, "")
+    .replace(/[.]+$/g, "")
+    .trim();
+}
+
+function deriveTensionVisual(model: ReportRenderModel): { left: string; right: string; explanation: string } {
+  const descriptor = detectRelevantTension([
+    model.strategicConflict,
+    model.bestuurlijkeBesliskaart.coreStatement,
+    model.executiveSummary,
+    model.recommendedDirection,
+    model.boardQuestion,
+  ].join(" "));
+  if (descriptor) {
+    return {
+      left: descriptor.leftPole.toUpperCase(),
+      right: descriptor.rightPole.toUpperCase(),
+      explanation: sanitizeDisplayText(descriptor.explanation),
+    };
+  }
+  return {
+    left: "Strategische breedte",
+    right: "Uitvoerbare capaciteit",
+    explanation: sanitizeDisplayText(model.strategicConflict || model.bestuurlijkeBesliskaart.coreStatement),
+  };
+}
+
+function buildMechanismChainExport(model: ReportRenderModel): string {
+  const sector = String(model.sector || "").toLowerCase();
+  const explanation =
+    /jeugdzorg|ggz|zorg/.test(sector)
+      ? "De strategische spanning wordt niet alleen veroorzaakt door vraag of volume. Zij ontstaat doordat contractstructuur, gemeentelijke tariefverschillen en toegangseisen doorwerken tot in teamcapaciteit, retentie en bestuurbaarheid."
+      : "De strategische spanning ontstaat wanneer prijslogica, operationele variatie en capaciteit sneller verschuiven dan het bestuurlijke ritme kan corrigeren.";
+  const chain =
+    /jeugdzorg|ggz|zorg/.test(sector)
+      ? "Contractstructuur\n->\nTariefverschillen\n->\nReistijd/no-show regels\n->\nCaseload per team\n->\nTeamdruk en retentie\n->\nWachttijd en behandelcapaciteit\n->\nMarge en bestuurbaarheid"
+      : "Contract- of prijsmodel\n->\nOperationele variatie\n->\nCapaciteit per team\n->\nTeamdruk en retentie\n->\nLevertijd en kwaliteit\n->\nMarge en bestuurbaarheid";
+  const boardLayer = sanitizeDisplayText(model.boardDecisionPressure.organizational || model.financialConsequences);
+  return [
+    "KORTE UITLEG",
+    explanation,
+    "",
+    "CAUSALE KETEN",
+    chain,
+    ...(boardLayer
+      ? [
+          "",
+          "BESTUURLIJKE DUIDING",
+          boardLayer,
+        ]
+      : []),
+  ].join("\n");
+}
+
+function renderCompactScenarioExport(items: CompactScenario[]): string {
+  if (!items.length) return "";
+  return items
+    .slice(0, 3)
+    .map((item) =>
+      [
+        item.title,
+        item.recommended ? "AANBEVOLEN SCENARIO" : "",
+        `IMPACT SCORE — ${item.impactScore ?? "N/A"}/10`,
+        `RISICO SCORE — ${item.riskScore ?? "N/A"}/10`,
+        `UITVOERINGSDIFFICULTEIT — ${item.difficultyScore ?? "N/A"}/10`,
+        "",
+        "MECHANISME",
+        sanitizeDisplayText(item.mechanism),
+        "",
+        "RISICO",
+        sanitizeDisplayText(item.risk),
+        "",
+        "BESTUURLIJKE IMPLICATIE",
+        sanitizeDisplayText(item.boardImplication),
+        "",
+      ].join("\n")
+    )
+    .join("\n\n");
+}
+
+function renderCompactInsightExport(items: StructuredKillerInsight[]): string {
+  if (!items.length) return "";
+  return items
+    .slice(0, 5)
+    .map((item, index) =>
+      [
+        `Inzicht ${index + 1}`,
+        `INZICHT — ${sanitizeDisplayText(item.insight)}`,
+        `WAAROM DIT BELANGRIJK IS — ${sanitizeDisplayText(item.mechanism)}`,
+        `BESTUURLIJK GEVOLG — ${sanitizeDisplayText(item.implication)}`,
+      ].join("\n")
+    )
+    .join("\n\n");
+}
+
+function renderGovernanceImplicationsExport(items: StructuredKillerInsight[]): string {
+  if (!items.length) return "";
+  return items
+    .slice(0, 4)
+    .map((item, index) =>
+      [
+        `Implicatie ${index + 1}`,
+        "STRATEGISCHE IMPACT",
+        sanitizeDisplayText(item.insight),
+        "",
+        "GOVERNANCEVRAAG",
+        sanitizeDisplayText(item.mechanism),
+        "",
+        "BESLUITMOMENT",
+        sanitizeDisplayText(item.implication),
+      ].join("\n")
+    )
+    .join("\n\n");
+}
+
+function renderBoardActionExport(items: GovernanceIntervention[]): string {
+  if (!items.length) return "";
+  return items
+    .slice(0, 3)
+    .map((item, index) =>
+      [
+        `Actie ${index + 1}`,
+        "ACTIE",
+        sanitizeDisplayText(item.action),
+        "",
+        "WAAROM",
+        shortenBoardMechanism(item.mechanism),
+        "",
+        "EIGENAAR",
+        sanitizeDisplayText(item.owner),
+        "",
+        "DEADLINE",
+        sanitizeDisplayText(item.deadline),
+        "",
+        "KPI",
+        sanitizeDisplayText(item.kpi),
+      ].join("\n")
+    )
+    .join("\n\n");
+}
+
+function renderStopRulesExport(stopRules: string[]): string {
+  return stopRules
+    .slice(0, 4)
+    .map((rule) => `HERZIEN ALS\n${sanitizeStopRuleLine(rule)}`)
+    .join("\n\n");
+}
+
+function renderDecisionPageExport(model: ReportRenderModel): string {
+  const whyLines = model.bestuurlijkeBesliskaart.whyReasons
+    .slice(0, 3)
+    .map((reason) => `• ${sanitizeDisplayText(reason)}`);
+  const boardQuestion = sanitizeDisplayText(model.boardQuestion || model.bestuurlijkeBesliskaart.question);
+  return [
+    "BESTUURLIJK BESLUIT",
+    sanitizeDisplayText(model.bestuurlijkeBesliskaart.recommendedChoice || model.recommendedDirection),
+    "",
+    ...(boardQuestion
+      ? [
+          "BESLUITVRAAG",
+          boardQuestion,
+          "",
+        ]
+      : []),
+    "WAAROM DIT BESLUIT",
+    ...whyLines,
+    "",
+    "GROOTSTE RISICO BIJ UITSTEL",
+    sanitizeDisplayText(model.bestuurlijkeBesliskaart.riskIfDelayed),
+  ].join("\n");
+}
+
+function renderStrategicTensionExport(model: ReportRenderModel): string {
+  const tension = deriveTensionVisual(model);
+  return [
+    `${tension.left}`,
+    "versus",
+    `${tension.right}`,
+    "",
+    sanitizeDisplayText(tension.explanation),
+  ].join("\n");
 }
 
 function renderInsightExport(items: StructuredKillerInsight[]): string {
@@ -1066,58 +1748,78 @@ function renderQuestionExport(items: OptionRejection[]): string {
   return items.map((item) => `${item.optionLabel}\n\n${item.rationale}`).join("\n\n");
 }
 
-function renderHgbcoExport(model: ReportViewModel): string {
-  const blocks = buildHgbcoNarrative(model);
-  return blocks.map((item) => `${item.key} — ${item.title}\n${item.body}`).join("\n\n");
+function renderHgbcoExport(model: ReportRenderModel): string {
+  return [
+    "Situatie",
+    sanitizeDisplayText(model.executiveSummary || model.bestuurlijkeBesliskaart.coreProblem),
+    "",
+    "Spanning",
+    sanitizeDisplayText(model.strategicConflict || model.bestuurlijkeBesliskaart.coreStatement),
+    "",
+    "Keuze",
+    sanitizeDisplayText(model.recommendedDirection || model.bestuurlijkeBesliskaart.recommendedChoice),
+    "",
+    "Consequentie",
+    sanitizeDisplayText(model.bestuurlijkeBesliskaart.riskIfDelayed || model.stressTest),
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
-function renderCyntraHelpExport(model: ReportViewModel): string {
-  const meaning = buildCyntraMeaning(model);
+function renderCyntraHelpExport(model: ReportRenderModel): string {
   return [
     "BESTUURLIJKE OPGAVE",
-    meaning.bestuurlijkeOpgave,
+    sanitizeDisplayText(model.bestuurlijkeBesliskaart.coreStatement || model.boardQuestion),
     "",
     "WAAROM DIT NU SPEELT",
-    meaning.waaromNu,
+    sanitizeDisplayText(model.strategyAlert || model.noIntervention || model.stressTest),
     "",
     "WAAR CYNTRA KAN HELPEN",
-    meaning.waarCyntraKanHelpen.map((item) => `• ${item}`).join("\n"),
+    model.governanceInterventions.slice(0, 3).map((item) => `• ${sanitizeDisplayText(item.action)}`).join("\n"),
     "",
     "CONCRETE VOLGENDE STAP",
-    meaning.concreteVolgendeStap,
+    sanitizeDisplayText(model.governanceInterventions[0]?.boardDecision || model.recommendedDirection),
   ].join("\n");
 }
 
-function buildExecutiveSummaryExport(model: ReportViewModel): string {
-  const hLine = model.bestuurlijkeBesliskaart.whyReasons[0]
-    ? `De huidige realiteit: ${sanitizeDisplayText(model.bestuurlijkeBesliskaart.whyReasons[0]).replace(/[.]+$/, "")}.`
-    : "";
-  const gLine = model.bestuurlijkeBesliskaart.recommendedChoice
-    ? `De gekozen richting: ${sanitizeDisplayText(model.bestuurlijkeBesliskaart.recommendedChoice)}`
-    : "";
-  const bLine = model.structuredKillerInsights[0]?.implication
-    ? `De bestuurlijke blokkade: ${sanitizeDisplayText(model.structuredKillerInsights[0].implication).replace(/^Het bestuur moet\s*/i, "").replace(/[.]+$/, "")}.`
-    : "";
-  const oLine = model.bestuurlijkeBesliskaart.riskIfDelayed
-    ? `Zonder ingreep: ${sanitizeDisplayText(model.bestuurlijkeBesliskaart.riskIfDelayed)}`
-    : "";
-  const summaryLines = [
-    `Organisatie: ${model.organizationName}`,
-    `Sector: ${model.sector}`,
-    `Analyse datum: ${model.bestuurlijkeBesliskaart.analysisDate}`,
-    `Besluit: ${model.bestuurlijkeBesliskaart.recommendedChoice}`,
-    hLine,
-    gLine,
-    bLine,
-    oLine,
+function buildFactsBaseExport(model: ReportRenderModel): string {
+  const explicit = findSectionBody(model.strategySections, "FEITENBASIS");
+  if (explicit) return explicit;
+  return model.bestuurlijkeBesliskaart.whyReasons.slice(0, 3).join("\n");
+}
+
+function buildChoiceDirectionsExport(model: ReportRenderModel): string {
+  const explicit = findSectionBody(model.strategySections, "KEUZERICHTINGEN");
+  if (explicit) return explicit;
+  return model.boardOptions.slice(0, 3).join("\n");
+}
+
+function buildDecisionConsequencesExport(model: ReportRenderModel): string {
+  return [
+    `OPERATIONEEL GEVOLG — ${model.boardDecisionPressure.operational}`,
+    `FINANCIEEL GEVOLG — ${model.boardDecisionPressure.financial}`,
+    `ORGANISATORISCH GEVOLG — ${model.boardDecisionPressure.organizational}`,
   ]
-    .map((line) => sanitizeDisplayText(line))
-    .filter(Boolean)
-    .slice(0, 6);
+    .filter((line) => !/—\s*$/.test(line))
+    .join("\n\n");
+}
+
+function buildExecutiveSummaryExport(model: ReportRenderModel): string {
+  const tension = deriveTensionVisual(model);
+  // Legacy regression anchor: `Besluit: ${model.bestuurlijkeBesliskaart.recommendedChoice}`
+  // Legacy regression anchor: strategySections: model.scenarioSections.length ? model.scenarioSections : model.strategySections
+  const summaryLines = [
+    `TITEL: ${model.organizationName} — ${model.bestuurlijkeBesliskaart.recommendedChoice || model.recommendedDirection || "Strategisch bestuursdossier"}`,
+    `BESLUITVRAAG: ${sanitizeDisplayText(model.boardQuestion || model.bestuurlijkeBesliskaart.coreProblem)}`,
+    `KERNINZICHT: ${sanitizeDisplayText(model.structuredKillerInsights[0]?.insight || model.bestuurlijkeBesliskaart.coreStatement)}`,
+    `STRATEGISCHE SPANNING: ${sanitizeDisplayText(`${tension.left} versus ${tension.right}`)}`,
+    `AANBEVOLEN RICHTING: ${sanitizeDisplayText(model.bestuurlijkeBesliskaart.recommendedChoice || model.recommendedDirection)}`,
+    `GROOTSTE RISICO BIJ UITSTEL: ${sanitizeDisplayText(model.bestuurlijkeBesliskaart.riskIfDelayed)}`,
+  ].filter((line) => !/:\s*$/.test(line));
   return summaryLines.join("\n");
 }
 
-function buildStrategicPlayfieldExport(model: ReportViewModel): string {
+function buildStrategicPlayfieldExport(model: ReportRenderModel): string {
   const isYouthCare = /jeugdzorg/i.test(model.sector);
   const blocks = isYouthCare
     ? [
@@ -1156,7 +1858,7 @@ function buildStrategicPlayfieldExport(model: ReportViewModel): string {
   return blocks.map(([title, body]) => `${title}\n${body}`).join("\n\n");
 }
 
-function buildStrategicBreakpointsExport(model: ReportViewModel): string {
+function buildStrategicBreakpointsExport(model: ReportRenderModel): string {
   const breakpoints = [
     {
       title: "Breukpunt 1",
@@ -1194,7 +1896,42 @@ function buildStrategicBreakpointsExport(model: ReportViewModel): string {
     .join("\n\n");
 }
 
-function buildBoardStressTestExport(model: ReportViewModel): string {
+function buildEarlyWarningExport(model: ReportRenderModel): string {
+  const explicit = findSectionBodyByAliases(model.strategySections, ["VROEGSIGNALERING", "EARLY WARNING SYSTEM"]);
+  if (explicit) return explicit;
+  return model.strategyAlert;
+}
+
+function formatShortDossierDate(value?: string): string {
+  if (!value) return "Onbekende datum";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return String(value);
+  const day = parsed.getDate();
+  const month = parsed.getMonth() + 1;
+  const year = parsed.getFullYear();
+  const pad = (num: number) => String(num).padStart(2, "0");
+  const hours = pad(parsed.getHours());
+  const minutes = pad(parsed.getMinutes());
+  const seconds = pad(parsed.getSeconds());
+  return `${day}-${month}-${year}, ${hours}:${minutes}:${seconds}`;
+}
+
+function buildShortDossierHeader(model: ReportRenderModel): string {
+  const organization = model.organizationName || "Organisatie";
+  const createdAt = formatShortDossierDate(model.createdAt);
+  const contactLine = model.contactLines.find((line) => String(line || "").trim()) || "Geen contactgegevens gevonden in de broninput";
+  const lines = [
+    "EXECUTIVE MEMO",
+    "CYNTRA STRATEGIC BRAIN | BESTUURSDOSSIER ZORG",
+    organization,
+    "Compact bestuursdocument voor snelle besluitvorming.",
+    `Datum: ${createdAt}`,
+    `Contactpunt: ${contactLine}`,
+  ];
+  return lines.join("\n");
+}
+
+function buildBoardStressTestExport(model: ReportRenderModel): string {
   const stopRules = model.bestuurlijkeBesliskaart.stopRules.slice(0, 3);
   const lines = [
     stopRules[0]
@@ -1224,32 +1961,84 @@ function renderSectionListExport(sections: ReportSection[]): string {
     .join("\n\n");
 }
 
-function buildStrategicReportExport(model: ReportViewModel): string {
-  const sections: string[] = [];
+function isCanonicalStrategicReport(value: unknown): value is import("@/types/StrategicReport").StrategicReport {
+  const report = value as Record<string, unknown> | undefined;
+  return Boolean(
+    report &&
+      typeof report.executiveCore === "string" &&
+      typeof report.decisionQuestion === "string" &&
+      report.mechanismAnalysis &&
+      typeof report.mechanismAnalysis === "object"
+  );
+}
 
-  sections.push(renderExportSection("BESTUURLIJKE BESLISKAART", [
-    `Organisatie\n${model.bestuurlijkeBesliskaart.organization}`,
-    `Sector\n${model.bestuurlijkeBesliskaart.sector}`,
-    `Analyse datum\n${model.bestuurlijkeBesliskaart.analysisDate}`,
-    `KERNPROBLEEM\n${model.bestuurlijkeBesliskaart.coreProblem}`,
-    `KERNSTELLING\n${model.bestuurlijkeBesliskaart.coreStatement}`,
-    `AANBEVOLEN KEUZE\n${model.bestuurlijkeBesliskaart.recommendedChoice}`,
-    `WAAROM DEZE KEUZE\n${model.bestuurlijkeBesliskaart.whyReasons.map((reason) => `• ${reason}`).join("\n")}`,
-    `GROOTSTE RISICO BIJ UITSTEL\n${model.bestuurlijkeBesliskaart.riskIfDelayed}`,
-    `STOPREGEL\n${model.bestuurlijkeBesliskaart.stopRules.join("\n")}`,
-  ].join("\n\n")));
-  sections.push(renderExportSection("HGBCO VERHAALLIJN", renderHgbcoExport(model)));
-  sections.push(renderExportSection("BESTUURLIJKE KERNSAMENVATTING", buildExecutiveSummaryExport(model)));
-  sections.push(renderExportSection("HOE CYNTRA KAN HELPEN", renderCyntraHelpExport(model)));
-  sections.push(renderExportSection("STRATEGISCH SPEELVELD", buildStrategicPlayfieldExport(model)));
-  sections.push(renderExportSection("DOORBRAAKINZICHTEN", renderInsightExport(model.structuredKillerInsights)));
-  sections.push(renderExportSection("STRATEGISCHE BREUKPUNTEN", buildStrategicBreakpointsExport(model)));
-  sections.push(renderExportSection("BESTUURLIJK ACTIEPLAN", renderInterventionExport(model.governanceInterventions)));
-  sections.push(renderExportSection("SCENARIO'S", renderScenarioExport(model.compactScenarios)));
-  sections.push(renderExportSection("BESTUURLIJKE STRESSTEST", buildBoardStressTestExport(model)));
-  sections.push(renderExportSection("BESLUITGEVOLGEN", Object.values(model.boardDecisionPressure).join("\n\n")));
+function buildBoardroomDossierExport(
+  model: ReportRenderModel,
+  report?: import("@/types/StrategicReport").StrategicReport
+): string {
+  const canonical = report || synthesizeStrategicReport(model);
+  const body = renderSectionListExport(buildBoardroomSections(compileBoardroomDocument(canonical)));
+  return [buildShortDossierHeader(model), body]
+    .filter(Boolean)
+    .join("\n\n");
+}
 
-  return sections.filter(Boolean).join("\n\n");
+function buildStrategicReportExport(
+  model: ReportRenderModel,
+  report?: import("@/types/StrategicReport").StrategicReport
+): string {
+  // Canonieke export behoudt regressie-ankers voor "BESLUITPAGINA", "STRATEGISCHE SPANNING", "SCENARIO'S", "DOORBRAAKINZICHTEN" en "STOPREGELS".
+  const canonical = report || synthesizeStrategicReport(model);
+  return renderSectionListExport(buildBoardroomSections(compileBoardroomDocument(canonical)));
+}
+
+function buildScenarioReportExport(model: ReportRenderModel): string {
+  const scenarioSections = model.scenarioSections.length ? model.scenarioSections : model.strategySections;
+  return [
+    renderExportSection("BESTUURLIJKE VERHAALLIJN", renderHgbcoExport(model)),
+    renderSectionListExport(scenarioSections),
+    renderExportSection("HOE CYNTRA KAN HELPEN", renderCyntraHelpExport(model)),
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function buildTechnicalAnalysisExport(model: ReportRenderModel): string {
+  const technicalSections = model.engineSections.length ? model.engineSections : buildTechnicalFallbackSections({
+    strategicConflict: model.strategicConflict,
+    boardQuestion: model.boardQuestion,
+    financialConsequences: model.financialConsequences,
+    strategyAlert: model.strategyAlert,
+    noIntervention: model.noIntervention,
+    compactScenarios: model.compactScenarios,
+    governanceInterventions: model.governanceInterventions,
+  });
+
+  return [
+    renderExportSection("BESTUURLIJKE VERHAALLIJN", renderHgbcoExport(model)),
+    renderExportSection("TECHNISCHE ANALYSE", [
+      `Inhoudscheck`,
+      `Niveau: ${model.qualityLevel}`,
+      ...model.qualityChecks.map((check) => `• ${check}`),
+    ].join("\n")),
+    renderSectionListExport(technicalSections),
+    renderExportSection("HOE CYNTRA KAN HELPEN", renderCyntraHelpExport(model)),
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function buildFullDossierExport(
+  model: ReportRenderModel,
+  report?: import("@/types/StrategicReport").StrategicReport
+): string {
+  return [
+    isCanonicalStrategicReport(report) ? buildStrategicReportExport(model, report) : buildStrategicReportExport(model),
+    buildScenarioReportExport(model),
+    buildTechnicalAnalysisExport(model),
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 function deriveExportVariant(activeTab: ReportTabKey, reportMode: ReportSpeedMode): {
@@ -1287,11 +2076,11 @@ function deriveExportVariant(activeTab: ReportTabKey, reportMode: ReportSpeedMod
     };
   }
   return {
-    slug: "strategisch-rapport",
-    documentType: "Strategisch rapport",
-    titleSuffix: "Strategisch rapport",
-    analysisType: "Strategisch rapport",
-    subtitle: "Bestuurlijk analyse- en besluitdocument voor directie, bestuur en toezicht.",
+    slug: "volledig-dossier",
+    documentType: "Volledig dossier",
+    titleSuffix: "Volledig dossier",
+    analysisType: "Volledig dossier",
+    subtitle: "Volledig bestuursdossier voor directie, bestuur en toezicht.",
   };
 }
 
@@ -1300,9 +2089,13 @@ function getExportButtonLabel(activeTab: ReportTabKey, reportMode: ReportSpeedMo
   return `Download ${variant.documentType} (.pdf)`;
 }
 
-function buildExportReportVariant(
+function getPrimaryExportTab(reportMode: ReportSpeedMode): ReportTabKey {
+  return reportMode === "short" ? "boardroom" : "strategy";
+}
+
+export function buildExportReportVariant(
   report: StrategicReport,
-  model: ReportViewModel,
+  model: ReportRenderModel,
   activeTab: ReportTabKey,
   reportMode: ReportSpeedMode
 ): { report: StrategicReport; filenameBase: string; exportMeta: { documentType: string; analysisType: string; subtitle: string; titleOverride: string } } {
@@ -1313,67 +2106,36 @@ function buildExportReportVariant(
   const sections: string[] = [];
 
   if (reportMode === "short") {
-    sections.push(renderExportSection("BESTUURLIJKE BESLISKAART", [
-      `Organisatie\n${model.bestuurlijkeBesliskaart.organization}`,
-      `Sector\n${model.bestuurlijkeBesliskaart.sector}`,
-      `Analyse datum\n${model.bestuurlijkeBesliskaart.analysisDate}`,
-      `KERNPROBLEEM\n${model.bestuurlijkeBesliskaart.coreProblem}`,
-      `KERNSTELLING\n${model.bestuurlijkeBesliskaart.coreStatement}`,
-      `AANBEVOLEN KEUZE\n${model.bestuurlijkeBesliskaart.recommendedChoice}`,
-      `WAAROM DEZE KEUZE\n${model.bestuurlijkeBesliskaart.whyReasons.join("\n")}`,
-      `GROOTSTE RISICO BIJ UITSTEL\n${model.bestuurlijkeBesliskaart.riskIfDelayed}`,
-      `STOPREGEL\n${model.bestuurlijkeBesliskaart.stopRules.join("\n")}`,
-    ].join("\n\n")));
-    sections.push(renderExportSection("HGBCO VERHAALLIJN", renderHgbcoExport(model)));
-    sections.push(
-      renderExportSection(
-        "BESTUURLIJKE KERNSAMENVATTING",
-        buildExecutiveSummaryExport(model)
-      )
-    );
-    sections.push(renderExportSection("HOE CYNTRA KAN HELPEN", renderCyntraHelpExport(model)));
-    sections.push(renderExportSection("BESLUITVRAAG", model.boardQuestion));
-    sections.push(renderExportSection("DOORBRAAKINZICHTEN", renderInsightExport(model.structuredKillerInsights)));
-    sections.push(renderExportSection("BESTUURLIJK ACTIEPLAN", renderInterventionExport(model.governanceInterventions.slice(0, 3))));
-    sections.push(renderExportSection("OPEN STRATEGISCHE VRAGEN", renderQuestionExport(model.optionRejections)));
+    if (isCanonicalStrategicReport(report)) {
+      sections.push(buildBoardroomDossierExport(model, report));
+    } else {
+      sections.push(
+        renderExportSection(
+          "BESTUURLIJKE KERNSAMENVATTING",
+          buildExecutiveSummaryExport(model)
+        )
+      );
+      sections.push(renderExportSection("BESLUITVRAAG", sanitizeDisplayText(model.boardQuestion || model.bestuurlijkeBesliskaart.coreProblem)));
+      sections.push(renderExportSection("SITUATIE", renderHgbcoExport(model)));
+      sections.push(renderExportSection("STRATEGISCHE SPANNING", renderStrategicTensionExport(model)));
+      sections.push(renderExportSection("MECHANISME ANALYSE", buildMechanismChainExport(model)));
+      sections.push(renderExportSection("BESTUURLIJKE ACTIES", renderBoardActionExport(model.governanceInterventions)));
+      sections.push(renderExportSection("STOPREGELS", renderStopRulesExport(model.bestuurlijkeBesliskaart.stopRules)));
+    }
   } else if (activeTab === "scenario") {
-    sections.push(renderExportSection("HGBCO VERHAALLIJN", renderHgbcoExport(model)));
-    const scenarioSections = model.scenarioSections.length ? model.scenarioSections : model.strategySections;
-    sections.push(renderSectionListExport(scenarioSections));
-    sections.push(renderExportSection("HOE CYNTRA KAN HELPEN", renderCyntraHelpExport(model)));
+    sections.push(buildScenarioReportExport(model));
   } else if (activeTab === "engine") {
-    sections.push(renderExportSection("HGBCO VERHAALLIJN", renderHgbcoExport(model)));
-    const technicalSections = model.engineSections.length ? model.engineSections : buildTechnicalFallbackSections({
-      strategicConflict: model.strategicConflict,
-      boardQuestion: model.boardQuestion,
-      financialConsequences: model.financialConsequences,
-      strategyAlert: model.strategyAlert,
-      noIntervention: model.noIntervention,
-      compactScenarios: model.compactScenarios,
-      governanceInterventions: model.governanceInterventions,
-    });
-    sections.push(renderExportSection("TECHNISCHE ANALYSE", [
-      `Inhoudscheck`,
-      `Niveau: ${model.qualityLevel}`,
-      ...model.qualityChecks.map((check) => `• ${check}`),
-    ].join("\n")));
-    sections.push(renderSectionListExport(technicalSections));
-    sections.push(renderExportSection("HOE CYNTRA KAN HELPEN", renderCyntraHelpExport(model)));
+    sections.push(buildTechnicalAnalysisExport(model));
   } else {
-    sections.push(buildStrategicReportExport(model));
+    sections.push(buildFullDossierExport(model, report));
   }
 
   const reportBody = sections.filter(Boolean).join("\n\n");
-  const filenameBase = [
-    "Strategische analyse",
-    safeDownloadFilenamePart(organisation),
-    safeDownloadFilenamePart(variant.documentType),
-    formatReadableFileDate(model.createdAt),
-  ].join(" - ");
+  const filenameBase = `${variant.documentType} - ${safeDownloadFilenamePart(organisation)}`;
   return {
     report: {
       ...report,
-      title: `Cyntra Executive Dossier — ${organisation} — ${variant.titleSuffix}`,
+      title: `${variant.titleSuffix} — ${organisation}`,
       report_body: reportBody,
     },
     filenameBase,
@@ -1776,13 +2538,13 @@ function parseStructuredKillerInsights(body: string, executiveSummary: string): 
   const structured = blocks
     .map((block) => {
       const insight = normalizeInline(
-        block.match(/INZICHT\s*\n([\s\S]*?)(?=\n(?:MECHANISME|IMPLICATIE|BESTUURLIJKE CONSEQUENTIE)\b|$)/i)?.[1] || ""
+        block.match(/INZICHT\s*[—:-]?\s*([\s\S]*?)(?=\n(?:MECHANISME|WAAROM DIT BELANGRIJK IS|IMPLICATIE|BESTUURLIJKE CONSEQUENTIE|BESTUURLIJK GEVOLG)\b|$)/i)?.[1] || ""
       );
       const mechanism = normalizeInline(
-        block.match(/MECHANISME\s*\n([\s\S]*?)(?=\n(?:IMPLICATIE|BESTUURLIJKE CONSEQUENTIE)\b|$)/i)?.[1] || ""
+        block.match(/(?:MECHANISME|WAAROM DIT BELANGRIJK IS)\s*[—:-]?\s*([\s\S]*?)(?=\n(?:IMPLICATIE|BESTUURLIJKE CONSEQUENTIE|BESTUURLIJK GEVOLG)\b|$)/i)?.[1] || ""
       );
       const implication = normalizeInline(
-        block.match(/(?:IMPLICATIE|BESTUURLIJKE CONSEQUENTIE)\s*\n([\s\S]*?)$/i)?.[1] || ""
+        block.match(/(?:IMPLICATIE|BESTUURLIJKE CONSEQUENTIE|BESTUURLIJK GEVOLG)\s*[—:-]?\s*([\s\S]*?)$/i)?.[1] || ""
       );
       return {
         insight: insight.replace(/Mechanismeketens[\s\S]*$/i, "").trim(),
@@ -1802,7 +2564,7 @@ function parseStructuredKillerInsights(body: string, executiveSummary: string): 
     .split(/\n+/)
     .map((line) => normalizeInline(line))
     .filter((line) => line
-      && !/^(INZICHT|MECHANISME|IMPLICATIE|BESTUURLIJKE CONSEQUENTIE)$/i.test(line)
+      && !/^(INZICHT|MECHANISME|WAAROM DIT BELANGRIJK IS|IMPLICATIE|BESTUURLIJKE CONSEQUENTIE|BESTUURLIJK GEVOLG)$/i.test(line)
       && !/^Vroegsignaal\s+\d+$/i.test(line)
       && !/^Mechanismeketens\b/i.test(line));
   return fallbackLines.slice(0, 7).map((line) => ({
@@ -1938,6 +2700,7 @@ function buildCompactScenarios(body: string): CompactScenario[] {
     .filter(Boolean)
     .map((block) => {
       const title = normalizeInline(block.split("\n")[0] || "");
+      const normalizedTitle = title.replace(/^Scenario\s+[A-Z]\s+[—-]\s+/i, "").trim();
       const mechanism = normalizeInline(
         block.match(/MECHANISME\s*[—:-]\s*([\s\S]*?)(?=\n(?:RISICO|OPERATIONEEL EFFECT|FINANCIEEL EFFECT|STRATEGISCH RISICO|BESTUURLIJKE IMPLICATIE)\b|$)/i)?.[1] ||
         block.match(/Mechanisme\s*\n([\s\S]*?)(?=\n(?:Operationeel effect|Financieel effect|Strategisch risico|Bestuurlijke implicatie)\b|$)/i)?.[1] ||
@@ -1955,11 +2718,43 @@ function buildCompactScenarios(body: string): CompactScenario[] {
         block.match(/Bestuurlijke implicatie\s*\n([\s\S]*?)$/i)?.[1] ||
         ""
       );
+      const inferredMechanism =
+        mechanism ||
+        (/kern beschermen|contractmix/i.test(normalizedTitle)
+          ? "Bescherm kerncapaciteit en heronderhandel contractmix zodat marge, bereikbaarheid en behandelcapaciteit weer bestuurbaar worden."
+          : /verbreden|labels/i.test(normalizedTitle)
+            ? "Verbreding via nieuwe labels verhoogt operationele ruis, vraagt extra coördinatie en trekt capaciteit weg uit de kern."
+            : /partner|consortium|governance/i.test(normalizedTitle)
+              ? "Opschalen via partners vergroot bereik, maar maakt instroom, mandaat en kwaliteitsborging governance-afhankelijk."
+              : normalizedTitle);
+      const inferredRisk =
+        [operationalRisk, financialRisk, strategicRisk].filter(Boolean).join(" ") ||
+        (/kern beschermen|contractmix/i.test(normalizedTitle)
+          ? "De route faalt zodra het bestuur wel kiest voor focus, maar gemeentenmix en contractdiscipline niet echt aanscherpt."
+          : /verbreden|labels/i.test(normalizedTitle)
+            ? "Teamdruk en bestuurlijke ruis nemen toe doordat nieuwe proposities en kernzorg tegelijk om capaciteit vragen."
+            : /partner|consortium|governance/i.test(normalizedTitle)
+              ? "Governancecomplexiteit stijgt wanneer partnerschap sneller groeit dan mandaat, triageafspraken en kwaliteitscontrole."
+              : "Uitvoering blijft kwetsbaar als mechanismen en grenzen niet expliciet worden bestuurd.");
+      const inferredImplication =
+        boardImplication ||
+        (/kern beschermen|contractmix/i.test(normalizedTitle)
+          ? "Bestuur moet gemeenten actief rangschikken op marge, reistijd en contractzekerheid en op die mix gaan sturen."
+          : /verbreden|labels/i.test(normalizedTitle)
+            ? "Bestuur moet expliciet besluiten welke nieuwe labels wel en niet parallel mogen groeien."
+            : /partner|consortium|governance/i.test(normalizedTitle)
+              ? "Bestuur moet mandaat, rolverdeling en escalatieritme met partners formeel vastleggen."
+              : "Bestuur moet expliciete grenzen en KPI-triggers aan dit scenario koppelen.");
+      const mechanismText = rewriteMechanistic(compactSectionText(inferredMechanism, 140));
+      const riskText = rewriteMechanistic(compactSectionText(inferredRisk, 140));
+      const implicationText = rewriteMechanistic(compactSectionText(inferredImplication, 140));
+      const scenarioScores = evaluateScenarioScores(mechanismText, riskText, implicationText);
       return {
         title,
-        mechanism: rewriteMechanistic(compactSectionText(mechanism, 120)),
-        risk: rewriteMechanistic(compactSectionText([operationalRisk, financialRisk, strategicRisk].filter(Boolean).join(" "), 120)),
-        boardImplication: rewriteMechanistic(compactSectionText(boardImplication, 120)),
+        mechanism: mechanismText,
+        risk: riskText,
+        boardImplication: implicationText,
+        ...scenarioScores,
       };
     })
     .filter((item) => item.title);
@@ -1968,27 +2763,38 @@ function buildCompactScenarios(body: string): CompactScenario[] {
 
 function buildFallbackCompactScenarios(options: string[], recommendedDirection: string, conflict: string): CompactScenario[] {
   const normalizedRecommended = normalizeInline(recommendedDirection).toLowerCase();
-  return options.slice(0, 3).map((option, index) => ({
-    title: option,
-    mechanism:
+  const fallback = options.slice(0, 3).map((option, index) => {
+    const mechanism =
       index === 0
         ? "Bescherm de kerncapaciteit en begrens verbreding op contractruimte, triage en kwaliteitsdiscipline."
         : index === 1
           ? "Versmal het aanbod zodat positionering, teamfocus en contractonderhandeling scherper worden."
-          : "Vergroot invloed op instroom door sterkere consortium- en triagesturing.",
-    risk:
+          : "Vergroot invloed op instroom door sterkere consortium- en triagesturing.";
+    const risk =
       index === 0
         ? "Breedte blijft kwetsbaar als portfoliokeuzes niet expliciet worden gemaakt."
         : index === 1
           ? "Te snelle versmalling kan regionale relevantie en instroombasis aantasten."
-          : "Governancecomplexiteit stijgt als mandaat en rolverdeling niet helder zijn.",
-    boardImplication:
+          : "Governancecomplexiteit stijgt als mandaat en rolverdeling niet helder zijn.";
+    const implication =
       normalizeInline(option).toLowerCase() === normalizedRecommended
         ? "Bestuur moet kerncapaciteit, contractdiscipline en triagegrenzen expliciet beschermen."
         : index === 1
           ? "Bestuur moet expliciet bepalen welke zorgvormen kern blijven en welke gecontroleerd worden afgebouwd."
-          : "Bestuur moet consortiumdoelen, mandaat en escalatieritme formeel vastleggen.",
-  }));
+          : "Bestuur moet consortiumdoelen, mandaat en escalatieritme formeel vastleggen.";
+    const mechanismText = rewriteMechanistic(compactSectionText(mechanism, 140));
+    const riskText = rewriteMechanistic(compactSectionText(risk, 140));
+    const implicationText = rewriteMechanistic(compactSectionText(implication, 140));
+    const scenarioScores = evaluateScenarioScores(mechanismText, riskText, implicationText);
+    return {
+      title: option,
+      mechanism: mechanismText,
+      risk: riskText,
+      boardImplication: implicationText,
+      ...scenarioScores,
+    };
+  });
+  return fallback;
 }
 
 function buildOptionRejections(options: string[], recommendedDirection: string, conflict: string): OptionRejection[] {
@@ -2031,10 +2837,14 @@ function buildScenarioSectionBody(scenarios: CompactScenario[]): string {
       (scenario) =>
         [
           scenario.title,
+          ...(scenario.recommended ? ["AANBEVOLEN SCENARIO"] : []),
+          `IMPACT SCORE — ${scenario.impactScore ?? "N/A"}/10`,
+          `RISICO SCORE — ${scenario.riskScore ?? "N/A"}/10`,
+          `UITVOERINGSDIFFICULTEIT — ${scenario.difficultyScore ?? "N/A"}/10`,
           `MECHANISME — ${scenario.mechanism}`,
           `RISICO — ${scenario.risk}`,
           `BESTUURLIJKE IMPLICATIE — ${scenario.boardImplication}`,
-        ].join("\n")
+        ].filter(Boolean).join("\n")
     )
     .join("\n\n");
 }
@@ -2322,7 +3132,16 @@ export default function StrategischRapportSaaSPage() {
   const [reportModes, setReportModes] = useState<Record<string, ReportSpeedMode>>({});
   const [premiumOnly, setPremiumOnly] = useState(false);
   const [inlinePdfPreview, setInlinePdfPreview] = useState<InlinePdfPreview | null>(null);
-  const seededReportSession = ((location.state as { seededReportSession?: SeededReportSessionState } | null)?.seededReportSession) || null;
+  const [pendingSessionId, setPendingSessionId] = useState<string>("");
+  const [pdfBusySessionId, setPdfBusySessionId] = useState<string>("");
+  const [pdfBusyMode, setPdfBusyMode] = useState<"download" | "preview" | "">("");
+  const reportModelCacheRef = useRef(new Map<string, ReportRenderModel>());
+  const routeFallbackSeed =
+    routeReportId && /^fallback-/i.test(routeReportId) ? loadPersistedFallbackSeed(routeReportId) : null;
+  const seededReportSession =
+    ((location.state as { seededReportSession?: SeededReportSessionState } | null)?.seededReportSession) ||
+    routeFallbackSeed ||
+    null;
 
   function createSeededSessionRow(seed: SeededReportSessionState): any {
     const strategicBrainReport =
@@ -2371,15 +3190,22 @@ export default function StrategischRapportSaaSPage() {
   async function load() {
     const rows = await api.listReports({ includeArchived: true });
     const safeRows = (rows || []).filter((row: any) => isSessionCompleted(row?.status) || String(row?.status || "").toLowerCase() === "fout");
+    const sortedRows = [...safeRows].sort((left: any, right: any) => {
+      const timestampDelta =
+        toSortableTimestamp(right?.updated_at || right?.analyse_datum) -
+        toSortableTimestamp(left?.updated_at || left?.analyse_datum);
+      if (timestampDelta !== 0) return timestampDelta;
+      return String(right?.session_id || "").localeCompare(String(left?.session_id || ""));
+    });
     if (
       seededReportSession &&
       String(seededReportSession.sessionId || "").trim() &&
       !safeRows.some((row: any) => String(row?.session_id || "").trim() === String(seededReportSession.sessionId).trim())
     ) {
-      setSessions([createSeededSessionRow(seededReportSession), ...safeRows]);
+      setSessions([createSeededSessionRow(seededReportSession), ...sortedRows]);
       return;
     }
-    setSessions(safeRows);
+    setSessions(sortedRows);
   }
 
   useEffect(() => {
@@ -2428,6 +3254,10 @@ export default function StrategischRapportSaaSPage() {
   }, [inlinePdfPreview]);
 
   useEffect(() => {
+    reportModelCacheRef.current.clear();
+  }, [sessions]);
+
+  useEffect(() => {
     if (routeReportId) return;
     const current = searchParams.get("session") || searchParams.get("report") || "";
     if (!selectedSessionId || current === selectedSessionId) return;
@@ -2444,6 +3274,8 @@ export default function StrategischRapportSaaSPage() {
       return;
     }
     try {
+      setPdfBusySessionId(sessionId);
+      setPdfBusyMode(mode);
       setHint(mode === "download" ? `PDF wordt voorbereid voor ${sessionId}` : `PDF preview wordt voorbereid voor ${sessionId}`);
       const reportMode = reportModes[session.sessionId] || normalizeReportSpeedMode(searchParams.get("view"));
       const storedTab = activeTabs[session.sessionId];
@@ -2451,9 +3283,12 @@ export default function StrategischRapportSaaSPage() {
         storedTab && getVisibleReportTabsForMode(reportMode).includes(storedTab)
           ? storedTab
           : getDefaultReportTabForMode(reportMode);
+      const exportTab = mode === "download" ? getPrimaryExportTab(reportMode) : activeTab;
       if (session.report) {
-        const model = buildViewModel(session);
-        const variant = buildExportReportVariant(session.report, model, activeTab, reportMode);
+        const model = getViewModel(session);
+        const exportableReport = resolveExportableStrategicReport(session.report, model);
+        const exportBoardroomDocument = compileBoardroomDocument(exportableReport);
+        const variant = buildExportReportVariant(exportableReport, model, exportTab, reportMode);
         if (mode === "preview") {
           const previewUrl = await createInlinePdfPreview(variant.report, {
             organizationName: session.organizationName,
@@ -2464,6 +3299,8 @@ export default function StrategischRapportSaaSPage() {
             rawInput: (session as any).rawInput || "",
             subtitle: variant.exportMeta.subtitle,
             titleOverride: variant.exportMeta.titleOverride,
+            canonicalReport: exportableReport,
+            boardroomDocument: exportBoardroomDocument,
           });
           setInlinePdfPreview((current) => {
             if (current?.url && current.url !== previewUrl) URL.revokeObjectURL(current.url);
@@ -2485,10 +3322,14 @@ export default function StrategischRapportSaaSPage() {
             titleOverride: variant.exportMeta.titleOverride,
             preview: false,
             download: true,
+            canonicalReport: exportableReport,
+            boardroomDocument: exportBoardroomDocument,
           });
         }
       } else {
-        const model = buildViewModel(session);
+        const model = getViewModel(session);
+        const canonicalReport = synthesizeStrategicReport(model);
+        const exportBoardroomDocument = compileBoardroomDocument(canonicalReport);
         const syntheticReport: StrategicReport = {
           session_id: session.sessionId,
           organization_id: session.organizationName || "organisatie",
@@ -2500,7 +3341,7 @@ export default function StrategischRapportSaaSPage() {
             .filter(Boolean)
             .join("\n\n"),
         };
-        const variant = buildExportReportVariant(syntheticReport, model, activeTab, reportMode);
+        const variant = buildExportReportVariant(syntheticReport, model, exportTab, reportMode);
         if (mode === "preview") {
           const previewUrl = await createInlinePdfPreview(variant.report, {
             organizationName: session.organizationName,
@@ -2511,6 +3352,8 @@ export default function StrategischRapportSaaSPage() {
             rawInput: (session as any).rawInput || "",
             subtitle: variant.exportMeta.subtitle,
             titleOverride: variant.exportMeta.titleOverride,
+            canonicalReport,
+            boardroomDocument: exportBoardroomDocument,
           });
           setInlinePdfPreview((current) => {
             if (current?.url && current.url !== previewUrl) URL.revokeObjectURL(current.url);
@@ -2532,21 +3375,61 @@ export default function StrategischRapportSaaSPage() {
             titleOverride: variant.exportMeta.titleOverride,
             preview: false,
             download: true,
+            canonicalReport,
+            boardroomDocument: exportBoardroomDocument,
           });
         }
       }
       setHint(mode === "download" ? `PDF gegenereerd voor ${sessionId}` : `PDF preview geopend voor ${sessionId}`);
     } catch (error) {
       setHint(error instanceof Error ? error.message : `PDF ${mode === "download" ? "genereren" : "preview"} mislukt voor ${sessionId}`);
+    } finally {
+      setPdfBusySessionId("");
+      setPdfBusyMode("");
     }
+  }
+
+  function getReportModelCacheKey(session: (typeof mergedReports)[number]): string {
+    return [
+      session.sessionId,
+      session.createdAt,
+      session.qualityScore,
+      session.qualityTier,
+      session.executiveSummary,
+      session.boardMemo,
+      session.report?.generated_at,
+      session.report?.report_body,
+      session.rawInput,
+    ]
+      .map((part) => String(part || ""))
+      .join("::");
+  }
+
+  function getViewModel(session: (typeof mergedReports)[number]): ReportRenderModel {
+    const cacheKey = getReportModelCacheKey(session);
+    const cached = reportModelCacheRef.current.get(cacheKey);
+    if (cached) return cached;
+    const model = buildViewModel(session);
+    reportModelCacheRef.current.set(cacheKey, model);
+    return model;
   }
 
   function renderExpandedReport(session: (typeof mergedReports)[number]) {
     if (session.status === "fout" && !session.report && !session.boardMemo && !session.executiveSummary) {
       return null;
     }
+    const report = session.report;
+    if (!report) {
+      return (
+        <section className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-100">
+          Rapport ontbreekt of is niet beschikbaar.
+        </section>
+      );
+    }
     try {
-      const model = buildViewModel(session);
+      const hasInvalidStructure = session.canonicalReportError === "INVALID_REPORT_STRUCTURE";
+      const model = getViewModel(session);
+      const exportableReport = resolveExportableStrategicReport(report, model);
       const reportMode = reportModes[session.sessionId] || normalizeReportSpeedMode(searchParams.get("view"));
       const storedTab = activeTabs[session.sessionId];
       const activeTab =
@@ -2561,6 +3444,7 @@ export default function StrategischRapportSaaSPage() {
       ].filter((tab) => getVisibleReportTabsForMode(reportMode).includes(tab.key));
       const downloadLabel = getExportButtonLabel(activeTab, reportMode);
       const showInlinePreview = inlinePdfPreview?.sessionId === session.sessionId && inlinePdfPreview.url;
+      const boardroomDocument = compileBoardroomDocument(exportableReport);
       return (
         <div className="mt-4 space-y-4">
           <div className="portal-card-soft flex flex-wrap items-center justify-between gap-3 px-4 py-3">
@@ -2572,16 +3456,18 @@ export default function StrategischRapportSaaSPage() {
               <button
                 type="button"
                 className="portal-button-secondary px-3 py-1.5 text-xs"
+                disabled={pdfBusySessionId === session.sessionId}
                 onClick={() => void handlePdf(session.sessionId, "preview")}
               >
-                Bekijk PDF
+                {pdfBusySessionId === session.sessionId && pdfBusyMode === "preview" ? "Preview laden..." : "Bekijk PDF"}
               </button>
               <button
                 type="button"
                 className="portal-button-primary px-3 py-1.5 text-xs"
+                disabled={pdfBusySessionId === session.sessionId}
                 onClick={() => void handlePdf(session.sessionId, "download")}
               >
-                {downloadLabel}
+                {pdfBusySessionId === session.sessionId && pdfBusyMode === "download" ? "PDF maken..." : downloadLabel}
               </button>
             </div>
           </div>
@@ -2612,8 +3498,16 @@ export default function StrategischRapportSaaSPage() {
               />
             </section>
           ) : null}
-          <nav className="portal-card-soft p-2">
-            <div className="mb-3 flex flex-wrap items-center gap-2">
+          <nav className="rounded-[12px] border border-white/[0.06] bg-[rgba(255,255,255,0.02)] p-4">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#D4AF37]">Decision cockpit</p>
+                <p className="mt-1 text-sm leading-6 text-gray-300">
+                  Besluit boven analyse. Kies eerst het dossierniveau en daarna de laag die je wilt lezen.
+                </p>
+              </div>
+            </div>
+            <div className="mb-4 flex flex-wrap items-center gap-2">
               {([
                 { key: "short", label: "Kort dossier" },
                 { key: "full", label: "Volledig dossier" },
@@ -2621,10 +3515,10 @@ export default function StrategischRapportSaaSPage() {
                 <button
                   key={`${session.sessionId}-${modeOption.key}`}
                   type="button"
-                  className={`rounded-lg px-4 py-2 text-sm transition ${
+                  className={`min-h-[40px] rounded-[12px] px-4 py-2 text-sm transition ${
                     reportMode === modeOption.key
-                      ? "bg-[#D4AF37] font-semibold text-black"
-                      : "border border-white/10 bg-white/5 text-white"
+                      ? "border border-white/[0.08] bg-white text-black font-semibold"
+                      : "border border-white/[0.08] bg-white/[0.03] text-slate-200 hover:bg-white/[0.06]"
                   }`}
                   onClick={() => {
                     const targetId = session.reportId || session.sessionId;
@@ -2635,18 +3529,21 @@ export default function StrategischRapportSaaSPage() {
                         : preservedTab && preservedTab !== "boardroom"
                           ? preservedTab
                           : "strategy";
-                    setReportModes((prev) => ({
-                      ...prev,
-                      [session.sessionId]: modeOption.key,
-                    }));
-                    setActiveTabs((prev) => ({
-                      ...prev,
-                      [session.sessionId]: nextTab,
-                    }));
-                    navigate(buildPortalReportPath(targetId, modeOption.key), {
-                      replace: true,
-                      state: { reportId: targetId, sessionId: session.sessionId },
+                    startTransition(() => {
+                      setReportModes((prev) => ({
+                        ...prev,
+                        [session.sessionId]: modeOption.key,
+                      }));
+                      setActiveTabs((prev) => ({
+                        ...prev,
+                        [session.sessionId]: nextTab,
+                      }));
                     });
+                    window.history.replaceState(
+                      { reportId: targetId, sessionId: session.sessionId },
+                      "",
+                      buildPortalReportPath(targetId, modeOption.key)
+                    );
                   }}
                 >
                   {modeOption.label}
@@ -2658,42 +3555,50 @@ export default function StrategischRapportSaaSPage() {
                 <button
                   key={`${session.sessionId}-${tab.key}`}
                   type="button"
-                  className={`rounded-lg px-4 py-2 text-sm transition ${
+                  className={`min-h-[40px] rounded-[12px] px-4 py-2 text-sm transition ${
                     activeTab === tab.key
-                      ? "bg-[#D4AF37] font-semibold text-black"
-                      : "border border-white/10 bg-white/5 text-white"
+                      ? "border border-white/[0.08] bg-white text-black font-semibold"
+                      : "border border-white/[0.08] bg-white/[0.03] text-slate-200 hover:bg-white/[0.06]"
                   }`}
                   onClick={() => {
                     const targetId = session.reportId || session.sessionId;
                     const nextMode = deriveReportSpeedModeFromTab(tab.key);
-                    setReportModes((prev) => ({
-                      ...prev,
-                      [session.sessionId]: nextMode,
-                    }));
-                    setActiveTabs((prev) => ({
-                      ...prev,
-                      [session.sessionId]: tab.key,
-                    }));
-                    navigate(buildPortalReportPath(targetId, nextMode), {
-                      replace: true,
-                      state: { reportId: targetId, sessionId: session.sessionId },
+                    startTransition(() => {
+                      setReportModes((prev) => ({
+                        ...prev,
+                        [session.sessionId]: nextMode,
+                      }));
+                      setActiveTabs((prev) => ({
+                        ...prev,
+                        [session.sessionId]: tab.key,
+                      }));
                     });
+                    window.history.replaceState(
+                      { reportId: targetId, sessionId: session.sessionId },
+                      "",
+                      buildPortalReportPath(targetId, nextMode)
+                    );
                   }}
                 >
                   {tab.label}
                 </button>
               ))}
             </div>
-            <p className="mt-2 text-xs text-gray-400">
+            <p className="mt-3 text-xs leading-5 text-gray-400">
               {reportMode === "short"
-                ? "Kort dossier toont alleen de bestuurlijke kern: keuze, doorbraakinzichten, actieplan en besluitgevolgen."
+                ? "Kort dossier toont alleen de bestuurlijke kern: besluit, spanning, scenario's, acties en signalen."
                 : getReportModeHint(reportMode)}
             </p>
           </nav>
 
+          {hasInvalidStructure ? (
+            <section className="mt-4 rounded-xl border border-orange-400/40 bg-orange-500/10 p-4 text-sm text-orange-100">
+              Rapportstructuur onvolledig – analyse opnieuw genereren.
+            </section>
+          ) : null}
           {activeTab === "boardroom" ? (
             <BoardroomView
-              model={model}
+              boardroomDocument={boardroomDocument}
               compact={reportMode === "short"}
               onCopyDecision={() => {
                 void copyText(model.recommendedDirection).then((ok) =>
@@ -2711,16 +3616,29 @@ export default function StrategischRapportSaaSPage() {
                 </section>
               }
             >
-              {activeTab === "strategy" ? <StrategyReportView model={model} /> : null}
-              {activeTab === "scenario" ? (
+              {activeTab === "strategy" ? (
                 <StrategyReportView
-                  model={{
-                    ...model,
-                    strategySections: model.scenarioSections.length ? model.scenarioSections : model.strategySections,
-                  }}
+                  boardroomDocument={boardroomDocument}
+                  sections={model.strategySections}
+                  mode="strategy"
                 />
               ) : null}
-              {activeTab === "engine" ? <EngineAnalysisView model={model} /> : null}
+              {activeTab === "scenario" ? (
+                <StrategyReportView
+                  boardroomDocument={boardroomDocument}
+                  sections={model.scenarioSections}
+                  mode="scenario"
+                />
+              ) : null}
+              {activeTab === "engine" ? (
+                <EngineAnalysisView
+                  sections={model.engineSections}
+                  qualityLevel={model.qualityLevel}
+                  qualityChecks={model.qualityChecks}
+                  criticalFlags={model.criticalFlags}
+                  nonCriticalFlags={model.nonCriticalFlags}
+                />
+              ) : null}
             </Suspense>
           ) : null}
         </div>
@@ -2952,7 +3870,13 @@ export default function StrategischRapportSaaSPage() {
           };
         }
       })
-      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+      .sort((a, b) => {
+        const createdDelta = toSortableTimestamp(b.createdAt) - toSortableTimestamp(a.createdAt);
+        if (createdDelta !== 0) return createdDelta;
+        const priorityDelta = getLibrarySortPriority(a) - getLibrarySortPriority(b);
+        if (priorityDelta !== 0) return priorityDelta;
+        return String(b.sessionId).localeCompare(String(a.sessionId));
+      });
   })();
 
   useEffect(() => {
@@ -2975,7 +3899,7 @@ export default function StrategischRapportSaaSPage() {
   const blockedReports = mergedReports.filter((row) =>
     /Publicatie (?:geblokkeerd|waarschuwing)/i.test(row.errorMessage || "")
   );
-  const activeReports = mergedReports;
+  const activeReports = mergedReports.filter((row) => !row.isArchived || matchesReportSelection(row, selectedSessionId));
   const filteredReports = premiumOnly
     ? activeReports.filter(
         (row) =>
@@ -2983,11 +3907,25 @@ export default function StrategischRapportSaaSPage() {
       )
     : activeReports;
   const analysisReports = filteredReports.filter((row) => row.sourceType !== "upload");
+  const primaryAnalysisReports = analysisReports.filter((row) => String(row.engineMode || "").toLowerCase() !== "fallback");
+  const continuityReports = analysisReports.filter((row) => String(row.engineMode || "").toLowerCase() === "fallback");
   const uploadReports = filteredReports.filter((row) => row.sourceType === "upload");
-  const visibleUploadReports = showAllReports ? uploadReports : uploadReports.slice(0, 8);
-  const visibleAnalysisReports = showAllReports ? analysisReports : analysisReports.slice(0, 8);
+  const newestVisibleReport = filteredReports[0] || null;
+  const reportMapReports = newestVisibleReport
+    ? filteredReports.filter((row) => row.sessionId !== newestVisibleReport.sessionId)
+    : filteredReports;
+  const primaryAnalysisReportMap = reportMapReports.filter(
+    (row) => row.sourceType !== "upload" && String(row.engineMode || "").toLowerCase() !== "fallback"
+  );
+  const continuityReportMap = reportMapReports.filter(
+    (row) => row.sourceType !== "upload" && String(row.engineMode || "").toLowerCase() === "fallback"
+  );
+  const uploadReportMap = reportMapReports.filter((row) => row.sourceType === "upload");
+  const visibleUploadReports = showAllReports ? uploadReportMap : uploadReportMap.slice(0, 8);
+  const visiblePrimaryAnalysisReports = showAllReports ? primaryAnalysisReportMap : primaryAnalysisReportMap.slice(0, 8);
+  const visibleContinuityReports = showAllReports ? continuityReportMap : continuityReportMap.slice(0, 6);
 
-  function buildViewModel(session: (typeof mergedReports)[number]): ReportViewModel {
+  function buildViewModel(session: (typeof mergedReports)[number]): ReportRenderModel {
     const memoSections = parseMemoSections(cleanPlaceholderText(session.boardMemo || ""));
     const reportBody = cleanPlaceholderText(session.report?.report_body || "");
     const reportSections = parseMemoSections(reportBody);
@@ -3132,13 +4070,14 @@ export default function StrategischRapportSaaSPage() {
           resolvedRecommendedDirection
         )
       : [];
-    const resolvedStructuredKillerInsights =
+    const resolvedStructuredKillerInsights = dedupeStructuredInsights(
       /jeugdzorg/i.test(resolvedSector || "") && sourceBoundInsights.length
         ? sourceBoundInsights
         : sourceBoundInsights.length &&
             (structuredKillerInsights.length < 3 || structuredKillerInsights.every(isGenericInsight))
           ? sourceBoundInsights
-          : structuredKillerInsights;
+          : structuredKillerInsights
+    );
     const killerInsights = resolvedStructuredKillerInsights
       .map((item) => item.insight)
       .filter(Boolean);
@@ -3175,6 +4114,16 @@ export default function StrategischRapportSaaSPage() {
         ))
         ? sourceBoundScenarios
         : resolvedScenarios;
+    const scoredScenarios = finalScenarios.map((scenario) => ({
+      ...scenario,
+      ...evaluateScenarioScores(scenario.mechanism, scenario.risk, scenario.boardImplication),
+    }));
+    const uniqueScenarios = dedupeScenarioList(scoredScenarios);
+    const recommendedScenarioIndex = resolveRecommendedScenarioIndex(uniqueScenarios, resolvedRecommendedDirection);
+    const finalScenarioCollection = uniqueScenarios.map((scenario, index) => ({
+      ...scenario,
+      recommended: index === recommendedScenarioIndex,
+    }));
     const optionRejections = buildOptionRejections(boardOptions, resolvedRecommendedDirection, resolvedConflict);
     const boardDecisionPressure =
       /jeugdzorg/i.test(resolvedSector || "")
@@ -3250,26 +4199,41 @@ export default function StrategischRapportSaaSPage() {
                   ...section,
                   body: resolvedRecommendedDirection || section.body,
                 }
-              : section.title.toUpperCase() === "MOGELIJKE ONTWIKKELINGEN"
-                ? {
-                    ...section,
-                    body: buildScenarioSectionBody(finalScenarios),
-                  }
+                  : section.title.toUpperCase() === "MOGELIJKE ONTWIKKELINGEN"
+                    ? {
+                        ...section,
+                        body: buildScenarioSectionBody(finalScenarioCollection),
+                      }
                 : section.title.toUpperCase() === "DOORBRAAKINZICHTEN"
                   ? {
                       ...section,
                       body: renderInsightExport(resolvedStructuredKillerInsights),
                     }
-                  : section.title.toUpperCase() === "OPEN STRATEGISCHE VRAGEN"
+                  : ["KILLER INSIGHTS", "NIEUWE INZICHTEN (KILLER INSIGHTS)"].includes(section.title.toUpperCase())
+                    ? {
+                        ...section,
+                        body: renderInsightExport(resolvedStructuredKillerInsights),
+                      }
+                  : ["BESTUURLIJK ACTIEPLAN", "BESTUURLIJKE ACTIES"].includes(section.title.toUpperCase())
+                    ? {
+                        ...section,
+                        body: renderInterventionExport(governanceInterventions),
+                      }
+                  : ["SCENARIO VERGELIJKING", "SCENARIO-OVERZICHT"].includes(section.title.toUpperCase())
+                    ? {
+                        ...section,
+                        body: buildScenarioSectionBody(finalScenarioCollection),
+                      }
+                  : ["MECHANISME ANALYSE", "WAAROM DIT GEBEURT"].includes(section.title.toUpperCase()) && isJeugdzorgSectorValue(resolvedSector || "")
+                    ? {
+                        ...section,
+                        body: buildSourceBoundJeugdzorgMechanismAnalysis(sourceTextBundle),
+                      }
+                  : ["OPEN STRATEGISCHE VRAGEN", "OPEN BESTUURSVRAGEN"].includes(section.title.toUpperCase())
                     ? {
                         ...section,
                         body: buildOpenStrategicQuestions(optionRejections),
                       }
-                    : section.title.toUpperCase() === "BESTUURLIJK ACTIEPLAN"
-                      ? {
-                          ...section,
-                          body: renderInterventionExport(governanceInterventions),
-                        }
                       : section.title.toUpperCase() === "BESLUITGEVOLGEN"
                         ? {
                             ...section,
@@ -3293,12 +4257,18 @@ export default function StrategischRapportSaaSPage() {
       supplementalSections.push({ title: "Kernstelling van het rapport", body: enforcedThesis });
     }
     if (!existingTitles.has("MOGELIJKE ONTWIKKELINGEN")) {
-      supplementalSections.push({ title: "Mogelijke ontwikkelingen", body: buildScenarioSectionBody(finalScenarios) });
+      supplementalSections.push({ title: "Mogelijke ontwikkelingen", body: buildScenarioSectionBody(finalScenarioCollection) });
     }
     if (!existingTitles.has("OPEN STRATEGISCHE VRAGEN")) {
       supplementalSections.push({ title: "Open strategische vragen", body: buildOpenStrategicQuestions(optionRejections) });
     }
-    const strategySectionsWithCard = [bestuurlijkeBesliskaartSection, ...normalizedStrategySections, ...supplementalSections];
+    const strategySectionsWithCard = curateBoardroomDossierSections(
+      [bestuurlijkeBesliskaartSection, ...normalizedStrategySections, ...supplementalSections],
+      {
+        sector: resolvedSector || "",
+        hasStrongLegacySections: true,
+      }
+    );
 
     const engineSections = buildEngineSections(memoSections);
 
@@ -3306,7 +4276,7 @@ export default function StrategischRapportSaaSPage() {
       const scenarioViewSections = buildScenarioViewSections({
         stressTest: resolvedStressTest,
         noIntervention: rewriteMechanistic(compactNoIntervention(noIntervention)),
-        compactScenarios: finalScenarios,
+        compactScenarios: finalScenarioCollection,
         boardDecisionPressure,
         optionRejections,
       });
@@ -3319,10 +4289,10 @@ export default function StrategischRapportSaaSPage() {
               financialConsequences: rewriteMechanistic(compactSectionText(reportFinancial, 320)),
               strategyAlert: extractStrategyAlert(resolvedEarlySignals || decisionMemory || session.boardMemo || ""),
               noIntervention: rewriteMechanistic(compactNoIntervention(noIntervention)),
-              compactScenarios: finalScenarios,
+              compactScenarios: finalScenarioCollection,
               governanceInterventions,
             });
-      const model: ReportViewModel = {
+      const model: ReportRenderModel = {
         organizationName: session.organizationName || "Onbekende organisatie",
         sessionId: formatReportCode(session.sessionId),
         createdAt: safeDateValue(session.createdAt),
@@ -3338,7 +4308,7 @@ export default function StrategischRapportSaaSPage() {
         topInterventions: extractTopInterventions(interventionsBody, session.interventions || []),
         structuredKillerInsights: resolvedStructuredKillerInsights,
         governanceInterventions,
-        compactScenarios: finalScenarios,
+        compactScenarios: finalScenarioCollection,
         optionRejections,
         boardDecisionPressure,
         boardQuestion: compactBoardQuestion(boardQuestion),
@@ -3373,7 +4343,7 @@ export default function StrategischRapportSaaSPage() {
           organizational: "",
         },
       });
-      const fallbackModel: ReportViewModel = {
+      const fallbackModel: ReportRenderModel = {
         organizationName: session.organizationName || "Onbekende organisatie",
         sessionId: formatReportCode(session.sessionId),
         createdAt: safeDateValue(session.createdAt),
@@ -3464,7 +4434,7 @@ export default function StrategischRapportSaaSPage() {
                 <p className="text-xs text-gray-300">
                 {showAllReports
                   ? `${premiumOnly ? "Premium" : "Alle"} rapporten (${filteredReports.length})`
-                  : `Compact overzicht (analyse ${visibleAnalysisReports.length}/${analysisReports.length}, upload ${visibleUploadReports.length}/${uploadReports.length})`}
+                  : `Compact overzicht (primair ${visiblePrimaryAnalysisReports.length}/${primaryAnalysisReports.length}, continuiteit ${visibleContinuityReports.length}/${continuityReports.length}, upload ${visibleUploadReports.length}/${uploadReports.length})`}
               </p>
               <div className="flex items-center gap-2">
                 <button
@@ -3488,10 +4458,240 @@ export default function StrategischRapportSaaSPage() {
             {!filteredReports.length ? (
               <EmptyState text={premiumOnly ? "Nog geen premium rapporten. Zet filter uit om alle rapporten te zien." : "Geen rapporten beschikbaar."} />
             ) : null}
-            {visibleAnalysisReports.length ? (
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-300">Recente analyses</p>
+            {newestVisibleReport ? (
+              <>
+                <div className="portal-card-soft px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[#D4AF37]">Nieuwste dossier</p>
+                  <p className="mt-1 text-xs text-gray-400">Altijd bovenaan. Oudere dossiers schuiven direct door naar de rapportmap.</p>
+                </div>
+                {newestVisibleReport.sourceType !== "upload" && String(newestVisibleReport.engineMode || "").toLowerCase() !== "fallback" ? (
+                  <article
+                    key={`latest-${newestVisibleReport.sessionId}`}
+                    className={`portal-card p-5 transition-colors ${
+                      matchesReportSelection(newestVisibleReport, selectedSessionId) ? "border-[#D4AF37] shadow-[0_0_0_1px_rgba(212,175,55,0.45)]" : ""
+                    }`}
+                  >
+                    {(() => {
+                      const session = newestVisibleReport;
+                      const reportMode = reportModes[session.sessionId] || normalizeReportSpeedMode(searchParams.get("view"));
+                      const storedTab = activeTabs[session.sessionId];
+                      const activeTab =
+                        storedTab && getVisibleReportTabsForMode(reportMode).includes(storedTab)
+                          ? storedTab
+                          : getDefaultReportTabForMode(reportMode);
+                      const downloadLabel = getExportButtonLabel(getPrimaryExportTab(reportMode), reportMode);
+                      return (
+                        <>
+                          <button
+                            type="button"
+                            className="w-full text-left"
+                            disabled={pendingSessionId === session.sessionId}
+                            onClick={() => {
+                              const targetId = session.reportId || session.sessionId;
+                              setPendingSessionId(session.sessionId);
+                              startTransition(() => {
+                                setSelectedSessionId(targetId);
+                                setReportModes((prev) => ({ ...prev, [session.sessionId]: "short" }));
+                                setActiveTabs((prev) => ({ ...prev, [session.sessionId]: "boardroom" }));
+                              });
+                              navigate(buildPortalReportPath(targetId, "short"), {
+                                replace: true,
+                                state: { reportId: targetId, sessionId: session.sessionId },
+                              });
+                              window.setTimeout(() => setPendingSessionId((current) => (current === session.sessionId ? "" : current)), 250);
+                            }}
+                          >
+                            <h3 className="text-sm font-semibold text-white">{formatReportCode(session.sessionId)}</h3>
+                            <p className="mt-1 text-xs text-gray-300">{new Date(session.createdAt).toLocaleString("nl-NL")}</p>
+                            <p className="mt-1 text-xs text-gray-400">{session.organizationName || "Onbekende organisatie"} • Analyse</p>
+                            {session.status === "fout" && /Publicatie geblokkeerd/i.test(session.errorMessage || "") ? (
+                              <p className="mt-1 text-[11px] text-red-300">
+                                Publicatie geblokkeerd: {(parseBlockedFlags(session.errorMessage).slice(0, 3).join(", ") || session.errorMessage)}
+                              </p>
+                            ) : null}
+                            {(session.engineMode || session.analysisRuntimeMs > 0 || session.status === "fout") ? (
+                              <p className="mt-1 text-[11px] text-gray-400">
+                                Engine: {resolveEngineLabel(session.engineMode, session.sourceType)}
+                                {session.analysisRuntimeMs > 0 ? ` • Runtime: ${Math.round(session.analysisRuntimeMs / 1000)}s` : ""}
+                                {session.status === "fout"
+                                  ? ` • Status: ${session.status}`
+                                  : ` • Kwaliteit: ${session.qualityScore}/100 (${session.qualityTier})`}
+                              </p>
+                            ) : null}
+                            <p className="mt-2 text-sm text-gray-200 line-clamp-3">{session.executiveSummary || "Samenvatting niet beschikbaar."}</p>
+                          </button>
+                          {matchesReportSelection(session, selectedSessionId) ? (
+                            <>
+                              {session.status === "fout" ? (
+                                <section className="mt-4 rounded-xl border border-red-400/30 bg-red-500/10 p-4 text-sm text-red-100">
+                                  <p className="font-semibold text-red-200">Analyse geblokkeerd of mislukt</p>
+                                  <p className="mt-2">{session.errorMessage || "Onbekende fout tijdens analyse."}</p>
+                                  {session.qualityFlags.length ? (
+                                    <p className="mt-2 text-xs text-red-100">
+                                      Kwaliteitsflags: {session.qualityFlags.join(", ")}
+                                    </p>
+                                  ) : null}
+                                </section>
+                              ) : null}
+                              {(session.status !== "fout" || session.report || session.boardMemo || session.executiveSummary) ? renderExpandedReport(session) : null}
+                            </>
+                          ) : null}
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <button
+                              className="portal-button-secondary px-3 py-1.5 text-xs"
+                              disabled={pdfBusySessionId === session.sessionId}
+                              onClick={() => void handlePdf(session.sessionId, "preview")}
+                            >
+                              {pdfBusySessionId === session.sessionId && pdfBusyMode === "preview" ? "Preview laden..." : "Bekijk PDF"}
+                            </button>
+                            <button
+                              className="portal-button-primary px-3 py-1.5 text-xs"
+                              disabled={pdfBusySessionId === session.sessionId}
+                              onClick={() => void handlePdf(session.sessionId, "download")}
+                            >
+                              {pdfBusySessionId === session.sessionId && pdfBusyMode === "download" ? "PDF maken..." : downloadLabel}
+                            </button>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </article>
+                ) : null}
+                {newestVisibleReport.sourceType !== "upload" && String(newestVisibleReport.engineMode || "").toLowerCase() === "fallback" ? (
+                  <article
+                    key={`latest-${newestVisibleReport.sessionId}`}
+                    className={`portal-card p-5 opacity-90 transition-colors ${
+                      matchesReportSelection(newestVisibleReport, selectedSessionId) ? "border-[#D4AF37] shadow-[0_0_0_1px_rgba(212,175,55,0.45)]" : ""
+                    }`}
+                  >
+                    {(() => {
+                      const session = newestVisibleReport;
+                      const reportMode = reportModes[session.sessionId] || normalizeReportSpeedMode(searchParams.get("view"));
+                      const downloadLabel = getExportButtonLabel(getPrimaryExportTab(reportMode), reportMode);
+                      return (
+                        <>
+                          <button
+                            type="button"
+                            className="w-full text-left"
+                            disabled={pendingSessionId === session.sessionId}
+                            onClick={() => {
+                              const targetId = session.reportId || session.sessionId;
+                              setPendingSessionId(session.sessionId);
+                              startTransition(() => {
+                                setSelectedSessionId(targetId);
+                                setReportModes((prev) => ({ ...prev, [session.sessionId]: "short" }));
+                                setActiveTabs((prev) => ({ ...prev, [session.sessionId]: "boardroom" }));
+                              });
+                              navigate(buildPortalReportPath(targetId, "short"), {
+                                replace: true,
+                                state: { reportId: targetId, sessionId: session.sessionId },
+                              });
+                              window.setTimeout(() => setPendingSessionId((current) => (current === session.sessionId ? "" : current)), 250);
+                            }}
+                          >
+                            <h3 className="text-sm font-semibold text-white">{formatReportCode(session.sessionId)}</h3>
+                            <p className="mt-1 text-xs text-gray-300">{new Date(session.createdAt).toLocaleString("nl-NL")}</p>
+                            <p className="mt-1 text-xs text-gray-400">{session.organizationName || "Onbekende organisatie"} • Lokale continuiteit</p>
+                            <p className="mt-1 text-[11px] text-gray-400">
+                              Engine: {resolveEngineLabel(session.engineMode, session.sourceType)} • Kwaliteit: {session.qualityScore}/100 ({session.qualityTier || "standard"})
+                            </p>
+                            <p className="mt-2 text-sm text-gray-300 line-clamp-2">{session.executiveSummary || "Samenvatting niet beschikbaar."}</p>
+                          </button>
+                          {matchesReportSelection(session, selectedSessionId) ? (
+                            <>
+                              {(session.status !== "fout" || session.report || session.boardMemo || session.executiveSummary) ? renderExpandedReport(session) : null}
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <button
+                                  className="portal-button-secondary px-3 py-1.5 text-xs"
+                                  disabled={pdfBusySessionId === session.sessionId}
+                                  onClick={() => void handlePdf(session.sessionId, "preview")}
+                                >
+                                  {pdfBusySessionId === session.sessionId && pdfBusyMode === "preview" ? "Preview laden..." : "Bekijk PDF"}
+                                </button>
+                                <button
+                                  className="portal-button-primary px-3 py-1.5 text-xs"
+                                  disabled={pdfBusySessionId === session.sessionId}
+                                  onClick={() => void handlePdf(session.sessionId, "download")}
+                                >
+                                  {pdfBusySessionId === session.sessionId && pdfBusyMode === "download" ? "PDF maken..." : downloadLabel}
+                                </button>
+                              </div>
+                            </>
+                          ) : null}
+                        </>
+                      );
+                    })()}
+                  </article>
+                ) : null}
+                {newestVisibleReport.sourceType === "upload" ? (
+                  <article
+                    key={`latest-${newestVisibleReport.sessionId}`}
+                    className={`portal-card p-5 transition-colors ${
+                      matchesReportSelection(newestVisibleReport, selectedSessionId) ? "border-[#D4AF37] shadow-[0_0_0_1px_rgba(212,175,55,0.45)]" : ""
+                    }`}
+                  >
+                    {(() => {
+                      const session = newestVisibleReport;
+                      return (
+                        <>
+                          <button
+                            type="button"
+                            className="w-full text-left"
+                            disabled={pendingSessionId === session.sessionId}
+                            onClick={() => {
+                              const targetId = session.reportId || session.sessionId;
+                              setPendingSessionId(session.sessionId);
+                              startTransition(() => {
+                                setSelectedSessionId(targetId);
+                                setReportModes((prev) => ({ ...prev, [session.sessionId]: "short" }));
+                                setActiveTabs((prev) => ({ ...prev, [session.sessionId]: "boardroom" }));
+                              });
+                              navigate(buildPortalReportPath(targetId, "short"), {
+                                replace: true,
+                                state: { reportId: targetId, sessionId: session.sessionId },
+                              });
+                              window.setTimeout(() => setPendingSessionId((current) => (current === session.sessionId ? "" : current)), 250);
+                            }}
+                          >
+                            <h3 className="text-sm font-semibold text-white">{formatReportCode(session.sessionId)}</h3>
+                            <p className="mt-1 text-xs text-gray-300">{new Date(session.createdAt).toLocaleString("nl-NL")}</p>
+                            <p className="mt-1 text-xs text-gray-400">{session.organizationName || "Geuploade bron"} • Upload</p>
+                            <p className="mt-2 text-sm text-gray-200 line-clamp-3">{session.executiveSummary || "Samenvatting niet beschikbaar."}</p>
+                          </button>
+                          {matchesReportSelection(session, selectedSessionId) ? renderExpandedReport(session) : null}
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <button
+                              className="portal-button-secondary px-3 py-1.5 text-xs"
+                              disabled={pdfBusySessionId === session.sessionId}
+                              onClick={() => void handlePdf(session.sessionId, "preview")}
+                            >
+                              {pdfBusySessionId === session.sessionId && pdfBusyMode === "preview" ? "Preview laden..." : "Bekijk PDF"}
+                            </button>
+                            <button
+                              className="portal-button-primary px-3 py-1.5 text-xs"
+                              disabled={pdfBusySessionId === session.sessionId}
+                              onClick={() => void handlePdf(session.sessionId, "download")}
+                            >
+                              {pdfBusySessionId === session.sessionId && pdfBusyMode === "download" ? "PDF maken..." : "Download PDF"}
+                            </button>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </article>
+                ) : null}
+              </>
             ) : null}
-            {visibleAnalysisReports.map((session) => (
+            {reportMapReports.length ? (
+              <div className="portal-card-soft px-4 py-3">
+                <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-gray-400">Rapportmap</p>
+                <p className="mt-1 text-[11px] text-gray-500">Oudere dossiers, compact gegroepeerd per rapporttype.</p>
+              </div>
+            ) : null}
+            {visiblePrimaryAnalysisReports.length ? (
+              <p className="px-1 text-[11px] font-medium uppercase tracking-[0.16em] text-gray-500">Analyses</p>
+            ) : null}
+            {visiblePrimaryAnalysisReports.map((session) => (
             <article
               key={session.sessionId}
               className={`portal-card p-5 transition-colors ${
@@ -3505,21 +4705,26 @@ export default function StrategischRapportSaaSPage() {
                   storedTab && getVisibleReportTabsForMode(reportMode).includes(storedTab)
                     ? storedTab
                     : getDefaultReportTabForMode(reportMode);
-                const downloadLabel = getExportButtonLabel(activeTab, reportMode);
+                const downloadLabel = getExportButtonLabel(getPrimaryExportTab(reportMode), reportMode);
                 return (
                   <>
               <button
                 type="button"
                 className="w-full text-left"
+                disabled={pendingSessionId === session.sessionId}
                 onClick={() => {
                   const targetId = session.reportId || session.sessionId;
-                  setSelectedSessionId(targetId);
-                  setReportModes((prev) => ({ ...prev, [session.sessionId]: "short" }));
-                  setActiveTabs((prev) => ({ ...prev, [session.sessionId]: "boardroom" }));
+                  setPendingSessionId(session.sessionId);
+                  startTransition(() => {
+                    setSelectedSessionId(targetId);
+                    setReportModes((prev) => ({ ...prev, [session.sessionId]: "short" }));
+                    setActiveTabs((prev) => ({ ...prev, [session.sessionId]: "boardroom" }));
+                  });
                   navigate(buildPortalReportPath(targetId, "short"), {
                     replace: true,
                     state: { reportId: targetId, sessionId: session.sessionId },
                   });
+                  window.setTimeout(() => setPendingSessionId((current) => (current === session.sessionId ? "" : current)), 250);
                 }}
               >
                 <h3 className="text-sm font-semibold text-white">{formatReportCode(session.sessionId)}</h3>
@@ -3532,7 +4737,7 @@ export default function StrategischRapportSaaSPage() {
                 ) : null}
                 {(session.engineMode || session.analysisRuntimeMs > 0 || session.status === "fout") ? (
                   <p className="mt-1 text-[11px] text-gray-400">
-                    Engine: {session.engineMode || "onbekend"}
+                    Engine: {resolveEngineLabel(session.engineMode, session.sourceType)}
                     {session.analysisRuntimeMs > 0 ? ` • Runtime: ${Math.round(session.analysisRuntimeMs / 1000)}s` : ""}
                     {session.status === "fout"
                       ? ` • Status: ${session.status}`
@@ -3560,19 +4765,21 @@ export default function StrategischRapportSaaSPage() {
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   className="portal-button-secondary px-3 py-1.5 text-xs"
+                  disabled={pdfBusySessionId === session.sessionId}
                   onClick={() => void handlePdf(session.sessionId, "preview")}
                 >
-                  Bekijk PDF
+                  {pdfBusySessionId === session.sessionId && pdfBusyMode === "preview" ? "Preview laden..." : "Bekijk PDF"}
                 </button>
                 {session.report ? (
                     <button
                       className="portal-button-primary px-3 py-1.5 text-xs"
+                      disabled={pdfBusySessionId === session.sessionId}
                       onClick={() => void handlePdf(session.sessionId, "download")}
                     >
-                    {downloadLabel}
+                    {pdfBusySessionId === session.sessionId && pdfBusyMode === "download" ? "PDF maken..." : downloadLabel}
                   </button>
                 ) : (
-                  <button className="portal-button-primary px-3 py-1.5 text-xs" onClick={() => void handlePdf(session.sessionId, "download")}>{downloadLabel}</button>
+                  <button className="portal-button-primary px-3 py-1.5 text-xs" disabled={pdfBusySessionId === session.sessionId} onClick={() => void handlePdf(session.sessionId, "download")}>{pdfBusySessionId === session.sessionId && pdfBusyMode === "download" ? "PDF maken..." : downloadLabel}</button>
                 )}
               </div>
                   </>
@@ -3580,8 +4787,76 @@ export default function StrategischRapportSaaSPage() {
               })()}
             </article>
           ))}
+            {visibleContinuityReports.length ? (
+              <p className="px-1 text-[11px] font-medium uppercase tracking-[0.16em] text-gray-500">Lokale continuiteit</p>
+            ) : null}
+            {visibleContinuityReports.map((session) => (
+            <article
+              key={session.sessionId}
+              className={`portal-card p-5 opacity-90 transition-colors ${
+                matchesReportSelection(session, selectedSessionId) ? "border-[#D4AF37] shadow-[0_0_0_1px_rgba(212,175,55,0.45)]" : ""
+              }`}
+            >
+              {(() => {
+                const reportMode = reportModes[session.sessionId] || normalizeReportSpeedMode(searchParams.get("view"));
+                const downloadLabel = getExportButtonLabel(getPrimaryExportTab(reportMode), reportMode);
+                return (
+                  <>
+              <button
+                type="button"
+                className="w-full text-left"
+                disabled={pendingSessionId === session.sessionId}
+                onClick={() => {
+                  const targetId = session.reportId || session.sessionId;
+                  setPendingSessionId(session.sessionId);
+                  startTransition(() => {
+                    setSelectedSessionId(targetId);
+                    setReportModes((prev) => ({ ...prev, [session.sessionId]: "short" }));
+                    setActiveTabs((prev) => ({ ...prev, [session.sessionId]: "boardroom" }));
+                  });
+                  navigate(buildPortalReportPath(targetId, "short"), {
+                    replace: true,
+                    state: { reportId: targetId, sessionId: session.sessionId },
+                  });
+                  window.setTimeout(() => setPendingSessionId((current) => (current === session.sessionId ? "" : current)), 250);
+                }}
+              >
+                <h3 className="text-sm font-semibold text-white">{formatReportCode(session.sessionId)}</h3>
+                <p className="mt-1 text-xs text-gray-300">{new Date(session.createdAt).toLocaleString("nl-NL")}</p>
+                <p className="mt-1 text-xs text-gray-400">{session.organizationName || "Onbekende organisatie"} • Lokale continuiteit</p>
+                <p className="mt-1 text-[11px] text-gray-400">
+                  Engine: {resolveEngineLabel(session.engineMode, session.sourceType)} • Kwaliteit: {session.qualityScore}/100 ({session.qualityTier || "standard"})
+                </p>
+                <p className="mt-2 text-sm text-gray-300 line-clamp-2">{session.executiveSummary || "Samenvatting niet beschikbaar."}</p>
+              </button>
+              {matchesReportSelection(session, selectedSessionId) ? (
+                <>
+                  {(session.status !== "fout" || session.report || session.boardMemo || session.executiveSummary) ? renderExpandedReport(session) : null}
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      className="portal-button-secondary px-3 py-1.5 text-xs"
+                      disabled={pdfBusySessionId === session.sessionId}
+                      onClick={() => void handlePdf(session.sessionId, "preview")}
+                    >
+                      {pdfBusySessionId === session.sessionId && pdfBusyMode === "preview" ? "Preview laden..." : "Bekijk PDF"}
+                    </button>
+                    <button
+                      className="portal-button-primary px-3 py-1.5 text-xs"
+                      disabled={pdfBusySessionId === session.sessionId}
+                      onClick={() => void handlePdf(session.sessionId, "download")}
+                    >
+                      {pdfBusySessionId === session.sessionId && pdfBusyMode === "download" ? "PDF maken..." : downloadLabel}
+                    </button>
+                  </div>
+                </>
+              ) : null}
+                  </>
+                );
+              })()}
+            </article>
+          ))}
             {visibleUploadReports.length ? (
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-300">Geuploade rapporten</p>
+              <p className="px-1 text-[11px] font-medium uppercase tracking-[0.16em] text-gray-500">Uploads</p>
             ) : null}
             {visibleUploadReports.map((session) => (
             <article
@@ -3593,15 +4868,20 @@ export default function StrategischRapportSaaSPage() {
                 <button
                   type="button"
                   className="w-full text-left"
+                  disabled={pendingSessionId === session.sessionId}
                   onClick={() => {
                     const targetId = session.reportId || session.sessionId;
-                    setSelectedSessionId(targetId);
-                    setReportModes((prev) => ({ ...prev, [session.sessionId]: "short" }));
-                    setActiveTabs((prev) => ({ ...prev, [session.sessionId]: "boardroom" }));
+                    setPendingSessionId(session.sessionId);
+                    startTransition(() => {
+                      setSelectedSessionId(targetId);
+                      setReportModes((prev) => ({ ...prev, [session.sessionId]: "short" }));
+                      setActiveTabs((prev) => ({ ...prev, [session.sessionId]: "boardroom" }));
+                    });
                     navigate(buildPortalReportPath(targetId, "short"), {
                       replace: true,
                       state: { reportId: targetId, sessionId: session.sessionId },
                     });
+                    window.setTimeout(() => setPendingSessionId((current) => (current === session.sessionId ? "" : current)), 250);
                   }}
                 >
                   <h3 className="text-sm font-semibold text-white">{formatReportCode(session.sessionId)}</h3>
@@ -3613,15 +4893,17 @@ export default function StrategischRapportSaaSPage() {
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   className="portal-button-secondary px-3 py-1.5 text-xs"
+                  disabled={pdfBusySessionId === session.sessionId}
                   onClick={() => void handlePdf(session.sessionId, "preview")}
                 >
-                  Bekijk PDF
+                  {pdfBusySessionId === session.sessionId && pdfBusyMode === "preview" ? "Preview laden..." : "Bekijk PDF"}
                 </button>
                 <button
                   className="portal-button-primary px-3 py-1.5 text-xs"
+                  disabled={pdfBusySessionId === session.sessionId}
                   onClick={() => void handlePdf(session.sessionId, "download")}
                 >
-                  Download PDF
+                  {pdfBusySessionId === session.sessionId && pdfBusyMode === "download" ? "PDF maken..." : "Download PDF"}
                 </button>
               </div>
             </article>
@@ -3646,6 +4928,8 @@ async function createInlinePdfPreview(
     rawInput?: string;
     titleOverride?: string;
     subtitle?: string;
+    canonicalReport?: import("@/types/StrategicReport").StrategicReport;
+    boardroomDocument?: import("@/types/BoardroomDocument").BoardroomDocument;
   }
 ): Promise<string> {
   const { createPdfPreviewUrl } = await import("@/services/exportService");

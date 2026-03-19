@@ -1,21 +1,30 @@
 import { useMemo } from "react";
 import type { SubscriptionType } from "@/platform";
+import type { StrategicReport as PlatformStrategicReport } from "@/platform/types";
+import { assertEngineOutputIntegrity } from "@/engine/contentIntegrityGuard";
+import type { StrategicReport } from "@/types/StrategicReport";
+import { synthesizeStrategicReport } from "@/engine/reportSynthesizer";
+import { validateStrategicReport } from "@/engine/reportValidator";
 
 const ARCHIVE_ENABLED = false;
 const fallbackOrganizations = new Map<string, any>();
 const fallbackSessions = new Map<string, CanonicalSession>();
+const FALLBACK_SESSIONS_STORAGE_KEY = "cyntra.fallback_sessions.v1";
 
 type CanonicalSession = {
   id: string;
   session_id?: string | null;
   organization_id?: string | null;
   organization_name?: string | null;
+  sector?: string | null;
   analysis_type?: string | null;
   input_data?: string | null;
   output?: Record<string, unknown> | null;
   executive_summary?: string | null;
   board_memo?: string | null;
   board_report?: string | null;
+  strategic_report?: PlatformStrategicReport | null;
+  engine_mode?: string | null;
   status?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -23,6 +32,36 @@ type CanonicalSession = {
 
 function normalize(value: unknown): string {
   return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function canUseStorage(): boolean {
+  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+}
+
+function loadPersistedFallbackSessions() {
+  if (!canUseStorage()) return;
+  try {
+    const raw = window.localStorage.getItem(FALLBACK_SESSIONS_STORAGE_KEY);
+    const rows = raw ? (JSON.parse(raw) as CanonicalSession[]) : [];
+    if (!Array.isArray(rows)) return;
+    rows.forEach((row) => {
+      const sessionId = String(row?.session_id || row?.id || "").trim();
+      if (!sessionId) return;
+      fallbackSessions.set(sessionId, { ...row, id: sessionId, session_id: sessionId });
+    });
+  } catch {
+    // Ignore corrupted local fallback state.
+  }
+}
+
+function persistFallbackSessions() {
+  if (!canUseStorage()) return;
+  try {
+    const rows = Array.from(fallbackSessions.values()).slice(0, 50);
+    window.localStorage.setItem(FALLBACK_SESSIONS_STORAGE_KEY, JSON.stringify(rows));
+  } catch {
+    // Ignore storage write errors.
+  }
 }
 
 function registerFallbackOrganization(payload: {
@@ -50,6 +89,7 @@ function registerFallbackSession(session: CanonicalSession) {
   const sessionId = String(session.session_id || session.id || "");
   if (!sessionId) return;
   fallbackSessions.set(sessionId, { ...session, id: sessionId, session_id: sessionId });
+  persistFallbackSessions();
   const organization = registerFallbackOrganization({
     organization_id: String(session.organization_id || ""),
     organisatie_naam: String(session.organization_name || ""),
@@ -58,6 +98,35 @@ function registerFallbackSession(session: CanonicalSession) {
     new Set([...(Array.isArray(organization.analyses) ? organization.analyses : []), sessionId])
   );
   fallbackOrganizations.set(organization.organization_id, organization);
+}
+
+loadPersistedFallbackSessions();
+
+type CanonicalReportResult = {
+  report?: StrategicReport;
+  error?: string;
+};
+
+function buildCanonicalReport(session: CanonicalSession): CanonicalReportResult {
+  const output = session.output || {};
+  const hasOutput = Boolean(Object.keys(output).length);
+  if (!hasOutput) {
+    return { report: session.strategic_report };
+  }
+  try {
+    assertEngineOutputIntegrity(output);
+    const synthesized = synthesizeStrategicReport(output);
+    validateStrategicReport(synthesized);
+    return { report: synthesized };
+  } catch (error) {
+    if ((error as Error).name === "INVALID_REPORT_STRUCTURE") {
+      return {
+        report: session.strategic_report,
+        error: "INVALID_REPORT_STRUCTURE",
+      };
+    }
+    throw error;
+  }
 }
 
 async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -85,102 +154,154 @@ function buildFallbackSession(payload: {
   organization_name?: string;
   sector?: string;
 }) {
-  const normalizedSector = normalize(payload.sector).toLowerCase();
-  const isYouthCare =
-    normalizedSector.includes("jeugdzorg") || /jeugdwet|wachttijden|wijkteams|gezinnen/i.test(payload.input_data);
+  const explicitSector = normalize(payload.sector).toLowerCase();
+  const inferredSector = normalize(payload.input_data).toLowerCase();
+  const normalizedSector = explicitSector || inferredSector;
+  const isYouthCare = explicitSector
+    ? explicitSector.includes("jeugdzorg")
+    : /jeugdzorg|jeugdwet|wijkteams|gezinnen|opvoed|jongeren/i.test(payload.input_data);
   const createdAt = new Date().toISOString();
   const analysisDate = createdAt.slice(0, 10);
   const organizationName = payload.organization_name || payload.organization_id || "Organisatie";
+  const sectorLabel = isYouthCare
+    ? "Jeugdzorg"
+    : normalizedSector.includes("ggz")
+      ? "GGZ"
+      : normalizedSector.includes("saas")
+        ? "SaaS"
+        : normalizedSector.includes("b2b")
+          ? "B2B Dienstverlening"
+          : String(payload.sector || "Onbekend");
   const profile = (() => {
     if (isYouthCare) {
       return {
-        executiveSummary: "Wachtdruk is contractgedreven, niet personeelsgedreven.",
-        recommendedOption: "Brede ambulante specialist blijven",
-        strategicConflict: "De spanning zit tussen brede ambulante aanwezigheid en contractdiscipline per gemeente.",
+        executiveSummary:
+          "Een breed gemeentenportfolio legt meer variatie in contractcondities en instroom op de organisatie dan vaste teams operationeel kunnen absorberen.",
+        recommendedOption: "Gemeentenportfolio rationaliseren en sturen op kern-, behoud- en uitstapgemeenten",
+        strategicConflict:
+          "De spanning zit tussen regionale relevantie voor gemeenten en operationele uitvoerbaarheid binnen vaste teams en consortiuminstroom.",
         options: [
-          "Brede ambulante specialist blijven",
-          "Selectieve specialisatie / niche kiezen",
-          "Consortiumstrategie verdiepen",
+          "Gemeentenportfolio rationaliseren",
+          "Operationele schaal vergroten binnen vaste teams en flexibele schil",
+          "Zorgmodel en instroomroute veranderen",
         ],
         interventions: [
-          "Heronderhandel contractgrenzen en instroomcriteria per gemeente.",
-          "Standaardiseer triage en verantwoordingslast rond specialistische casuistiek.",
+          "Stel een gemeentenmatrix vast met kern-, behoud- en uitstapgemeenten.",
+          "Koppel consortiumtriage en instroom wekelijks aan caseload- en wachttijdsturing.",
+          "Bescherm cultuurkapitaal met een bestuurlijke grens voor flexratio en groeitempo.",
         ],
-        mechanism: "Gemeentelijke contractdruk vervormt instroom, verhoogt wachtdruk en ondergraaft teamstabiliteit.",
-        facts: "Gemeenten, triage, wachtdruk en consortiumafspraken bepalen de feitelijke schaalruimte.",
+        mechanism:
+          "Tarief, reistijd, no-show en consortiumtriage bepalen samen de effectieve marge en de planbare druk op vaste teams.",
+        facts:
+          "Circa 35 gemeenten, consortiumtoegang, rendabiliteitsdruk en retentie van vaste professionals bepalen samen de schaalruimte.",
         scenarios: [
-          "Scenario A — Brede ambulante specialist blijven: borg triage en contractdiscipline per gemeente.",
-          "Scenario B — Selectieve specialisatie / niche kiezen: verlaag complexiteitsmix maar verlies lokale breedte.",
-          "Scenario C — Consortiumstrategie verdiepen: deel capaciteit en contractpositie via partners.",
+          "Scenario A — Gemeentenportfolio rationaliseren: prioriteer kern-, behoud- en uitstapgemeenten.",
+          "Scenario B — Operationele schaal vergroten: vergroot capaciteit binnen harde grenzen voor caseload en flexratio.",
+          "Scenario C — Zorgmodel en instroomroute veranderen: herontwerp toegang, triage en routering.",
+        ],
+        stopRules: [
+          "caseload > 18",
+          "wachttijd > 12 weken",
+          "marge < 4%",
         ],
       };
     }
     if (normalizedSector.includes("ggz")) {
       return {
-        executiveSummary: "Contractplafonds en capaciteit drukken de marge harder dan extra vraag haar verbetert.",
+        executiveSummary:
+          "Contractplafonds, zorgzwaarte en behandelcapaciteit drukken de marge harder dan extra vraag haar kan herstellen.",
         recommendedOption: "Kern beschermen en contractmix heronderhandelen",
-        strategicConflict: "De spanning zit tussen volumebehoefte, contractplafonds en behandelcapaciteit.",
+        strategicConflict:
+          "De spanning zit tussen volumegroei, contractplafonds en behandelcapaciteit binnen een rendabele productmix.",
         options: [
           "Kern beschermen en contractmix heronderhandelen",
-          "Parallel verbreden via nieuwe labels",
-          "Partnermodel met strakke governance",
+          "Selectief groeien in rendabele zorgpaden",
+          "Netwerkzorg via partners en doorverwijzing verdiepen",
         ],
         interventions: [
           "Heronderhandel plafonds en tariefmix op basis van behandelzwaarte.",
           "Verminder capaciteitslekken in intake, planning en no-show.",
+          "Bevries niet-kerninitiatieven totdat marge en wachttijd stabiliseren.",
         ],
-        mechanism: "Contractplafonds en capaciteitsdruk maken volumegroei onrendabel zonder scherpere contractmix.",
-        facts: "Contract, marge, plafond en capaciteit zijn de dominante stuurvariabelen.",
+        mechanism:
+          "Behandelmix, contractplafonds en no-show bepalen samen de effectieve margeruimte per zorgpad.",
+        facts:
+          "Contract, zorgzwaarte, wachttijd en behandelaarcapaciteit zijn de dominante stuurvariabelen in de GGZ-kern.",
         scenarios: [
           "Scenario A — Kern beschermen en contractmix heronderhandelen: stuur op marge en behandelcapaciteit.",
-          "Scenario B — Parallel verbreden via nieuwe labels: voeg labels toe maar verhoogt operationele ruis.",
-          "Scenario C — Partnermodel met strakke governance: deel capaciteit via partners met harde regie.",
+          "Scenario B — Selectief groeien in rendabele zorgpaden: verhoog behandelvolume alleen waar contract en capaciteit dat toelaten.",
+          "Scenario C — Netwerkzorg verdiepen: verschuif vraag via partners en doorverwijzing met harde governance.",
+        ],
+        stopRules: [
+          "wachttijd > 14 weken",
+          "bezettingsgraad > 92%",
+          "marge < 5%",
         ],
       };
     }
     if (normalizedSector.includes("b2b")) {
       return {
-        executiveSummary: "Salesgroei zonder delivery-discipline vergroot omzet maar verslechtert marge en concentratierisico.",
+        executiveSummary:
+          "Commerciële groei verhoogt omzet, maar zonder delivery-discipline en accountselectie verslechteren marge en uitvoerbaarheid tegelijk.",
         recommendedOption: "Kern beschermen en delivery disciplineren",
-        strategicConflict: "De spanning zit tussen commerciële versnelling, delivery-capaciteit en marge.",
+        strategicConflict:
+          "De spanning zit tussen commerciële versnelling, delivery-capaciteit en marge per account.",
         options: [
           "Kern beschermen en delivery disciplineren",
           "Commercieel versnellen via nieuwe proposities",
-          "Selectieve focus op rendabele accounts",
+          "Selectieve focus op rendabele accounts en sectoren",
         ],
         interventions: [
           "Herbalanceer sales- en deliverydoelen op marge per account.",
           "Verlaag concentratierisico via selectieve accountkeuzes.",
+          "Stop uitzonderingsdeals die deliverydruk verhogen zonder prijsdiscipline.",
         ],
-        mechanism: "Sales en delivery raken ontkoppeld waardoor marge lekt in complexe accounts.",
-        facts: "Sales, delivery, concentratie en marge bepalen de bestuurlijke keuze.",
+        mechanism:
+          "Salesmix, uitzonderingswerk en deliverybelasting bepalen samen de effectieve marge en leverbetrouwbaarheid per account.",
+        facts:
+          "Accountconcentratie, deliverybezetting en marge per klantsegment bepalen de bestuurlijke keuze in B2B-dienstverlening.",
         scenarios: [
           "Scenario A — Kern beschermen en delivery disciplineren: zet marge en leverdiscipline centraal.",
           "Scenario B — Commercieel versnellen via nieuwe proposities: verhoogt omzetkans maar ook uitvoeringsdruk.",
-          "Scenario C — Selectieve focus op rendabele accounts: verlaagt ruis en beschermt deliverykwaliteit.",
+          "Scenario C — Selectieve focus op rendabele accounts en sectoren: verlaagt ruis en beschermt deliverykwaliteit.",
+        ],
+        stopRules: [
+          "delivery utilization > 90%",
+          "gross margin < 30%",
+          "top-3 accounts > 55% omzet",
         ],
       };
     }
     if (normalizedSector.includes("saas")) {
       return {
-        executiveSummary: "Nieuwe omzet compenseert churn en burn niet zolang retentie en unit economics zwak blijven.",
+        executiveSummary:
+          "Nieuwe omzet compenseert churn en burn niet zolang retentie, pricing en implementatiedruk de unit economics blijven ondermijnen.",
         recommendedOption: "Retentie en unit economics eerst herstellen",
-        strategicConflict: "De spanning zit tussen groeidruk, burn en retentie.",
+        strategicConflict:
+          "De spanning zit tussen groeidruk, burn, retentie en implementeerbare klantkwaliteit.",
         options: [
           "Retentie en unit economics eerst herstellen",
           "Enterprise sales versnellen",
-          "Focus op selectieve verticale groei",
+          "Focus op selectieve verticale groei met scherpere ICP",
         ],
         interventions: [
           "Verlaag churn via productretentie en accountdiscipline.",
           "Zet burn-grenzen en pricing-correcties op enterprise deals.",
+          "Vertraag acquisitie buiten ICP totdat implementatie en payback binnen norm vallen.",
         ],
-        mechanism: "Burn en churn versnellen tegelijk waardoor nieuwe omzet onvoldoende kwaliteitsgroei oplevert.",
-        facts: "Churn, enterprise, burn en retentie bepalen de schaalbaarheid.",
+        mechanism:
+          "Churn, CAC-payback en implementatiebelasting bepalen samen of groei werkelijk bijdraagt aan brutomarge en runway.",
+        facts:
+          "Net revenue retention, burn multiple en implementatiecapaciteit bepalen de schaalbaarheid van de SaaS-kern.",
         scenarios: [
           "Scenario A — Retentie en unit economics eerst herstellen: herstel churn en brutomarge.",
           "Scenario B — Enterprise sales versnellen: verhoogt ACV maar vergroot implementatiedruk.",
-          "Scenario C — Focus op selectieve verticale groei: scherpt ICP en retentie per segment aan.",
+          "Scenario C — Focus op selectieve verticale groei met scherpere ICP: verhoogt retentie per segment en verlaagt ruis.",
+        ],
+        stopRules: [
+          "NRR < 100%",
+          "burn multiple > 2.0",
+          "CAC payback > 18 maanden",
         ],
       };
     }
@@ -204,6 +325,11 @@ function buildFallbackSession(payload: {
         "Scenario B — Versnel groei via nieuwe proposities: verhoogt complexiteit en uitvoeringseisen.",
         "Scenario C — Versmal focus op de meest rendabele kern: beschermt marge en uitvoerbaarheid.",
       ],
+      stopRules: [
+        "marge onder norm",
+        "capaciteit boven grens",
+        "besluitdiscipline verzwakt",
+      ],
     };
   })();
   const boardMemo = [
@@ -211,7 +337,7 @@ function buildFallbackSession(payload: {
     `${profile.executiveSummary} ${profile.strategicConflict}`,
     "",
     "Feitenbasis",
-    `${profile.facts} Organisatie: ${organizationName}. Sector: ${payload.sector || "Onbekend"}.`,
+    `${profile.facts} Organisatie: ${organizationName}. Sector: ${sectorLabel}.`,
     "",
     "Besluitvoorstel",
     `Besluit: kies ${profile.recommendedOption}.`,
@@ -222,85 +348,50 @@ function buildFallbackSession(payload: {
   const boardReport = [
     "0. Boardroom summary",
     `Organisatie: ${organizationName}`,
-    `Sector: ${payload.sector || "Onbekend"}`,
+    `Sector: ${sectorLabel}`,
     `Analyse datum: ${analysisDate}`,
     `Aanbevolen keuze: ${profile.recommendedOption}`,
     profile.executiveSummary,
     "",
-    "### NIEUWE INZICHTEN (KILLER INSIGHTS)",
-    "INZICHT",
-    profile.mechanism,
-    "BESTUURLIJKE CONSEQUENTIE",
-    profile.interventions[0],
-    "INZICHT",
-    profile.facts,
-    "BESTUURLIJKE CONSEQUENTIE",
-    profile.interventions[1],
-    isYouthCare
-      ? [
-          "INZICHT",
-          "Contractvolume en zorgvraag groeien uit elkaar.",
-          "BESTUURLIJKE CONSEQUENTIE",
-          "Herijk contractgrenzen per gemeente.",
-          "INZICHT",
-          "Wachttijd ontstaat bij verwijzing en toeleiding, niet alleen in uitvoering.",
-          "BESTUURLIJKE CONSEQUENTIE",
-          "Stuur op triage-afspraken met wijkteams.",
-          "INZICHT",
-          "Kleinschaligheid is onderscheidend zolang casusmix beheersbaar blijft.",
-          "BESTUURLIJKE CONSEQUENTIE",
-          "Bescherm specialistische capaciteit tegen versnippering.",
-          "INZICHT",
-          "Personeelsdruk volgt uit onvoorspelbare contractering.",
-          "BESTUURLIJKE CONSEQUENTIE",
-          "Onderhandel voorspelbare volumevensters.",
-          "INZICHT",
-          "Lokale legitimiteit is sterker dan schaalvoordeel.",
-          "BESTUURLIJKE CONSEQUENTIE",
-          "Positioneer op gezinscontinuiteit en nabijheid.",
-        ].join("\n")
-      : "",
+    "1. Executive Decision Card",
+    `CORE PROBLEM\n${profile.executiveSummary}`,
     "",
-    "1. Besluitvraag",
-    `Moet ${organizationName} nu kiezen voor ${profile.recommendedOption}?`,
+    `STRATEGIC TENSION\n${profile.strategicConflict}`,
     "",
-    "2. Strategische kernvragen",
-    `Hoe borgt het bestuur dat ${profile.recommendedOption} niet wordt ondermijnd door parallelle prioriteiten?`,
+    `RECOMMENDED DECISION\n${profile.recommendedOption}`,
     "",
-    "3. Strategisch patroon",
-    `Primair patroon: ${profile.options[0]}. Secundair patroon: ${profile.options[2]}.`,
+    `WHY THIS DECISION\n${profile.facts}`,
     "",
-    "4. Systeemmechanisme",
-    profile.mechanism,
+    `STOP RULES\n${profile.stopRules.join("\n")}`,
     "",
-    "5. Feitenbasis",
-    profile.facts,
+    "2. Strategisch Verhaal",
+    `SITUATIE\n${profile.facts}`,
     "",
-    "6. Keuzerichtingen",
+    `SPANNING\n${profile.strategicConflict}`,
+    "",
+    `DYNAMIEK\n${profile.mechanism}`,
+    "",
+    `KEUZE\n${profile.recommendedOption}`,
+    "",
+    `BESTUURLIJKE OPGAVE\n${profile.interventions[0]}`,
+    "",
+    "3. Scenariovergelijking",
     profile.options.map((option, index) => `${String.fromCharCode(65 + index)}. ${option}`).join("\n"),
     "",
-    "7. Aanbevolen keuze",
-    profile.recommendedOption,
-    "",
-    "8. Doorbraakinzichten",
-    `${profile.interventions[0]}\n${profile.interventions[1]}`,
-    "",
-    "9. Mogelijke ontwikkelingen",
     profile.scenarios.join("\n"),
     "",
-    "10. Bestuurlijke waarschuwingssignalen",
-    "1. KPI-afwijking op marge of capaciteit in twee meetrondes.",
-    "2. Besluitdiscipline verzwakt door parallelle uitzonderingen.",
-    "3. Contract- of klantmix wijkt af van de gekozen richting.",
+    "4. Mechanisme Analyse",
+    profile.mechanism,
     "",
-    "11. Besluitgevolgen",
-    `12m: ${profile.recommendedOption} stabiliseert operatie en governance.`,
-    "24m: de organisatie kan selectiever investeren in capaciteit en positie.",
-    "36m: het gekozen patroon wordt duurzaam of moet expliciet worden herzien.",
+    "5. Bestuurlijke Acties",
+    profile.interventions.map((item, index) => `Actie ${index + 1}\n${item}`).join("\n\n"),
     "",
-    "2. Mechanismeketens",
-    `${profile.mechanism} -> ${profile.interventions[0]} -> scherpere uitvoering -> hogere bestuurlijke betrouwbaarheid`,
-    `${profile.facts} -> ${profile.interventions[1]} -> minder ruis -> stabielere resultaten`,
+    "6. Verdieping",
+    `KILLER INSIGHTS\n${profile.mechanism}`,
+    "",
+    `EARLY SIGNALS\n${profile.stopRules.join("\n")}`,
+    "",
+    `BOARDROOM STRESSTEST\nWat besluit het bestuur als ${profile.stopRules[0]} terwijl de gekozen richting blijft doorlopen?`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -309,12 +400,23 @@ function buildFallbackSession(payload: {
     session_id: "",
     organization_id: payload.organization_id,
     organization_name: organizationName,
+    sector: sectorLabel,
     analysis_type: payload.analysis_type || "analysis",
     input_data: payload.input_data,
     status: "COMPLETED",
     executive_summary: profile.executiveSummary,
     board_memo: boardMemo,
     board_report: boardReport,
+    strategic_report: {
+      report_id: `report-${Date.now()}`,
+      session_id: "",
+      organization_id: payload.organization_id,
+      title: `Cyntra Executive Dossier — ${organizationName}`,
+      sections: boardReport.split(/\n{2,}/).filter(Boolean),
+      generated_at: createdAt,
+      report_body: boardReport,
+    },
+    engine_mode: "fallback",
     output: {
       executive_summary: profile.executiveSummary,
       board_memo: boardMemo,
@@ -322,12 +424,20 @@ function buildFallbackSession(payload: {
       recommended_option: profile.recommendedOption,
       interventions: profile.interventions,
       strategic_conflict: profile.strategicConflict,
+      sector: sectorLabel,
       source: "fallback",
     },
     created_at: createdAt,
     updated_at: createdAt,
   };
   session.session_id = session.id;
+  if (session.strategic_report) {
+    session.strategic_report = {
+      ...session.strategic_report,
+      report_id: session.id,
+      session_id: session.id,
+    };
+  }
   registerFallbackSession(session);
   return mapSession(session);
 }
@@ -335,6 +445,16 @@ function buildFallbackSession(payload: {
 function mapSession(session: CanonicalSession) {
   const sessionId = String(session.session_id || session.id || "");
   const output = session.output || {};
+  const { report: canonicalReport, error: canonicalReportError } = buildCanonicalReport(session);
+  const legacyStrategicReport = session.strategic_report || {
+    report_id: sessionId,
+    session_id: sessionId,
+    organization_id: String(session.organization_id || ""),
+    title: `Cyntra Executive Dossier — ${String(session.organization_name || "Organisatie")} — ${sessionId}`,
+    sections: String(session.board_report || output.executive_summary || "").split(/\n{2,}/).filter(Boolean),
+    generated_at: String(session.updated_at || session.created_at || new Date().toISOString()),
+    report_body: String(session.board_report || output.executive_summary || ""),
+  };
   return {
     session_id: sessionId,
     organization_id: session.organization_id || null,
@@ -345,6 +465,7 @@ function mapSession(session: CanonicalSession) {
     executive_summary: String(session.executive_summary || output.executive_summary || ""),
     board_memo: String(session.board_memo || output.executive_summary || ""),
     board_report: String(session.board_report || output.executive_summary || ""),
+    engine_mode: String(session.engine_mode || "fallback"),
     status: String(session.status || "COMPLETED"),
     analyse_datum: String(session.created_at || ""),
     updated_at: String(session.updated_at || session.created_at || ""),
@@ -355,18 +476,13 @@ function mapSession(session: CanonicalSession) {
       ? output.actions.map((action) => ({ interventie: String(action) }))
       : [],
     strategic_metadata: {
-      sector: "",
+      sector: String(session.sector || output.sector || ""),
       strategic_hefbomen: [],
     },
-    strategic_report: {
-      report_id: sessionId,
-      session_id: sessionId,
-      organization_id: String(session.organization_id || ""),
-      title: `Cyntra Executive Dossier — ${String(session.organization_name || "Organisatie")} — ${sessionId}`,
-      sections: [],
-      generated_at: String(session.updated_at || session.created_at || new Date().toISOString()),
-      report_body: String(session.board_report || output.executive_summary || ""),
-    },
+    strategic_report: legacyStrategicReport,
+    canonicalReport,
+    canonicalReportError: canonicalReportError ?? "",
+    report: legacyStrategicReport,
   };
 }
 
@@ -402,7 +518,13 @@ async function runCanonicalAnalysis(payload: {
     sessionId: session.session_id,
     organizationName: session.organization_name || "",
     createdAt: session.updated_at || session.analyse_datum || new Date().toISOString(),
-    report: session.strategic_report,
+    report: session.canonicalReport
+      ? {
+          ...session.canonicalReport,
+          report_id: session.session_id,
+          session_id: session.session_id,
+        }
+      : session.strategic_report,
     result: session.output,
     session,
   };
@@ -447,7 +569,16 @@ export const platformApiBridge = {
       const query = organization_id ? `?organization_id=${encodeURIComponent(organization_id)}` : "";
       const response = await platformJson<CanonicalSession[]>(`/sessions${query}`);
       (response || []).forEach(registerFallbackSession);
-      sessions = (response || []).map(mapSession);
+      const merged = new Map<string, ReturnType<typeof mapSession>>();
+      Array.from(fallbackSessions.values()).forEach((row) => {
+        const mapped = mapSession(row);
+        merged.set(String(mapped.session_id), mapped);
+      });
+      (response || []).forEach((row) => {
+        const mapped = mapSession(row);
+        merged.set(String(mapped.session_id), mapped);
+      });
+      sessions = Array.from(merged.values());
     } catch {
       sessions = Array.from(fallbackSessions.values()).map(mapSession);
     }

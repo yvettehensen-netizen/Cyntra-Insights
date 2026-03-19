@@ -109,16 +109,16 @@ FEW-SHOT VOORBEELD
 ### Boardroom debat
 
 CFO
-De strategie om brede ambulante specialist te blijven is logisch zolang de organisatie grip houdt op caseload en contractrendement. Het risico zit in de variatie tussen gemeenten: kleine verschillen in tarieven en reistijd kunnen de marge snel onder druk zetten.
+De strategie om het gemeentenportfolio actief te begrenzen is logisch zolang de organisatie grip houdt op caseload en contractrendement. Het risico zit in de variatie tussen gemeenten: kleine verschillen in tarieven, reistijd en no-show kunnen de marge snel onder druk zetten.
 
 BESTUURDER
 De brede positie houdt de organisatie relevant voor gemeenten en het consortium. Te sterke begrenzing kan ertoe leiden dat de organisatie minder zichtbaar wordt in regionale samenwerking en instroom verliest.
 
 STRATEGISCH ADVISEUR
-De strategie werkt zolang de organisatie actief stuurt op haar gemeentenportfolio. Zonder selectie ontstaat een diffuus netwerk waarin capaciteit versnipperd raakt.
+De strategie werkt zolang de organisatie actief stuurt op haar gemeentenportfolio en niet doet alsof cultuur, teamstabiliteit en capaciteit vanzelf opschalen. Zonder selectie ontstaat een diffuus netwerk waarin capaciteit versnipperd raakt.
 
 KERNVRAAG VOOR HET BESTUUR
-Welke gemeenten en zorgvormen zijn strategische kern, en waar moet de organisatie bewust begrenzen om uitvoerbaarheid en teamstabiliteit te beschermen?
+Welke gemeenten zijn strategische kern, waar vergroot de organisatie alleen nog capaciteit onder harde voorwaarden, en waar moet zij het zorgmodel of de instroomroute veranderen?
 `.trim();
 
 function normalize(value: unknown): string {
@@ -188,12 +188,13 @@ export function runBoardroomRoleDebateNode(
   const boardroomRoleDebate: BoardroomRoleDebate =
     /\bjeugdzorg|gemeente|consortium|regionaal\b/i.test(context)
       ? {
-          cfo: `De strategie om ${choice} is logisch zolang contractrendement, reistijd en caseload bestuurlijk binnen grens blijven. Het grootste risico is dat kleine verschillen tussen gemeenten onzichtbaar margeverlies veroorzaken voordat het bestuur ingrijpt.`,
-          bestuurder: "De brede positie houdt de organisatie relevant voor gemeenten en het regionale netwerk. Te sterke begrenzing kan die legitimiteit verzwakken, maar te veel openheid tast juist kwaliteit en continuïteit aan.",
+          cfo: `De strategie om ${choice} is logisch zolang contractrendement, reistijd, no-show en caseload bestuurlijk binnen grens blijven. Het grootste risico is dat kleine verschillen tussen gemeenten onzichtbaar margeverlies veroorzaken voordat het bestuur ingrijpt.`,
+          bestuurder:
+            "De brede positie houdt de organisatie relevant voor gemeenten en het regionale netwerk. Te sterke begrenzing kan die legitimiteit verzwakken, maar te veel openheid tast juist kwaliteit, wachttijd en continuïteit aan.",
           strategicAdvisor:
-            "De strategie is robuust zolang de organisatie haar gemeentenportfolio actief ordent en niet doet alsof alle instroom even wenselijk is. Zonder selectie verandert breedte in versnippering.",
+            "De strategie is robuust zolang de organisatie haar gemeentenportfolio actief ordent en niet doet alsof alle instroom even wenselijk of uitvoerbaar is. Zonder selectie verandert breedte in versnippering en raakt cultuurkapitaal uitgehold.",
           boardQuestion:
-            "Welke gemeenten, contracten en zorgvormen zijn strategische kern, en waar moet het bestuur bewust begrenzen om teamstabiliteit en uitvoerbaarheid te beschermen?",
+            "Welke gemeenten zijn strategische kern, waar vergroot de organisatie alleen nog capaciteit onder harde voorwaarden, en waar moet zij instroomroute of zorgmodel veranderen om teamstabiliteit en uitvoerbaarheid te beschermen?",
         }
       : {
           cfo: `De gekozen richting ${choice} is verdedigbaar zolang kosten, marge en tempo in dezelfde lijn blijven. Het risico zit in groei of verbreding zonder harde financiële grens.`,

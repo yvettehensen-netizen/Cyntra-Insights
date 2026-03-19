@@ -1,5 +1,6 @@
 import { Fragment } from "react";
 import { reportViewStyles } from "./reportViewStyles";
+import { sanitizeReportOutput } from "@/utils/sanitizeReportOutput";
 
 type ReportStructuredContentProps = {
   body: string;
@@ -24,7 +25,7 @@ function splitBlocks(body: string): string[] {
 }
 
 export default function ReportStructuredContent({ body, compact = false }: ReportStructuredContentProps) {
-  const blocks = splitBlocks(body);
+  const blocks = splitBlocks(sanitizeReportOutput(body));
 
   return (
     <div className={compact ? "space-y-3" : "space-y-4"}>

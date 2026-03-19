@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import type { SubscriptionType } from "@/platform";
 import type { StrategicReport } from "@/platform/types";
 import type { Intervention } from "@/aurelius/interventions/types";
+import { saveReport as persistReport } from "@/services/reportStorage";
 
 import { usePlatformApiBridge } from "../usePlatformApiBridge";
 import { formatReportCode } from "../reportIdentity";
@@ -242,7 +243,12 @@ export default function StrategicAnalysisIntake({
         const failureMessage =
           String(session?.error_message || "").trim() || "Analyse is geblokkeerd of mislukt.";
         setCombinedStatus(`Analyse afgerond met blokkade. Rapportcode: ${reportCode}. ${failureMessage}`);
-        await loadOrganizations();
+        if (report) {
+          persistReport(sessionId, report, {
+            organizationName: trimmedNaam,
+            result: session?.output,
+          });
+        }
         safelyCompleteSession(reportId || sessionId, {
           sessionId,
           report,
@@ -262,6 +268,7 @@ export default function StrategicAnalysisIntake({
           qualityTier: String(session?.quality_tier || ""),
           qualityFlags: Array.isArray(session?.quality_flags) ? session.quality_flags.map((item: unknown) => String(item)) : [],
         });
+        void loadOrganizations();
         return;
       }
 
@@ -272,7 +279,12 @@ export default function StrategicAnalysisIntake({
       );
       setLatestStrategicLevers(session?.strategic_metadata?.strategic_hefbomen || []);
 
-      await loadOrganizations();
+      if (report) {
+        persistReport(sessionId, report, {
+          organizationName: trimmedNaam,
+          result: session?.output,
+        });
+      }
       safelyCompleteSession(reportId || sessionId, {
         sessionId,
         report,
@@ -292,6 +304,7 @@ export default function StrategicAnalysisIntake({
         qualityTier: String(session?.quality_tier || ""),
         qualityFlags: Array.isArray(session?.quality_flags) ? session.quality_flags.map((item: unknown) => String(item)) : [],
       });
+      void loadOrganizations();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Analyse mislukt.";
       setCombinedStatus(message);

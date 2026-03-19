@@ -32,6 +32,11 @@ export type CompactScenario = {
   mechanism: string;
   risk: string;
   boardImplication: string;
+  impactScore?: number;
+  riskScore?: number;
+  difficultyScore?: number;
+  scoreValue?: number;
+  recommended?: boolean;
 };
 
 export type OptionRejection = {
@@ -55,9 +60,14 @@ export type BestuurlijkeBesliskaart = {
   whyReasons: string[];
   riskIfDelayed: string;
   stopRules: string[];
+  decisionConfidence?: {
+    score: number;
+    label: string;
+    reasons: string[];
+  };
 };
 
-export type ReportViewModel = {
+export type ReportRenderModel = {
   organizationName: string;
   sessionId: string;
   createdAt: string;

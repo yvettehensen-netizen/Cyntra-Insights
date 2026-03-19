@@ -17,7 +17,7 @@ export interface StoredReport {
 }
 
 function canUseStorage(): boolean {
-  return false;
+  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
 }
 
 function read(): StoredReport[] {
@@ -62,6 +62,12 @@ function read(): StoredReport[] {
 
 function write(rows: StoredReport[]): void {
   memoryCache = [...rows];
+  if (!canUseStorage()) return;
+  try {
+    window.localStorage.setItem(REPORTS_KEY, JSON.stringify(rows));
+  } catch {
+    // Ignore local storage write failures.
+  }
 }
 
 export function saveReport(

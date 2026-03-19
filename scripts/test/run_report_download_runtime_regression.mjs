@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { chromium } from "playwright";
+import { getLocalReportBaseUrl } from "./shared/getLocalReportBaseUrl.mjs";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -106,7 +107,7 @@ function buildSeededReportBody() {
 }
 
 async function main() {
-  const baseUrl = process.env.REPORT_E2E_BASE_URL || "http://127.0.0.1:4173";
+  const baseUrl = getLocalReportBaseUrl();
   const sessionId = "sess-runtime-regression";
   const reportId = "rpt-runtime-regression";
   const downloadsDir = fs.mkdtempSync(path.join(os.tmpdir(), "cyntra-report-download-"));
@@ -119,6 +120,7 @@ async function main() {
   });
 
   await page.addInitScript(({ sessionId, reportId, reportBody }) => {
+    window.localStorage.clear();
     window.localStorage.setItem("cyntra_portal_dev_auth_bypass", "1");
     window.localStorage.setItem(
       "cyntra_reports",
@@ -127,13 +129,13 @@ async function main() {
           id: reportId,
           sessionId,
           organizationName: "Jeugdzorg ZIJN",
-          savedAt: "2026-03-13T11:44:01.000Z",
+          savedAt: "2026-03-16T15:44:01.000Z",
           report: {
             report_id: reportId,
             session_id: sessionId,
             organization_id: "Jeugdzorg ZIJN",
             title: "Jeugdzorg ZIJN",
-            generated_at: "2026-03-13T11:44:01.000Z",
+            generated_at: "2026-03-16T15:44:01.000Z",
             sections: [
               "Bestuurlijke besliskaart",
               "Bestuurlijke kernsamenvatting",
@@ -172,8 +174,8 @@ async function main() {
     actionBar.getByRole("button", { name: /Download .*\.pdf/ }).first().click(),
   ]);
   const suggestedFilename = download.suggestedFilename();
-  assert(/Strategische analyse/i.test(suggestedFilename), `onverwachte downloadnaam: ${suggestedFilename}`);
-  assert(/Kort dossier|Bestuurlijk overzicht|Strategisch rapport/i.test(suggestedFilename), `onverwachte documentvariant in bestandsnaam: ${suggestedFilename}`);
+  assert(/Kort dossier/i.test(suggestedFilename), `onverwachte downloadnaam: ${suggestedFilename}`);
+  assert(/Jeugdzorg ZIJN|Runtime Regression Org/i.test(suggestedFilename), `organisatienaam ontbreekt in bestandsnaam: ${suggestedFilename}`);
 
   const savedPath = path.join(downloadsDir, suggestedFilename);
   await download.saveAs(savedPath);
@@ -184,13 +186,29 @@ async function main() {
   await page.getByRole("button", { name: "Strategisch rapport", exact: true }).waitFor({ state: "visible" });
   await page.getByRole("button", { name: "Scenario simulatie", exact: true }).waitFor({ state: "visible" });
   await page.getByRole("button", { name: "Technische analyse", exact: true }).waitFor({ state: "visible" });
+  await page.getByText("Rapportacties").waitFor({ state: "visible" });
+  const fullActionBar = page.locator("div").filter({ hasText: "Rapportacties" }).first();
+  const fullBodyText = await page.locator("body").innerText();
+  assert(!/^\s*$/.test(fullBodyText), "volledig dossier renderde leeg/wit");
+
+  const [fullDownload] = await Promise.all([
+    page.waitForEvent("download"),
+    fullActionBar.getByRole("button", { name: /Download .*\.pdf/ }).first().click(),
+  ]);
+  const fullSuggestedFilename = fullDownload.suggestedFilename();
+  assert(/Volledig dossier/i.test(fullSuggestedFilename), `onverwachte full downloadnaam: ${fullSuggestedFilename}`);
+  assert(/Jeugdzorg ZIJN|Runtime Regression Org/i.test(fullSuggestedFilename), `organisatienaam ontbreekt in full bestandsnaam: ${fullSuggestedFilename}`);
+  const fullSavedPath = path.join(downloadsDir, fullSuggestedFilename);
+  await fullDownload.saveAs(fullSavedPath);
+  const fullStats = fs.statSync(fullSavedPath);
+  assert(fullStats.size > 1000, "gedownloade full dossier PDF is leeg of te klein");
 
   await page.getByRole("button", { name: "Scenario simulatie", exact: true }).click();
   await page.getByText(/^(Stressproef|Bestuurlijke stresstest)$/).waitFor({ state: "visible" });
   await page.getByText(/^(Scenario-overzicht|Mogelijke ontwikkelingen)$/).waitFor({ state: "visible" });
 
   await page.getByRole("button", { name: "Technische analyse", exact: true }).click();
-  await page.getByText(/^(Uitvoerings- en kwaliteitsanalyse|Technische analyse)$/).waitFor({ state: "visible" });
+  await page.getByRole("heading", { name: /^(Uitvoerings- en kwaliteitsanalyse|Technische analyse)$/ }).waitFor({ state: "visible" });
   await page.getByText("Inhoudscheck", { exact: true }).waitFor({ state: "visible" });
 
   await context.close();

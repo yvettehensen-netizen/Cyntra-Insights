@@ -2,6 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { chromium } from "playwright";
+import { getLocalReportBaseUrl } from "./shared/getLocalReportBaseUrl.mjs";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -9,7 +10,7 @@ function assert(condition, message) {
 
 async function main() {
   const repoRoot = process.cwd();
-  const baseUrl = process.env.REPORT_E2E_BASE_URL || "http://127.0.0.1:4174";
+  const baseUrl = getLocalReportBaseUrl();
   const sourcePath = path.join(repoRoot, "scripts/test/fixtures/jeugdzorg_zijn_source.txt");
   const sourceText = fs.readFileSync(sourcePath, "utf8");
 

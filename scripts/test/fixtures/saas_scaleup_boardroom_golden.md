@@ -1,36 +1,38 @@
 SignalStack
 Sector: SaaS
-Analyse datum: 2026-03-12
+Analyse datum: 2026-03-16
 
 KERNPROBLEEM
-De scale-up kiest tussen productstabiliteit voor bestaande klanten en versnelde feature-expansie om nieuwe enterprise-deals te winnen.
+Nieuwe omzet compenseert churn en burn niet zolang retentie, pricing en implementatiedruk de unit economics blijven ondermijnen.
 
 KERNSTELLING
-Het dominante risico is niet onvoldoende productvisie maar bestuurlijke onderschatting van support-, reliability- en implementatiedruk onder enterprise-groei.
+De scale-up kan niet tegelijk groeidruk, burn, enterprise-complexiteit en stabiele implementatiecapaciteit maximaliseren zonder dat retentie terugvalt.
 
 AANBEVOLEN KEUZE
-Productstabiliteit en implementatierijpheid prioriteren boven feature-expansie.
+Retentie en unit economics eerst herstellen.
 
-SCENARIO'S
-Scenario A — Productstabiliteit prioriteren
-MECHANISME: reliability, onboarding en support-capaciteit worden eerst gestabiliseerd
-RISICO: tragere roadmap voor nieuwe commerciële wensen
-RELATIE TOT SPANNING: Productstabiliteit prioriteren / Feature-expansie versnellen
-BESTUURLIJKE IMPLICATIE: leiderschap koppelt roadmap aan support- en implementation gates
+WAAROM DEZE KEUZE
+Net revenue retention, burn multiple en implementatiecapaciteit bepalen de schaalbaarheid van de SaaS-kern. Churn, CAC-payback en implementatiebelasting bepalen samen of groei werkelijk bijdraagt aan brutomarge en runway.
 
-Scenario B — Feature-expansie versnellen
-MECHANISME: roadmap wordt primair gedreven door salesdruk en enterprise-verzoeken
-RISICO: churn, implementatiefrictie en reputatieschade nemen toe
-RELATIE TOT SPANNING: Productstabiliteit prioriteren / Feature-expansie versnellen
-BESTUURLIJKE IMPLICATIE: leiderschap accepteert hogere operationele instabiliteit
+STOPREGEL: Herzie direct bij NRR < 100% gedurende twee meetperiodes.
+STOPREGEL: Herzie direct bij burn multiple > 2.0 gedurende twee meetperiodes.
+STOPREGEL: Herzie direct bij CAC payback > 18 maanden gedurende twee meetperiodes.
 
-INTERVENTIES
-STOPREGEL 1
-ACTIE: Koppel roadmap-besluiten aan reliability- en onboardingcapaciteit
-RICHTING: Productstabiliteit en implementatierijpheid prioriteren boven feature-expansie
-WAAROM: voorkomt dat commerciële druk productschuld versnelt
-RISICO: zonder gates groeit enterprise-belofte sneller dan leveringskwaliteit
-STOPREGEL: Herzie direct bij churn > 3% per kwartaal
-OWNER: CEO en CTO
-DEADLINE: 14 dagen
-KPI: release-besluiten volgen reliability- en onboardingcriteria
+SCENARIO A
+Retentie en unit economics eerst herstellen.
+MECHANISME — Herstel churn, pricing en brutomarge voordat extra acquisitie de implementatiedruk verder verhoogt.
+RISICO — Groei vertraagt tijdelijk terwijl de commerciële organisatie nog op volume staat gestuurd.
+STRATEGISCHE IMPLICATIE — Bestuur moet retentie en payback boven nieuwe bookings plaatsen.
+
+SCENARIO B
+Enterprise sales versnellen.
+MECHANISME — Hogere ACV verhoogt omzetpotentieel maar vergroot implementatiebelasting en time-to-value risico.
+RISICO — Meer enterprise-deals zonder ICP-discipline verslechteren burn en klantkwaliteit tegelijk.
+STRATEGISCHE IMPLICATIE — Bestuur moet harde dealgrenzen en implementatiegates invoeren.
+
+SCENARIO C
+Focus op selectieve verticale groei met scherpere ICP.
+MECHANISME — Scherpere ICP verlaagt ruis, verhoogt retentie per segment en maakt implementatie voorspelbaarder.
+RISICO — Te nauwe focus beperkt het adresserbare groeipad op korte termijn.
+STRATEGISCHE IMPLICATIE — Bestuur moet kiezen welke verticale markt de kern wordt voor schaalbare groei.
+

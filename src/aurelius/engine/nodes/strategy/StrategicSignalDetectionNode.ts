@@ -146,8 +146,9 @@ function buildYouthSignals(source: string): StrategicSignal[] {
     items.push({
       category: "marktstructuur",
       signal: "Consortiumtriage bepaalt een deel van de instroom",
-      meaning: "Instroom ligt niet volledig onder eigen regie, waardoor vraag en capaciteit sneller uit elkaar kunnen lopen.",
-      possibleDevelopment: "Capaciteitsdiscipline wordt een strategisch vraagstuk zodra externe toegang meer casussen toewijst dan teams aankunnen.",
+      meaning: "Instroom ligt niet volledig onder eigen regie, waardoor vraag, caseload en teamcapaciteit sneller uit elkaar kunnen lopen.",
+      possibleDevelopment:
+        "De keten instroom -> triage -> caseload -> wachttijd -> teamdruk -> marge wordt bestuurlijk zodra externe toegang meer casussen toewijst dan teams aankunnen.",
     });
   }
 
@@ -182,8 +183,10 @@ function buildYouthSignals(source: string): StrategicSignal[] {
     items.push({
       category: "cultuur",
       signal: "Cultuur en samenhang leunen sterk op nabij leiderschap",
-      meaning: "De cultuur is nu een kracht, maar kan kwetsbaar worden als groei of spreiding sneller gaat dan het leiderschap mee kan bewegen.",
-      possibleDevelopment: "Cultuur moet explicieter worden vastgelegd voordat schaalvergroting de samenhang gaat verdunnen.",
+      meaning:
+        "De cultuur is hier geen zachte HR-factor maar een direct productiemechanisme voor retentie, kennisdeling en uitvoerbare zorgkwaliteit.",
+      possibleDevelopment:
+        "Cultuurkapitaal moet expliciet beschermd worden zodra groei of spreiding sneller gaat dan teams en leiderschap samenhang kunnen vasthouden.",
     });
   }
 

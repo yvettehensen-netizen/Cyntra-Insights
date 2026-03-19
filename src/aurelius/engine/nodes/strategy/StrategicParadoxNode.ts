@@ -136,27 +136,27 @@ OUTPUT
 ### Strategische paradox
 
 PARADOX
-De organisatie moet tegelijk regionaal toegankelijk blijven
-voor gemeenten en scherp begrenzen wat zij organisatorisch
-en financieel kan dragen.
+De organisatie moet tegelijk een breed gemeentenportfolio bedienen
+en de teamcapaciteit binnen uitvoerbare en rendabele grenzen houden.
 
 MECHANISME
-Brede toegankelijkheid houdt de organisatie relevant
-in gemeentelijke netwerken en zorgt voor stabiele instroom.
-Tegelijk zorgt diezelfde breedte ervoor dat verschillen
-in tarieven, reistijd en zorgzwaarte direct drukken
-op uitvoerbaarheid, teamstabiliteit en marge.
+Een breed gemeentenportfolio houdt de organisatie zichtbaar
+in regionale netwerken en ondersteunt instroom.
+Tegelijk zorgen verschillen in tarieven, reistijd,
+triage en zorgzwaarte ervoor dat precies die breedte
+direct drukt op caseload, teamstabiliteit en marge.
 
 RISICO
 Als de organisatie vooral kiest voor breedte,
-groeit de uitvoeringsdruk sneller dan teams kunnen dragen.
+groeit de caseload sneller dan teams kunnen dragen.
 Als zij te sterk begrenst,
-verliest zij regionale positie en instroom.
+verliest zij instroom, legitimiteit en netwerkpositie.
 
 BESTUURLIJKE IMPLICATIE
-De bestuurlijke opgave is niet kiezen tussen toegankelijkheid
-en begrenzing, maar het actief managen van de grens ertussen.
-Dat vraagt om expliciete kaders voor gemeentenmix,
+De bestuurlijke opgave is niet abstracte breedte verdedigen,
+maar actief sturen op de grens tussen gemeentenportfolio
+en teamcapaciteit. Dat vraagt om expliciete kaders
+voor kern-, behoud- en uitstapgemeenten,
 caseload, wachttijd en contractrendement.
 `.trim();
 
@@ -230,13 +230,13 @@ function buildFallbackParadox(input: StrategicParadoxNodeInput): StrategicParado
   if (isYouthRegionalContext(source) && hasCapacityAndMarginPressure(source)) {
     return {
       paradox:
-        "De organisatie moet tegelijk regionaal toegankelijk blijven voor gemeenten en scherp begrenzen wat zij organisatorisch en financieel kan dragen.",
+        "De organisatie moet tegelijk een breed gemeentenportfolio bedienen en de teamcapaciteit binnen uitvoerbare en rendabele grenzen houden.",
       mechanism:
-        "Brede toegankelijkheid houdt de organisatie relevant in regionale netwerken en zorgt voor stabiele instroom vanuit gemeenten en consortiumsamenwerking. Tegelijk zorgt diezelfde breedte ervoor dat verschillen in tarieven, reistijd, zorgzwaarte en caseload direct drukken op uitvoerbaarheid, teamstabiliteit en marge.",
+        "Een breed gemeentenportfolio houdt de organisatie relevant in regionale netwerken en ondersteunt instroom via gemeenten en consortiumsamenwerking. Tegelijk zorgen verschillen in tarieven, reistijd, triage, zorgzwaarte en caseload ervoor dat juist die breedte direct drukt op uitvoerbaarheid, teamstabiliteit en marge.",
       risk:
-        "Als de organisatie vooral kiest voor breedte, groeit de uitvoeringsdruk sneller dan teams en financiën kunnen dragen. Als zij te veel begrenst, verliest zij regionale relevantie, instroom en invloed in het gemeentelijke netwerk.",
+        "Als de organisatie vooral kiest voor breedte, groeit de uitvoeringsdruk sneller dan teams en financiën kunnen dragen. Als zij te hard begrenst, verliest zij instroom, legitimiteit en invloed in het gemeentelijke netwerk.",
       boardImplication:
-        "De bestuurlijke opgave is daarom niet kiezen tussen toegankelijkheid en begrenzing, maar het actief managen van de grens ertussen. Dat vraagt om expliciete kaders voor gemeentenmix, contractrendement, caseload en wachttijd, en een bestuur dat periodiek herijkt waar toegankelijkheid ophoudt en overbelasting begint.",
+        "De bestuurlijke opgave is daarom niet breedte als identiteit verdedigen, maar actief sturen op de grens tussen gemeentenportfolio en teamcapaciteit. Dat vraagt om expliciete kaders voor kern-, behoud- en uitstapgemeenten, contractrendement, caseload en wachttijd, en een bestuur dat periodiek herijkt waar spreiding overgaat in overbelasting.",
     };
   }
 
